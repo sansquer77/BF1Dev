@@ -3,3 +3,6 @@ bcrypt
 jwt
 pandas
 requests
+ast
+os
+re
