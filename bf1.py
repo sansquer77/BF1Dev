@@ -23,11 +23,10 @@ def init_db():
                     senha_hash TEXT,
                     perfil TEXT,
                     status TEXT DEFAULT 'Ativo')''')
-    c.execute('SELECT * FROM usuarios WHERE nome=?', ('Password',))
-    if not c.fetchone():
-        senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
-        c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil, status) VALUES (?, ?, ?, ?, ?)',
-                  ('Admin', 'master@bolao.com', senha_hash, 'master', 'Ativo'))
+    senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
+c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status)
+             VALUES (?, ?, ?, ?, ?)''',
+          ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo'))
     c.execute('''CREATE TABLE IF NOT EXISTS equipes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT UNIQUE)''')
