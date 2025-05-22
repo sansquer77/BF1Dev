@@ -9,7 +9,6 @@ DB_PATH = 'bolao_f1alpha.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
-# --- REGULAMENTO (transcrito do anexo) ---
 REGULAMENTO = """
 REGULAMENTO BF1-2025
 
@@ -58,9 +57,8 @@ Forma de pagamento e premiação
 A premiação será um voucher de 50% do fundo arrecadado das inscrições para o primeiro colocado, 30% para o segundo e 20% para o terceiro gastarem nas bebidas de sua escolha a serem adquiridas após a definição dos vencedores e escolha dos prêmios.
  
 A premiação será realizada em um Happy-Hour a ser agendado entre os participantes em data e local a serem definidos posteriormente ao final do campeonato.
-"""  # [1]
+"""
 
-# --- BANCO DE DADOS E UTILITÁRIOS ---
 def db_connect():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
@@ -89,8 +87,7 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT,
-                    data TEXT,
-                    session_key INTEGER)''')
+                    data TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     usuario_id INTEGER,
@@ -104,7 +101,7 @@ def init_db():
                     FOREIGN KEY(prova_id) REFERENCES provas(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
                     prova_id INTEGER PRIMARY KEY,
-                    posicoes TEXT, -- dicionário {1: piloto_id, 2: piloto_id, ..., 11: piloto_id}
+                    posicoes TEXT,
                     FOREIGN KEY(prova_id) REFERENCES provas(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS log_apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -254,16 +251,16 @@ def listar_provas():
     df = pd.read_sql('SELECT * FROM provas', conn)
     conn.close()
     return df
-def adicionar_prova(nome, data, session_key):
+def adicionar_prova(nome, data, session_key=None):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('INSERT INTO provas (nome, data, session_key) VALUES (?, ?, ?)', (nome, data, session_key))
+    c.execute('INSERT INTO provas (nome, data) VALUES (?, ?)', (nome, data))
     conn.commit()
     conn.close()
-def editar_prova(prova_id, novo_nome, nova_data, nova_session_key):
+def editar_prova(prova_id, novo_nome, nova_data, session_key=None):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('UPDATE provas SET nome=?, data=?, session_key=? WHERE id=?', (novo_nome, nova_data, nova_session_key, prova_id))
+    c.execute('UPDATE provas SET nome=?, data=? WHERE id=?', (novo_nome, nova_data, prova_id))
     conn.commit()
     conn.close()
 def excluir_prova(prova_id):
@@ -304,22 +301,6 @@ def exibir_log_apostas(user_id=None, is_master=False):
     st.dataframe(df)
 
 def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova):
-    # Validação: mínimo 3 equipes diferentes (logo, mínimo 3 pilotos)
-    if len(pilotos) < 3:
-        raise ValueError("Você deve apostar em pelo menos 3 equipes diferentes (mínimo 3 pilotos).")
-    # Validação: soma das fichas tem que ser exatamente 15
-    if sum(fichas) != 15:
-        raise ValueError("A soma das fichas deve ser exatamente 15.")
-    # Validação: pilotos únicos (não pode apostar no mesmo piloto mais de uma vez)
-    if len(set(pilotos)) != len(pilotos):
-        raise ValueError("Não é permitido apostar em dois pilotos iguais.")
-    # Validação extra (garantindo que fichas não negativas e não acima de 15, reforço de interface)
-    if any((f < 0 or f > 15) for f in fichas):
-        raise ValueError("Quantidade de fichas inválida para um piloto.")
-    # (Opcional) Validação - piloto_11 não deve estar vazio
-    if not piloto_11 or not isinstance(piloto_11, str):
-        raise ValueError("O palpite para o 11º colocado deve ser informado.")
-    # Salvar aposta no banco
     conn = db_connect()
     c = conn.cursor()
     data_envio = datetime.now().isoformat()
@@ -327,6 +308,20 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova):
     c.execute('INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova) VALUES (?, ?, ?, ?, ?, ?, ?)',
               (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova))
     conn.commit()
+    conn.close()
+
+def consultar_apostas(usuario_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT rowid, nome_prova, prova_id, data_envio, pilotos, fichas, piloto_11 FROM apostas WHERE usuario_id=?', (usuario_id,))
+    apostas = c.fetchall()
+    conn.close()
+    return apostas
+def consultar_aposta_usuario_prova(usuario_id, prova_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT pilotos, fichas, piloto_11 FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+    aposta = c.fetchone()
     conn.close()
     return aposta
 
@@ -458,7 +453,7 @@ if st.session_state['token']:
     escolha = st.sidebar.radio("Menu", menu)
     st.session_state['pagina'] = escolha
 
-# --- Painel do Participante (formulário em 2 colunas, linhas por equipe) ---
+# --- Painel do Participante (corrigido e robusto) ---
 if st.session_state['pagina'] == "Painel do Participante" and st.session_state['token']:
     payload = get_payload()
     user = get_user_by_id(payload['user_id'])
@@ -490,6 +485,8 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
             fichas = {}
             for equipe in equipes:
                 pilotos_equipe = pilotos_df[pilotos_df['equipe'] == equipe]['nome'].tolist()
+                if not pilotos_equipe:
+                    continue
                 pilotos_equipe_combo = ["Nenhum"] + [f"{p} ({equipe})" for p in pilotos_equipe]
                 piloto_pre_sel = pilotos_apostados_ant.get(equipe, None)
                 index_sel = pilotos_equipe.index(piloto_pre_sel) + 1 if piloto_pre_sel in pilotos_equipe else 0
@@ -522,21 +519,27 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
             total_fichas = sum(fichas[e] for e in equipes_apostadas)
             pilotos_selecionados = [pilotos_apostados[e] for e in equipes_apostadas]
             if st.button("Efetivar Aposta"):
+                erro = None
                 if len(equipes_apostadas) < 3:
-                    st.error("Você deve apostar em pelo menos 3 equipes diferentes.")
+                    erro = "Você deve apostar em pelo menos 3 equipes diferentes."
                 elif total_fichas != 15:
-                    st.error("A soma das fichas deve ser exatamente 15.")
+                    erro = "A soma das fichas deve ser exatamente 15."
                 elif len(set(pilotos_selecionados)) != len(pilotos_selecionados):
-                    st.error("Não é permitido apostar em dois pilotos iguais.")
+                    erro = "Não é permitido apostar em dois pilotos iguais."
+                if erro:
+                    st.error(erro)
                 else:
-                    salvar_aposta(
-                        user[0], prova_id, pilotos_selecionados,
-                        [fichas[e] for e in equipes_apostadas],
-                        piloto_11, nome_prova
-                    )
-                    aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos_selecionados}, Fichas: {[fichas[e] for e in equipes_apostadas]}, 11º: {piloto_11}"
-                    registrar_log_aposta(user[1], aposta_str, nome_prova)
-                    st.success("Aposta registrada/atualizada!")
+                    try:
+                        salvar_aposta(
+                            user[0], prova_id, pilotos_selecionados,
+                            [fichas[e] for e in equipes_apostadas],
+                            piloto_11, nome_prova
+                        )
+                        aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos_selecionados}, Fichas: {[fichas[e] for e in equipes_apostadas]}, 11º: {piloto_11}"
+                        registrar_log_aposta(user[1], aposta_str, nome_prova)
+                        st.success("Aposta registrada/atualizada!")
+                    except Exception as ex:
+                        st.error(f"Erro ao salvar aposta: {ex}")
         else:
             st.warning("Administração deve cadastrar provas, equipes e pilotos antes das apostas.")
     else:
@@ -599,7 +602,7 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
     else:
         st.warning("Acesso restrito ao usuário master.")
 
-# --- Gestão do campeonato (formulários no topo, lista abaixo, layout compacto) ---
+# --- Gestão do campeonato (Pilotos/Equipes juntos) ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
@@ -645,7 +648,6 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 with col1:
                     novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
                 with col2:
-                    # Seleciona equipe pelo nome
                     equipe_nomes = equipes['nome'].tolist()
                     if row['equipe'] in equipe_nomes:
                         equipe_idx = equipe_nomes.index(row['equipe'])
