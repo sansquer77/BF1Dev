@@ -1,6 +1,6 @@
-import streamlit as st
-import sqlite3
-import bcrypt
-import jwt
-import pandas as pd
-import requests
+streamlit as st
+sqlite3
+bcrypt
+jwt
+pandas as pd
+requests
