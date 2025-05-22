@@ -1,0 +1,5 @@
+streamlit
+bcrypt
+pyjwt
+pandas
+requests
