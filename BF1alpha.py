@@ -466,12 +466,11 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     pilotos_df = listar_pilotos()
     equipes_df = listar_equipes()
     if user[4] == "Ativo":
-        if len(provas) > 0 and len(pilotos_df) > 2:
+        if len(provas) > 0 and len(pilotos_df) > 2 and len(equipes_df) > 0:
             prova_id = st.selectbox("Escolha a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
             nome_prova = provas[provas['id']==prova_id]['nome'].values[0]
             equipes = equipes_df['nome'].tolist()
             aposta_existente = consultar_aposta_usuario_prova(user[0], prova_id)
-            # Preparar apostas anteriores (se houver)
             pilotos_apostados_ant = {}
             fichas_ant = {}
             piloto_11_ant = ""
@@ -483,38 +482,38 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                     equipe_p = pilotos_df[pilotos_df['nome'] == p]['equipe'].values[0]
                     pilotos_apostados_ant[equipe_p] = p
                     fichas_ant[equipe_p] = f
+
             st.write("Escolha **um piloto de cada equipe** e distribua até 15 fichas (mínimo 3 equipes diferentes):")
             pilotos_apostados = {}
             fichas = {}
-            equipe_col1, equipe_col2 = st.columns(2)
-            for idx, equipe in enumerate(equipes):
+            linhas = []
+            for equipe in equipes:
                 pilotos_equipe = pilotos_df[pilotos_df['equipe'] == equipe]['nome'].tolist()
                 if not pilotos_equipe:
                     continue
-                with [equipe_col1, equipe_col2][idx % 2]:
-                    col_pil, col_fich = st.columns([2,1])
-                    with col_pil:
-                        piloto_sel = st.selectbox(
-                            f"Piloto da equipe {equipe}",
-                            ["Nenhum"] + pilotos_equipe,
-                            index=(pilotos_equipe.index(pilotos_apostados_ant[equipe]) + 1) if equipe in pilotos_apostados_ant else 0,
-                            key=f"piloto_{equipe}"
+                col1, col2 = st.columns([2,1])
+                with col1:
+                    piloto_sel = st.selectbox(
+                        f"Piloto da equipe {equipe}",
+                        ["Nenhum"] + pilotos_equipe,
+                        index=(pilotos_equipe.index(pilotos_apostados_ant[equipe]) + 1) if equipe in pilotos_apostados_ant else 0,
+                        key=f"piloto_{equipe}"
+                    )
+                with col2:
+                    if piloto_sel != "Nenhum":
+                        fichas[equipe] = st.number_input(
+                            f"Fichas para {piloto_sel}", min_value=0, max_value=15,
+                            value=fichas_ant.get(equipe, 0), key=f"fichas_{equipe}"
                         )
-                    with col_fich:
-                        if piloto_sel != "Nenhum":
-                            fichas[equipe] = st.number_input(
-                                f"Fichas para {piloto_sel}", min_value=0, max_value=15,
-                                value=fichas_ant.get(equipe, 0), key=f"fichas_{equipe}"
-                            )
-                            pilotos_apostados[equipe] = piloto_sel
-                        else:
-                            fichas[equipe] = 0
+                        pilotos_apostados[equipe] = piloto_sel
+                    else:
+                        fichas[equipe] = 0
+
             st.markdown("---")
             piloto_11 = st.selectbox(
                 "Palpite para 11º colocado", pilotos_df['nome'].tolist(),
                 index=pilotos_df['nome'].tolist().index(piloto_11_ant) if piloto_11_ant in pilotos_df['nome'].tolist() else 0
             )
-            # Validação
             equipes_apostadas = [e for e, f in fichas.items() if f > 0]
             total_fichas = sum(fichas[e] for e in equipes_apostadas)
             pilotos_selecionados = [pilotos_apostados[e] for e in equipes_apostadas]
@@ -531,14 +530,13 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                     registrar_log_aposta(user[1], aposta_str, nome_prova)
                     st.success("Aposta registrada/atualizada!")
         else:
-            st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
+            st.warning("Administração deve cadastrar provas, equipes e pilotos antes das apostas.")
     else:
         st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
     st.subheader("Minhas apostas")
     apostas = consultar_apostas(user[0])
     df_apostas = pd.DataFrame(apostas, columns=["#", "Prova", "Prova_id", "Data Envio", "Pilotos", "Fichas", "11º"])
     st.table(df_apostas[["#", "Prova", "Data Envio", "Pilotos", "Fichas", "11º"]])
-
 
 # --- Gestão de Usuários (apenas master) ---
 if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
