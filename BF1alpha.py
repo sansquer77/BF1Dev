@@ -601,7 +601,7 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
     else:
         st.warning("Acesso restrito ao usuário master.")
 
-# --- Gestão do campeonato (Pilotos/Equipes juntos) ---
+# --- Gestão do campeonato ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
@@ -616,24 +616,30 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 if nome_equipe.strip():
                     adicionar_equipe(nome_equipe.strip())
                     st.success("Equipe adicionada!")
+                    st.experimental_rerun()
                 else:
                     st.warning("Informe o nome da equipe.")
 
             st.markdown("---")
             st.subheader("Equipes cadastradas")
             equipes = listar_equipes()
-            for idx, row in equipes.iterrows():
-                col1, col2, col3 = st.columns([4,2,2])
-                with col1:
-                    novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
-                with col2:
-                    if st.button("Editar equipe", key=f"eq_edit{row['id']}"):
-                        editar_equipe(row['id'], novo_nome)
-                        st.success("Equipe editada!")
-                with col3:
-                    if st.button("Excluir equipe", key=f"eq_del{row['id']}"):
-                        excluir_equipe(row['id'])
-                        st.success("Equipe excluída!")
+            if len(equipes) == 0:
+                st.info("Nenhuma equipe cadastrada.")
+            else:
+                for idx, row in equipes.iterrows():
+                    col1, col2, col3 = st.columns([4,2,2])
+                    with col1:
+                        novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
+                    with col2:
+                        if st.button("Editar equipe", key=f"eq_edit{row['id']}"):
+                            editar_equipe(row['id'], novo_nome)
+                            st.success("Equipe editada!")
+                            st.experimental_rerun()
+                    with col3:
+                        if st.button("Excluir equipe", key=f"eq_del{row['id']}"):
+                            excluir_equipe(row['id'])
+                            st.success("Equipe excluída!")
+                            st.experimental_rerun()
 
         # --- Pilotos ---
         with tab2:
@@ -641,9 +647,19 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
             equipes = listar_equipes()
             equipe_nomes = equipes['nome'].tolist()
             nome_piloto = st.text_input("Nome do novo piloto", key="nome_novo_piloto")
-        
+
+            # Controle do combo pelo session_state para resetar após cadastro
+            if 'equipe_novo_piloto_idx' not in st.session_state:
+                st.session_state['equipe_novo_piloto_idx'] = 0
+
             if equipe_nomes:
-                equipe_nome = st.selectbox("Equipe do novo piloto", equipe_nomes, key="combo_equipe_novo_piloto")
+                equipe_idx = st.session_state['equipe_novo_piloto_idx']
+                equipe_nome = st.selectbox(
+                    "Equipe do novo piloto",
+                    equipe_nomes,
+                    index=equipe_idx,
+                    key="combo_equipe_novo_piloto"
+                )
                 if st.button("Adicionar piloto", key="btn_add_piloto"):
                     if not nome_piloto.strip():
                         st.error("Informe o nome do piloto.")
@@ -651,9 +667,13 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         equipe_id = equipes[equipes['nome'] == equipe_nome]['id'].values[0]
                         adicionar_piloto(nome_piloto.strip(), equipe_id)
                         st.success("Piloto adicionado!")
+                        # Resetar combo e campo de nome
+                        st.session_state['equipe_novo_piloto_idx'] = 0
+                        st.session_state['nome_novo_piloto'] = ""
+                        st.experimental_rerun()
             else:
                 st.info("Cadastre uma equipe antes de cadastrar pilotos.")
-        
+
             st.markdown("---")
             st.subheader("Pilotos cadastrados")
             pilotos = listar_pilotos()
@@ -681,38 +701,50 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         if st.button("Editar piloto", key=f"pl_edit{row['id']}"):
                             editar_piloto(row['id'], novo_nome, nova_equipe_id)
                             st.success("Piloto editado!")
+                            st.experimental_rerun()
                     with col4:
                         if st.button("Excluir piloto", key=f"pl_del{row['id']}"):
                             excluir_piloto(row['id'])
                             st.success("Piloto excluído!")
+                            st.experimental_rerun()
 
         # --- Provas ---
         with tab3:
             st.subheader("Adicionar nova prova")
-            nome_prova = st.text_input("Nome da nova prova")
-            data_prova = st.date_input("Data da nova prova")
-            if st.button("Adicionar prova"):
-                adicionar_prova(nome_prova, data_prova.isoformat())
-                st.success("Prova adicionada!")
+            nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
+            data_prova = st.date_input("Data da nova prova", key="data_nova_prova")
+            if st.button("Adicionar prova", key="btn_add_prova"):
+                if not nome_prova.strip():
+                    st.error("Informe o nome da prova.")
+                else:
+                    adicionar_prova(nome_prova.strip(), data_prova.isoformat())
+                    st.success("Prova adicionada!")
+                    st.experimental_rerun()
             st.markdown("---")
             st.subheader("Provas cadastradas")
             provas = listar_provas()
-            for idx, row in provas.iterrows():
-                col1, col2, col3, col4 = st.columns([4,4,2,2])
-                with col1:
-                    novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
-                with col2:
-                    nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
-                with col3:
-                    if st.button("Editar prova", key=f"pr_edit{row['id']}"):
-                        editar_prova(row['id'], novo_nome, nova_data.isoformat())
-                        st.success("Prova editada!")
-                with col4:
-                    if st.button("Excluir prova", key=f"pr_del{row['id']}"):
-                        excluir_prova(row['id'])
-                        st.success("Prova excluída!")
+            if len(provas) == 0:
+                st.info("Nenhuma prova cadastrada.")
+            else:
+                for idx, row in provas.iterrows():
+                    col1, col2, col3, col4 = st.columns([4,4,2,2])
+                    with col1:
+                        novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
+                    with col2:
+                        nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
+                    with col3:
+                        if st.button("Editar prova", key=f"pr_edit{row['id']}"):
+                            editar_prova(row['id'], novo_nome, nova_data.isoformat())
+                            st.success("Prova editada!")
+                            st.experimental_rerun()
+                    with col4:
+                        if st.button("Excluir prova", key=f"pr_del{row['id']}"):
+                            excluir_prova(row['id'])
+                            st.success("Prova excluída!")
+                            st.experimental_rerun()
     else:
         st.warning("Acesso restrito ao usuário master.")
+
 
 # --- Atualização de resultados (apenas manual, tabela de posições) ---
 if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
