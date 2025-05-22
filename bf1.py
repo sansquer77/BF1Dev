@@ -320,20 +320,50 @@ def get_payload():
         st.stop()
     return payload
 
-# --- Login ---
+# --- Login e Esqueceu a Senha ---
 if st.session_state['pagina'] == "Login":
     st.title("Login")
-    email = st.text_input("Email")
-    senha = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
-        user = autenticar_usuario(email, senha)
-        if user:
-            token = generate_token(user[0], user[4], user[5])
-            st.session_state['token'] = token
-            st.session_state['pagina'] = "Painel do Participante"
-            st.success(f"Bem-vindo, {user[1]}!")
-        else:
-            st.error("Usuário ou senha inválidos.")
+    if 'esqueceu_senha' not in st.session_state:
+        st.session_state['esqueceu_senha'] = False
+
+    if not st.session_state['esqueceu_senha']:
+        email = st.text_input("Email")
+        senha = st.text_input("Senha", type="password")
+        col1, col2 = st.columns([2,1])
+        with col1:
+            if st.button("Entrar"):
+                user = autenticar_usuario(email, senha)
+                if user:
+                    token = generate_token(user[0], user[4], user[5])
+                    st.session_state['token'] = token
+                    st.session_state['pagina'] = "Painel do Participante"
+                    st.success(f"Bem-vindo, {user[1]}!")
+                else:
+                    st.error("Usuário ou senha inválidos.")
+        with col2:
+            if st.button("Esqueceu a senha?"):
+                st.session_state['esqueceu_senha'] = True
+                st.experimental_rerun()
+    else:
+        st.subheader("Redefinir senha")
+        email_reset = st.text_input("Email cadastrado")
+        nova_senha = st.text_input("Nova senha", type="password")
+        if st.button("Salvar nova senha"):
+            user = get_user_by_email(email_reset)
+            if user:
+                conn = db_connect()
+                c = conn.cursor()
+                nova_hash = hash_password(nova_senha)
+                c.execute('UPDATE usuarios SET senha_hash=? WHERE email=?', (nova_hash, email_reset))
+                conn.commit()
+                conn.close()
+                st.success("Senha redefinida com sucesso! Faça login com a nova senha.")
+                st.session_state['esqueceu_senha'] = False
+            else:
+                st.error("Email não cadastrado.")
+        if st.button("Voltar para login"):
+            st.session_state['esqueceu_senha'] = False
+
 
 # --- Menu lateral dinâmico ---
 if st.session_state['token']:
