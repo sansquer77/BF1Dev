@@ -1,7 +1,7 @@
 import streamlit as st
 import sqlite3
 import bcrypt
-import jwt
+import jwt as pyjwt  # PyJWT explicitamente
 import pandas as pd
 import ast
 from datetime import datetime, timedelta
@@ -85,12 +85,17 @@ def generate_token(user_id, perfil, status):
         'status': status,
         'exp': datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    token = pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    if isinstance(token, bytes):
+        token = token.decode('utf-8')
+    return token
 def decode_token(token):
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         return payload
-    except jwt.ExpiredSignatureError:
+    except pyjwt.ExpiredSignatureError:
+        return None
+    except Exception:
         return None
 def get_user_by_email(email):
     conn = db_connect()
