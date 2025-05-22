@@ -1,5 +1,5 @@
 streamlit
-bcrypt
-jwt
 pandas
+bcrypt
+pyjwt[crypto]
 requests
