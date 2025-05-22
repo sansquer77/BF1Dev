@@ -6,12 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 import requests
 
-# --- Configurações ---
 DB_PATH = 'bolao_f1.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
-# --- Banco de Dados ---
 def db_connect():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
@@ -24,7 +22,14 @@ def init_db():
                     nome TEXT,
                     email TEXT UNIQUE,
                     senha_hash TEXT,
-                    perfil TEXT)''')
+                    perfil TEXT,
+                    status TEXT DEFAULT 'Ativo')''')
+    # Usuário master
+    c.execute('SELECT * FROM usuarios WHERE nome=?', ('Password',))
+    if not c.fetchone():
+        senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
+        c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil, status) VALUES (?, ?, ?, ?, ?)',
+                  ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo'))
     # Equipes
     c.execute('''CREATE TABLE IF NOT EXISTS equipes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,17 +74,17 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Autenticação e Autorização ---
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
 def check_password(password, hashed):
     return bcrypt.checkpw(password.encode(), hashed)
 
-def generate_token(user_id, perfil):
+def generate_token(user_id, perfil, status):
     payload = {
         'user_id': user_id,
         'perfil': perfil,
+        'status': status,
         'exp': datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
@@ -94,7 +99,7 @@ def decode_token(token):
 def get_user_by_email(email):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('SELECT id, nome, email, senha_hash, perfil FROM usuarios WHERE email=?', (email,))
+    c.execute('SELECT id, nome, email, senha_hash, perfil, status FROM usuarios WHERE email=?', (email,))
     user = c.fetchone()
     conn.close()
     return user
@@ -102,7 +107,7 @@ def get_user_by_email(email):
 def get_user_by_id(user_id):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('SELECT id, nome, email, perfil FROM usuarios WHERE id=?', (user_id,))
+    c.execute('SELECT id, nome, email, perfil, status FROM usuarios WHERE id=?', (user_id,))
     user = c.fetchone()
     conn.close()
     return user
@@ -121,19 +126,18 @@ def require_auth():
 
 def require_admin():
     payload = require_auth()
-    if payload['perfil'] != 'admin':
+    if payload['perfil'] not in ['admin', 'master']:
         st.error("Acesso restrito ao administrador.")
         st.stop()
     return payload
 
-# --- Gestão de Usuários ---
 def cadastrar_usuario(nome, email, senha, perfil='participante'):
     conn = db_connect()
     c = conn.cursor()
     try:
         senha_hash = hash_password(senha)
-        c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?, ?, ?, ?)', 
-                  (nome, email, senha_hash, perfil))
+        c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil, status) VALUES (?, ?, ?, ?, ?)', 
+                  (nome, email, senha_hash, perfil, 'Ativo'))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -147,7 +151,26 @@ def autenticar_usuario(email, senha):
         return user
     return None
 
-# --- Gestão do Campeonato ---
+def listar_usuarios():
+    conn = db_connect()
+    df = pd.read_sql('SELECT id, nome, email, perfil, status FROM usuarios', conn)
+    conn.close()
+    return df
+
+def alterar_status_usuario(user_id, novo_status):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('UPDATE usuarios SET status=? WHERE id=?', (novo_status, user_id))
+    conn.commit()
+    conn.close()
+
+def alterar_perfil_usuario(user_id, novo_perfil):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('UPDATE usuarios SET perfil=? WHERE id=?', (novo_perfil, user_id))
+    conn.commit()
+    conn.close()
+
 def listar_equipes():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM equipes', conn)
@@ -187,7 +210,6 @@ def adicionar_prova(nome, data, session_key):
     conn.commit()
     conn.close()
 
-# --- Atualização de resultados via OpenF1 ---
 def atualizar_resultado_openf1(session_key):
     url = f"https://api.openf1.org/v1/classification?session_key={session_key}"
     resp = requests.get(url)
@@ -207,7 +229,6 @@ def salvar_resultado(prova_id, pontos_pilotos, piloto_11):
     conn.commit()
     conn.close()
 
-# --- Log de apostas ---
 def get_client_ip():
     try:
         return st.context.ip_address
@@ -242,7 +263,6 @@ def exibir_log_apostas():
     st.subheader("Log de Apostas")
     st.dataframe(df)
 
-# --- Apostas ---
 def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11):
     conn = db_connect()
     c = conn.cursor()
@@ -261,11 +281,10 @@ def consultar_apostas(usuario_id):
     conn.close()
     return apostas
 
-# --- Streamlit App ---
 st.set_page_config(page_title="Bolão F1 2025", layout="wide")
 init_db()
 
-menu = st.sidebar.selectbox("Menu", ["Login", "Cadastro", "Painel", "Gestão Campeonato", "Atualizar Resultado", "Log de Apostas"])
+menu = st.sidebar.selectbox("Menu", ["Login", "Cadastro", "Painel", "Gestão Usuários", "Gestão Campeonato", "Atualizar Resultado", "Log de Apostas"])
 
 if menu == "Login":
     st.title("Login")
@@ -274,7 +293,7 @@ if menu == "Login":
     if st.button("Entrar"):
         user = autenticar_usuario(email, senha)
         if user:
-            token = generate_token(user[0], user[4])
+            token = generate_token(user[0], user[4], user[5])
             st.session_state['token'] = token
             st.success(f"Bem-vindo, {user[1]}!")
             st.experimental_rerun()
@@ -294,33 +313,55 @@ elif menu == "Cadastro":
 
 elif menu == "Painel":
     payload = require_auth()
-    st.title("Painel do Participante")
     user = get_user_by_id(payload['user_id'])
-    st.write(f"Bem-vindo, {user[1]} ({user[3]})")
+    st.title("Painel do Participante")
+    st.write(f"Bem-vindo, {user[1]} ({user[3]}) - Status: {user[4]}")
     provas = listar_provas()
     pilotos_df = listar_pilotos()
-    if len(provas) > 0 and len(pilotos_df) > 2:
-        prova_id = st.selectbox("Escolha a prova", provas['id'])
-        pilotos = pilotos_df['nome'].tolist()
-        fichas = []
-        st.write("Distribua 15 fichas entre no mínimo 3 pilotos de equipes diferentes:")
-        for piloto in pilotos:
-            fichas.append(st.number_input(f"Fichas para {piloto}", min_value=0, max_value=15, value=0, key=piloto))
-        piloto_11 = st.selectbox("Palpite para 11º colocado", pilotos)
-        if st.button("Enviar aposta"):
-            if sum(fichas) == 15 and len([f for f in fichas if f > 0]) >= 3:
-                salvar_aposta(user[0], prova_id, pilotos, fichas, piloto_11)
-                ip = get_client_ip()
-                aposta_str = f"Prova: {prova_id}, Pilotos: {pilotos}, Fichas: {fichas}, 11º: {piloto_11}"
-                registrar_log_aposta(user[1], ip, aposta_str)
-                st.success("Aposta registrada e logada!")
-            else:
-                st.error("Distribua exatamente 15 fichas entre pelo menos 3 pilotos diferentes.")
-        st.subheader("Minhas apostas")
-        apostas = consultar_apostas(user[0])
-        st.table(pd.DataFrame(apostas, columns=["Prova", "Data Envio", "Pilotos", "Fichas", "11º"]))
+    if user[4] == "Ativo":
+        if len(provas) > 0 and len(pilotos_df) > 2:
+            prova_id = st.selectbox("Escolha a prova", provas['id'])
+            pilotos = pilotos_df['nome'].tolist()
+            fichas = []
+            st.write("Distribua 15 fichas entre no mínimo 3 pilotos de equipes diferentes:")
+            for piloto in pilotos:
+                fichas.append(st.number_input(f"Fichas para {piloto}", min_value=0, max_value=15, value=0, key=piloto))
+            piloto_11 = st.selectbox("Palpite para 11º colocado", pilotos)
+            if st.button("Enviar aposta"):
+                if sum(fichas) == 15 and len([f for f in fichas if f > 0]) >= 3:
+                    salvar_aposta(user[0], prova_id, pilotos, fichas, piloto_11)
+                    ip = get_client_ip()
+                    aposta_str = f"Prova: {prova_id}, Pilotos: {pilotos}, Fichas: {fichas}, 11º: {piloto_11}"
+                    registrar_log_aposta(user[1], ip, aposta_str)
+                    st.success("Aposta registrada e logada!")
+                else:
+                    st.error("Distribua exatamente 15 fichas entre pelo menos 3 pilotos diferentes.")
+        else:
+            st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
     else:
-        st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
+        st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
+    st.subheader("Minhas apostas")
+    apostas = consultar_apostas(user[0])
+    st.table(pd.DataFrame(apostas, columns=["Prova", "Data Envio", "Pilotos", "Fichas", "11º"]))
+
+elif menu == "Gestão Usuários":
+    payload = require_admin()
+    st.title("Gestão de Usuários")
+    usuarios = listar_usuarios()
+    st.dataframe(usuarios)
+    st.write("Selecione um usuário para alterar status ou perfil:")
+    usuario_id = st.selectbox("Usuário", usuarios['id'])
+    usuario = usuarios[usuarios['id'] == usuario_id].iloc[0]
+    novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1)
+    novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1)
+    if st.button("Atualizar usuário"):
+        if usuario['nome'] == "Password":
+            st.warning("Não é permitido alterar o status ou perfil do usuário master.")
+        else:
+            alterar_status_usuario(usuario_id, novo_status)
+            alterar_perfil_usuario(usuario_id, novo_perfil)
+            st.success("Usuário atualizado!")
+            st.experimental_rerun()
 
 elif menu == "Gestão Campeonato":
     require_admin()
@@ -377,8 +418,5 @@ elif menu == "Atualizar Resultado":
         st.warning("Nenhuma prova cadastrada.")
 
 elif menu == "Log de Apostas":
-    payload = require_auth()
-    if payload['perfil'] == 'admin':
-        exibir_log_apostas()
-    else:
-        st.warning("Acesso restrito ao administrador.")
+    payload = require_admin()
+    exibir_log_apostas()
