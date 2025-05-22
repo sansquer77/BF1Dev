@@ -27,7 +27,7 @@ def init_db():
     if not c.fetchone():
         senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
         c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil, status) VALUES (?, ?, ?, ?, ?)',
-                  ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo'))
+                  ('Gaspar', 'sansquer@gmail.com', senha_hash, 'C4tatuia.', 'Ativo'))
     c.execute('''CREATE TABLE IF NOT EXISTS equipes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT UNIQUE)''')
