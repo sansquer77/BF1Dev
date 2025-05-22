@@ -1,7 +1,7 @@
 import streamlit as st
 import sqlite3
 import bcrypt
-import jwt as pyjwt  # PyJWT explicitamente
+import jwt as pyjwt
 import pandas as pd
 import ast
 from datetime import datetime, timedelta
@@ -17,7 +17,6 @@ def db_connect():
 def init_db():
     conn = db_connect()
     c = conn.cursor()
-    # Usuários
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT,
@@ -29,23 +28,19 @@ def init_db():
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status)
                  VALUES (?, ?, ?, ?, ?)''',
               ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo'))
-    # Equipes
     c.execute('''CREATE TABLE IF NOT EXISTS equipes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT UNIQUE)''')
-    # Pilotos
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT,
                     equipe_id INTEGER,
                     FOREIGN KEY(equipe_id) REFERENCES equipes(id))''')
-    # Provas
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT,
                     data TEXT,
                     session_key INTEGER)''')
-    # Apostas
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     usuario_id INTEGER,
@@ -56,13 +51,11 @@ def init_db():
                     piloto_11 TEXT,
                     FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
                     FOREIGN KEY(prova_id) REFERENCES provas(id))''')
-    # Resultados
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
                     prova_id INTEGER PRIMARY KEY,
                     pontos_pilotos TEXT,
                     piloto_11 TEXT,
                     FOREIGN KEY(prova_id) REFERENCES provas(id))''')
-    # Log de apostas
     c.execute('''CREATE TABLE IF NOT EXISTS log_apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     apostador TEXT,
@@ -73,7 +66,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Funções de autenticação e usuários ---
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 def check_password(password, hashed):
@@ -111,13 +103,13 @@ def get_user_by_id(user_id):
     user = c.fetchone()
     conn.close()
     return user
-def cadastrar_usuario(nome, email, senha, perfil='participante'):
+def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo'):
     conn = db_connect()
     c = conn.cursor()
     try:
         senha_hash = hash_password(senha)
         c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil, status) VALUES (?, ?, ?, ?, ?)', 
-                  (nome, email, senha_hash, perfil, 'Ativo'))
+                  (nome, email, senha_hash, perfil, status))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -159,7 +151,6 @@ def excluir_usuario(user_id):
     conn.commit()
     conn.close()
 
-# --- CRUD Equipes ---
 def listar_equipes():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM equipes', conn)
@@ -184,7 +175,6 @@ def excluir_equipe(equipe_id):
     conn.commit()
     conn.close()
 
-# --- CRUD Pilotos ---
 def listar_pilotos():
     conn = db_connect()
     df = pd.read_sql('SELECT p.id, p.nome, e.nome as equipe, p.equipe_id FROM pilotos p LEFT JOIN equipes e ON p.equipe_id=e.id', conn)
@@ -209,7 +199,6 @@ def excluir_piloto(piloto_id):
     conn.commit()
     conn.close()
 
-# --- CRUD Provas ---
 def listar_provas():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM provas', conn)
@@ -234,7 +223,6 @@ def excluir_prova(prova_id):
     conn.commit()
     conn.close()
 
-# --- CRUD Resultados ---
 def salvar_resultado(prova_id, pontos_pilotos, piloto_11):
     conn = db_connect()
     c = conn.cursor()
@@ -243,7 +231,6 @@ def salvar_resultado(prova_id, pontos_pilotos, piloto_11):
     conn.commit()
     conn.close()
 
-# --- Log de apostas ---
 def get_client_ip():
     try:
         return st.context.ip_address
@@ -259,9 +246,13 @@ def registrar_log_aposta(apostador, ip, aposta):
               (apostador, ip, data, horario, aposta))
     conn.commit()
     conn.close()
-def exibir_log_apostas():
+
+def exibir_log_apostas(user_id=None, is_master=False):
     conn = db_connect()
-    df = pd.read_sql('SELECT * FROM log_apostas', conn)
+    if is_master:
+        df = pd.read_sql('SELECT * FROM log_apostas', conn)
+    else:
+        df = pd.read_sql('SELECT * FROM log_apostas WHERE apostador=?', conn, params=(get_user_by_id(user_id)[1],))
     conn.close()
     st.subheader("Log de Apostas")
     st.dataframe(df)
@@ -290,7 +281,6 @@ def consultar_aposta_usuario_prova(usuario_id, prova_id):
     conn.close()
     return aposta
 
-# --- Navegação por estado ---
 st.set_page_config(page_title="Bolão F1 2025", layout="wide")
 init_db()
 
@@ -314,9 +304,17 @@ def menu_master():
         "Log de Apostas",
         "Logout"
     ]
+def menu_admin():
+    return [
+        "Painel do Participante",
+        "Atualização de resultados",
+        "Log de Apostas",
+        "Logout"
+    ]
 def menu_participante():
     return [
         "Painel do Participante",
+        "Log de Apostas",
         "Logout"
     ]
 
@@ -332,16 +330,18 @@ def get_payload():
         st.stop()
     return payload
 
-# --- Login e Esqueceu a Senha ---
+# --- Login, Esqueceu a Senha e Criar Usuário Inativo ---
 if st.session_state['pagina'] == "Login":
     st.title("Login")
     if 'esqueceu_senha' not in st.session_state:
         st.session_state['esqueceu_senha'] = False
+    if 'criar_usuario' not in st.session_state:
+        st.session_state['criar_usuario'] = False
 
-    if not st.session_state['esqueceu_senha']:
+    if not st.session_state['esqueceu_senha'] and not st.session_state['criar_usuario']:
         email = st.text_input("Email")
         senha = st.text_input("Senha", type="password")
-        col1, col2 = st.columns([2,1])
+        col1, col2, col3 = st.columns([2,1,1])
         with col1:
             if st.button("Entrar"):
                 user = autenticar_usuario(email, senha)
@@ -355,7 +355,11 @@ if st.session_state['pagina'] == "Login":
         with col2:
             if st.button("Esqueceu a senha?"):
                 st.session_state['esqueceu_senha'] = True
-    else:
+        with col3:
+            if st.button("Criar usuário"):
+                st.session_state['criar_usuario'] = True
+
+    elif st.session_state['esqueceu_senha']:
         st.subheader("Redefinir senha")
         email_reset = st.text_input("Email cadastrado")
         nova_senha = st.text_input("Nova senha", type="password")
@@ -375,12 +379,28 @@ if st.session_state['pagina'] == "Login":
         if st.button("Voltar para login"):
             st.session_state['esqueceu_senha'] = False
 
+    elif st.session_state['criar_usuario']:
+        st.subheader("Criar novo usuário")
+        nome_novo = st.text_input("Nome completo")
+        email_novo = st.text_input("Email")
+        senha_novo = st.text_input("Senha", type="password")
+        if st.button("Cadastrar usuário"):
+            if cadastrar_usuario(nome_novo, email_novo, senha_novo, perfil='participante', status='Inativo'):
+                st.success("Usuário criado com sucesso! Aguarde aprovação do administrador.")
+                st.session_state['criar_usuario'] = False
+            else:
+                st.error("Email já cadastrado.")
+        if st.button("Voltar para login", key="voltar_login_criar"):
+            st.session_state['criar_usuario'] = False
+
 # --- Menu lateral dinâmico ---
 if st.session_state['token']:
     payload = get_payload()
     perfil = payload['perfil']
     if perfil == 'master':
         menu = menu_master()
+    elif perfil == 'admin':
+        menu = menu_admin()
     else:
         menu = menu_participante()
     escolha = st.sidebar.radio("Menu", menu)
@@ -518,7 +538,17 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 with col1:
                     novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
                 with col2:
-                    nova_equipe_nome = st.selectbox(f"Equipe piloto {row['id']}", equipe_nomes, index=equipe_nomes.index(row['equipe']), key=f"pl_eq{row['id']}")
+                    # CORREÇÃO: Verifica se equipe existe na lista antes de usar .index()
+                    if row['equipe'] in equipe_nomes:
+                        equipe_idx = equipe_nomes.index(row['equipe'])
+                    else:
+                        equipe_idx = 0
+                    nova_equipe_nome = st.selectbox(
+                        f"Equipe piloto {row['id']}",
+                        equipe_nomes,
+                        index=equipe_idx,
+                        key=f"pl_eq{row['id']}"
+                    )
                     nova_equipe_id = equipes[equipes['nome']==nova_equipe_nome]['id'].values[0]
                 with col3:
                     if st.button("Editar", key=f"pl_edit{row['id']}"):
@@ -563,10 +593,10 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
     else:
         st.warning("Acesso restrito ao usuário master.")
 
-# --- Atualização de resultados (apenas master) ---
+# --- Atualização de resultados (admin e master) ---
 if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
     payload = get_payload()
-    if payload['perfil'] == 'master':
+    if payload['perfil'] in ['master', 'admin']:
         st.title("Atualizar Resultado")
         provas = listar_provas()
         if len(provas) > 0:
@@ -597,15 +627,15 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
         else:
             st.warning("Nenhuma prova cadastrada.")
     else:
-        st.warning("Acesso restrito ao usuário master.")
+        st.warning("Acesso restrito ao administrador/master.")
 
-# --- Log de apostas (apenas master) ---
+# --- Log de apostas (visível para todos, mas com filtros) ---
 if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
-        exibir_log_apostas()
+        exibir_log_apostas(is_master=True)
     else:
-        st.warning("Acesso restrito ao usuário master.")
+        exibir_log_apostas(user_id=payload['user_id'], is_master=False)
 
 # --- Logout ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
