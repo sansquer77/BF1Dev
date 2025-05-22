@@ -601,16 +601,15 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
     else:
         st.warning("Acesso restrito ao usuário master.")
 
-# --- Gestão do campeonato (Pilotos/Equipes juntos, corrigido) ---
+# --- Gestão do campeonato (Pilotos/Equipes juntos) ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
         st.title("Gestão do Campeonato")
-        tab1, tab2 = st.tabs(["Pilotos/Equipes", "Provas"])
+        tab1, tab2, tab3 = st.tabs(["Equipes", "Pilotos", "Provas"])
 
-        # --- Pilotos/Equipes ---
+        # --- Equipes ---
         with tab1:
-            # Formulário de inclusão de equipe
             st.subheader("Adicionar nova equipe")
             nome_equipe = st.text_input("Nome da nova equipe", key="nome_nova_equipe")
             if st.button("Adicionar equipe", key="btn_add_equipe"):
@@ -621,7 +620,23 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     st.warning("Informe o nome da equipe.")
 
             st.markdown("---")
-            # Formulário de inclusão de piloto (independente da edição/listagem)
+            st.subheader("Equipes cadastradas")
+            equipes = listar_equipes()
+            for idx, row in equipes.iterrows():
+                col1, col2, col3 = st.columns([4,2,2])
+                with col1:
+                    novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
+                with col2:
+                    if st.button("Editar equipe", key=f"eq_edit{row['id']}"):
+                        editar_equipe(row['id'], novo_nome)
+                        st.success("Equipe editada!")
+                with col3:
+                    if st.button("Excluir equipe", key=f"eq_del{row['id']}"):
+                        excluir_equipe(row['id'])
+                        st.success("Equipe excluída!")
+
+        # --- Pilotos ---
+        with tab2:
             st.subheader("Adicionar novo piloto")
             equipes = listar_equipes()
             equipe_nomes = equipes['nome'].tolist()
@@ -638,23 +653,6 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     st.success("Piloto adicionado!")
 
             st.markdown("---")
-            # Lista de equipes cadastradas
-            st.subheader("Equipes cadastradas")
-            for idx, row in equipes.iterrows():
-                col1, col2, col3 = st.columns([4,2,2])
-                with col1:
-                    novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
-                with col2:
-                    if st.button("Editar equipe", key=f"eq_edit{row['id']}"):
-                        editar_equipe(row['id'], novo_nome)
-                        st.success("Equipe editada!")
-                with col3:
-                    if st.button("Excluir equipe", key=f"eq_del{row['id']}"):
-                        excluir_equipe(row['id'])
-                        st.success("Equipe excluída!")
-
-            st.markdown("---")
-            # Lista de pilotos cadastrados
             st.subheader("Pilotos cadastrados")
             pilotos = listar_pilotos()
             equipe_nomes_pilotos = equipes['nome'].tolist()
@@ -684,7 +682,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         st.success("Piloto excluído!")
 
         # --- Provas ---
-        with tab2:
+        with tab3:
             st.subheader("Adicionar nova prova")
             nome_prova = st.text_input("Nome da nova prova")
             data_prova = st.date_input("Data da nova prova")
@@ -710,7 +708,6 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         st.success("Prova excluída!")
     else:
         st.warning("Acesso restrito ao usuário master.")
-
 
 # --- Atualização de resultados (apenas manual, tabela de posições) ---
 if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
