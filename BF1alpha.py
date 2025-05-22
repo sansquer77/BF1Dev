@@ -3,7 +3,6 @@ import sqlite3
 import bcrypt
 import jwt as pyjwt
 import pandas as pd
-import ast
 from datetime import datetime, timedelta
 
 DB_PATH = 'bolao_f1alpha.db'
@@ -305,6 +304,22 @@ def exibir_log_apostas(user_id=None, is_master=False):
     st.dataframe(df)
 
 def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova):
+    # Validação: mínimo 3 equipes diferentes (logo, mínimo 3 pilotos)
+    if len(pilotos) < 3:
+        raise ValueError("Você deve apostar em pelo menos 3 equipes diferentes (mínimo 3 pilotos).")
+    # Validação: soma das fichas tem que ser exatamente 15
+    if sum(fichas) != 15:
+        raise ValueError("A soma das fichas deve ser exatamente 15.")
+    # Validação: pilotos únicos (não pode apostar no mesmo piloto mais de uma vez)
+    if len(set(pilotos)) != len(pilotos):
+        raise ValueError("Não é permitido apostar em dois pilotos iguais.")
+    # Validação extra (garantindo que fichas não negativas e não acima de 15, reforço de interface)
+    if any((f < 0 or f > 15) for f in fichas):
+        raise ValueError("Quantidade de fichas inválida para um piloto.")
+    # (Opcional) Validação - piloto_11 não deve estar vazio
+    if not piloto_11 or not isinstance(piloto_11, str):
+        raise ValueError("O palpite para o 11º colocado deve ser informado.")
+    # Salvar aposta no banco
     conn = db_connect()
     c = conn.cursor()
     data_envio = datetime.now().isoformat()
@@ -312,19 +327,6 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova):
     c.execute('INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova) VALUES (?, ?, ?, ?, ?, ?, ?)',
               (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova))
     conn.commit()
-    conn.close()
-def consultar_apostas(usuario_id):
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute('SELECT rowid, nome_prova, prova_id, data_envio, pilotos, fichas, piloto_11 FROM apostas WHERE usuario_id=?', (usuario_id,))
-    apostas = c.fetchall()
-    conn.close()
-    return apostas
-def consultar_aposta_usuario_prova(usuario_id, prova_id):
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute('SELECT pilotos, fichas, piloto_11 FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-    aposta = c.fetchone()
     conn.close()
     return aposta
 
