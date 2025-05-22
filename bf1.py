@@ -25,7 +25,7 @@ def init_db():
                     perfil TEXT,
                     status TEXT DEFAULT 'Ativo')''')
     # Usuário master
-    c.execute('SELECT * FROM usuarios WHERE nome=?', ('Password',))
+    c.execute('SELECT * FROM usuarios WHERE nome=?', ('sansquer@gmail.com',))
     if not c.fetchone():
         senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
         c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil, status) VALUES (?, ?, ?, ?, ?)',
