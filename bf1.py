@@ -23,7 +23,6 @@ def init_db():
                     senha_hash TEXT,
                     perfil TEXT,
                     status TEXT DEFAULT 'Ativo')''')
-    # Usuário master
     c.execute('SELECT * FROM usuarios WHERE nome=?', ('Password',))
     if not c.fetchone():
         senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
@@ -100,23 +99,6 @@ def get_user_by_id(user_id):
     user = c.fetchone()
     conn.close()
     return user
-def require_auth():
-    token = st.session_state.get('token')
-    if not token:
-        st.error("Faça login para acessar esta área.")
-        st.stop()
-    payload = decode_token(token)
-    if not payload:
-        st.error("Sessão expirada. Faça login novamente.")
-        st.session_state['token'] = None
-        st.stop()
-    return payload
-def require_admin():
-    payload = require_auth()
-    if payload['perfil'] not in ['admin', 'master']:
-        st.error("Acesso restrito ao administrador.")
-        st.stop()
-    return payload
 def cadastrar_usuario(nome, email, senha, perfil='participante'):
     conn = db_connect()
     c = conn.cursor()
@@ -248,8 +230,6 @@ def salvar_resultado(prova_id, pontos_pilotos, piloto_11):
               (prova_id, str(pontos_pilotos), str(piloto_11)))
     conn.commit()
     conn.close()
-def editar_resultado(prova_id, pontos_pilotos, piloto_11):
-    salvar_resultado(prova_id, pontos_pilotos, piloto_11)
 
 # --- Log de apostas ---
 def get_client_ip():
@@ -290,21 +270,58 @@ def consultar_apostas(usuario_id):
     apostas = c.fetchall()
     conn.close()
     return apostas
+def consultar_aposta_usuario_prova(usuario_id, prova_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT pilotos, fichas, piloto_11 FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+    aposta = c.fetchone()
+    conn.close()
+    return aposta
 
+# --- Navegação por estado ---
 st.set_page_config(page_title="Bolão F1 2025", layout="wide")
 init_db()
 
+if 'pagina' not in st.session_state:
+    st.session_state['pagina'] = "Login"
 if 'token' not in st.session_state:
     st.session_state['token'] = None
 
 def logout():
     st.session_state['token'] = None
+    st.session_state['pagina'] = "Login"
     st.success("Logout realizado com sucesso!")
-    st.experimental_rerun()
 
-menu = st.sidebar.selectbox("Menu", ["Login", "Cadastro", "Painel", "Gestão Usuários", "Gestão Campeonato", "Atualizar Resultado", "Log de Apostas", "Logout"])
+def menu_master():
+    return [
+        "Painel do Participante",
+        "Gestão de Usuários",
+        "Cadastro de novo participante",
+        "Gestão do campeonato",
+        "Atualização de resultados",
+        "Log de Apostas",
+        "Logout"
+    ]
+def menu_participante():
+    return [
+        "Painel do Participante",
+        "Logout"
+    ]
 
-if menu == "Login":
+def get_payload():
+    token = st.session_state.get('token')
+    if not token:
+        st.session_state['pagina'] = "Login"
+        st.stop()
+    payload = decode_token(token)
+    if not payload:
+        st.session_state['pagina'] = "Login"
+        st.session_state['token'] = None
+        st.stop()
+    return payload
+
+# --- Login ---
+if st.session_state['pagina'] == "Login":
     st.title("Login")
     email = st.text_input("Email")
     senha = st.text_input("Senha", type="password")
@@ -313,24 +330,25 @@ if menu == "Login":
         if user:
             token = generate_token(user[0], user[4], user[5])
             st.session_state['token'] = token
+            st.session_state['pagina'] = "Painel do Participante"
             st.success(f"Bem-vindo, {user[1]}!")
-            st.experimental_rerun()
         else:
             st.error("Usuário ou senha inválidos.")
 
-elif menu == "Cadastro":
-    st.title("Cadastro de novo participante")
-    nome = st.text_input("Nome")
-    email = st.text_input("Email")
-    senha = st.text_input("Senha", type="password")
-    if st.button("Cadastrar"):
-        if cadastrar_usuario(nome, email, senha):
-            st.success("Usuário cadastrado com sucesso!")
-        else:
-            st.error("Email já cadastrado.")
+# --- Menu lateral dinâmico ---
+if st.session_state['token']:
+    payload = get_payload()
+    perfil = payload['perfil']
+    if perfil == 'master':
+        menu = menu_master()
+    else:
+        menu = menu_participante()
+    escolha = st.sidebar.radio("Menu", menu)
+    st.session_state['pagina'] = escolha
 
-elif menu == "Painel":
-    payload = require_auth()
+# --- Painel do Participante (inclusão/alteração de apostas) ---
+if st.session_state['pagina'] == "Painel do Participante" and st.session_state['token']:
+    payload = get_payload()
     user = get_user_by_id(payload['user_id'])
     st.title("Painel do Participante")
     st.write(f"Bem-vindo, {user[1]} ({user[3]}) - Status: {user[4]}")
@@ -338,20 +356,28 @@ elif menu == "Painel":
     pilotos_df = listar_pilotos()
     if user[4] == "Ativo":
         if len(provas) > 0 and len(pilotos_df) > 2:
-            prova_id = st.selectbox("Escolha a prova", provas['id'])
+            prova_id = st.selectbox("Escolha a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
             pilotos = pilotos_df['nome'].tolist()
+            aposta_existente = consultar_aposta_usuario_prova(user[0], prova_id)
+            if aposta_existente:
+                pilotos_ant, fichas_ant, piloto_11_ant = aposta_existente
+                fichas_ant = list(map(int, fichas_ant.split(',')))
+                st.info("Você já apostou nesta prova. Altere e salve para atualizar sua aposta.")
+            else:
+                fichas_ant = [0]*len(pilotos)
+                piloto_11_ant = pilotos[0]
             fichas = []
             st.write("Distribua 15 fichas entre no mínimo 3 pilotos de equipes diferentes:")
-            for piloto in pilotos:
-                fichas.append(st.number_input(f"Fichas para {piloto}", min_value=0, max_value=15, value=0, key=piloto))
-            piloto_11 = st.selectbox("Palpite para 11º colocado", pilotos)
-            if st.button("Enviar aposta"):
+            for i, piloto in enumerate(pilotos):
+                fichas.append(st.number_input(f"Fichas para {piloto}", min_value=0, max_value=15, value=fichas_ant[i], key=f"fichas_{piloto}"))
+            piloto_11 = st.selectbox("Palpite para 11º colocado", pilotos, index=pilotos.index(piloto_11_ant) if aposta_existente else 0)
+            if st.button("Salvar aposta"):
                 if sum(fichas) == 15 and len([f for f in fichas if f > 0]) >= 3:
                     salvar_aposta(user[0], prova_id, pilotos, fichas, piloto_11)
                     ip = get_client_ip()
                     aposta_str = f"Prova: {prova_id}, Pilotos: {pilotos}, Fichas: {fichas}, 11º: {piloto_11}"
                     registrar_log_aposta(user[1], ip, aposta_str)
-                    st.success("Aposta registrada e logada!")
+                    st.success("Aposta registrada/atualizada!")
                 else:
                     st.error("Distribua exatamente 15 fichas entre pelo menos 3 pilotos diferentes.")
         else:
@@ -362,160 +388,185 @@ elif menu == "Painel":
     apostas = consultar_apostas(user[0])
     st.table(pd.DataFrame(apostas, columns=["Prova", "Data Envio", "Pilotos", "Fichas", "11º"]))
 
-elif menu == "Gestão Usuários":
-    payload = require_admin()
-    st.title("Gestão de Usuários")
-    usuarios = listar_usuarios()
-    st.dataframe(usuarios)
-    st.write("Selecione um usuário para editar, excluir ou alterar status/perfil:")
-    usuario_id = st.selectbox("Usuário", usuarios['id'])
-    usuario = usuarios[usuarios['id'] == usuario_id].iloc[0]
-    novo_nome = st.text_input("Nome", value=usuario['nome'])
-    novo_email = st.text_input("Email", value=usuario['email'])
-    novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1)
-    novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1)
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("Atualizar usuário"):
-            if usuario['nome'] == "Password":
-                st.warning("Não é permitido alterar o status ou perfil do usuário master.")
-            else:
-                editar_usuario(usuario_id, novo_nome, novo_email)
-                alterar_status_usuario(usuario_id, novo_status)
-                alterar_perfil_usuario(usuario_id, novo_perfil)
-                st.success("Usuário atualizado!")
-                st.experimental_rerun()
-    with col2:
-        if st.button("Excluir usuário"):
-            if usuario['nome'] == "Password":
-                st.warning("Não é permitido excluir o usuário master.")
-            else:
-                excluir_usuario(usuario_id)
-                st.success("Usuário excluído!")
-                st.experimental_rerun()
-    with col3:
-        if st.button("Logout"):
-            logout()
-
-elif menu == "Gestão Campeonato":
-    require_admin()
-    st.title("Gestão do Campeonato")
-    tab1, tab2, tab3 = st.tabs(["Equipes", "Pilotos", "Provas"])
-
-    with tab1:
-        st.subheader("Equipes")
-        equipes = listar_equipes()
-        for idx, row in equipes.iterrows():
-            col1, col2, col3 = st.columns([4,2,2])
-            with col1:
-                novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
-            with col2:
-                if st.button("Editar", key=f"eq_edit{row['id']}"):
-                    editar_equipe(row['id'], novo_nome)
-                    st.success("Equipe editada!")
-                    st.experimental_rerun()
-            with col3:
-                if st.button("Excluir", key=f"eq_del{row['id']}"):
-                    excluir_equipe(row['id'])
-                    st.success("Equipe excluída!")
-                    st.experimental_rerun()
-        nome_equipe = st.text_input("Nome da nova equipe")
-        if st.button("Adicionar equipe"):
-            adicionar_equipe(nome_equipe)
-            st.success("Equipe adicionada!")
-            st.experimental_rerun()
-
-    with tab2:
-        st.subheader("Pilotos")
-        pilotos = listar_pilotos()
-        equipes = listar_equipes()
-        for idx, row in pilotos.iterrows():
-            col1, col2, col3, col4 = st.columns([4,2,2,2])
-            with col1:
-                novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
-            with col2:
-                nova_equipe_id = st.selectbox(f"Equipe piloto {row['id']}", equipes['id'], index=list(equipes['id']).index(row['equipe_id']), key=f"pl_eq{row['id']}")
-            with col3:
-                if st.button("Editar", key=f"pl_edit{row['id']}"):
-                    editar_piloto(row['id'], novo_nome, nova_equipe_id)
-                    st.success("Piloto editado!")
-                    st.experimental_rerun()
-            with col4:
-                if st.button("Excluir", key=f"pl_del{row['id']}"):
-                    excluir_piloto(row['id'])
-                    st.success("Piloto excluído!")
-                    st.experimental_rerun()
-        nome_piloto = st.text_input("Nome do novo piloto")
-        equipe_id = st.selectbox("Equipe do novo piloto", equipes['id'])
-        if st.button("Adicionar piloto"):
-            adicionar_piloto(nome_piloto, equipe_id)
-            st.success("Piloto adicionado!")
-            st.experimental_rerun()
-
-    with tab3:
-        st.subheader("Provas")
-        provas = listar_provas()
-        for idx, row in provas.iterrows():
-            col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
-            with col1:
-                novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
-            with col2:
-                nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
-            with col3:
-                nova_session_key = st.number_input(f"Session Key {row['id']}", min_value=0, value=row['session_key'], key=f"pr_sk{row['id']}")
-            with col4:
-                if st.button("Editar", key=f"pr_edit{row['id']}"):
-                    editar_prova(row['id'], novo_nome, nova_data.isoformat(), nova_session_key)
-                    st.success("Prova editada!")
-                    st.experimental_rerun()
-            with col5:
-                if st.button("Excluir", key=f"pr_del{row['id']}"):
-                    excluir_prova(row['id'])
-                    st.success("Prova excluída!")
-                    st.experimental_rerun()
-        nome_prova = st.text_input("Nome da nova prova")
-        data_prova = st.date_input("Data da nova prova")
-        session_key = st.number_input("Session Key OpenF1", min_value=0, step=1)
-        if st.button("Adicionar prova"):
-            adicionar_prova(nome_prova, data_prova.isoformat(), session_key)
-            st.success("Prova adicionada!")
-            st.experimental_rerun()
-
-elif menu == "Atualizar Resultado":
-    require_admin()
-    st.title("Atualizar Resultado")
-    provas = listar_provas()
-    if len(provas) > 0:
-        prova_id = st.selectbox("Selecione a prova", provas['id'])
-        st.write("Você pode buscar automaticamente ou cadastrar manualmente o resultado.")
-        if st.button("Buscar resultado OpenF1"):
-            session_key = provas[provas['id'] == prova_id]['session_key'].values[0]
-            url = f"https://api.openf1.org/v1/classification?session_key={session_key}"
-            resp = requests.get(url)
-            if resp.status_code == 200:
-                data = resp.json()
-                pontos_pilotos = {str(item['driver_number']): item['points'] for item in data}
-                piloto_11 = data[10]['driver_number'] if len(data) > 10 else None
-                salvar_resultado(prova_id, pontos_pilotos, piloto_11)
-                st.success("Resultado atualizado via OpenF1!")
-            else:
-                st.error("Erro ao buscar dados da OpenF1.")
-        st.write("Ou preencha manualmente:")
-        pontos_pilotos = st.text_area("Pontos dos pilotos (ex: {'44':25, '33':18, ...})")
-        piloto_11 = st.text_input("Piloto 11º colocado (número)")
-        if st.button("Salvar resultado manualmente"):
-            try:
-                pontos_dict = eval(pontos_pilotos)
-                salvar_resultado(prova_id, pontos_dict, piloto_11)
-                st.success("Resultado manual salvo!")
-            except Exception:
-                st.error("Erro no formato dos pontos dos pilotos.")
+# --- Gestão de Usuários (apenas master) ---
+if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
+    payload = get_payload()
+    if payload['perfil'] == 'master':
+        st.title("Gestão de Usuários")
+        usuarios = listar_usuarios()
+        st.dataframe(usuarios)
+        st.write("Selecione um usuário para editar, excluir ou alterar status/perfil:")
+        usuario_id = st.selectbox("Usuário", usuarios['id'])
+        usuario = usuarios[usuarios['id'] == usuario_id].iloc[0]
+        novo_nome = st.text_input("Nome", value=usuario['nome'])
+        novo_email = st.text_input("Email", value=usuario['email'])
+        novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1)
+        novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("Atualizar usuário"):
+                if usuario['nome'] == "Password":
+                    st.warning("Não é permitido alterar o status ou perfil do usuário master.")
+                else:
+                    editar_usuario(usuario_id, novo_nome, novo_email)
+                    alterar_status_usuario(usuario_id, novo_status)
+                    alterar_perfil_usuario(usuario_id, novo_perfil)
+                    st.success("Usuário atualizado!")
+        with col2:
+            if st.button("Excluir usuário"):
+                if usuario['nome'] == "Password":
+                    st.warning("Não é permitido excluir o usuário master.")
+                else:
+                    excluir_usuario(usuario_id)
+                    st.success("Usuário excluído!")
+        with col3:
+            if st.button("Logout"):
+                logout()
     else:
-        st.warning("Nenhuma prova cadastrada.")
+        st.warning("Acesso restrito ao usuário master.")
 
-elif menu == "Log de Apostas":
-    payload = require_admin()
-    exibir_log_apostas()
+# --- Cadastro de novo participante (apenas master) ---
+if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_state['token']:
+    payload = get_payload()
+    if payload['perfil'] == 'master':
+        st.title("Cadastro de novo participante")
+        nome = st.text_input("Nome")
+        email = st.text_input("Email")
+        senha = st.text_input("Senha", type="password")
+        if st.button("Cadastrar"):
+            if cadastrar_usuario(nome, email, senha):
+                st.success("Usuário cadastrado com sucesso!")
+            else:
+                st.error("Email já cadastrado.")
+    else:
+        st.warning("Acesso restrito ao usuário master.")
 
-elif menu == "Logout":
+# --- Gestão do campeonato (apenas master) ---
+if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
+    payload = get_payload()
+    if payload['perfil'] == 'master':
+        st.title("Gestão do Campeonato")
+        tab1, tab2, tab3 = st.tabs(["Equipes", "Pilotos", "Provas"])
+
+        with tab1:
+            st.subheader("Equipes")
+            equipes = listar_equipes()
+            for idx, row in equipes.iterrows():
+                col1, col2, col3 = st.columns([4,2,2])
+                with col1:
+                    novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
+                with col2:
+                    if st.button("Editar", key=f"eq_edit{row['id']}"):
+                        editar_equipe(row['id'], novo_nome)
+                        st.success("Equipe editada!")
+                with col3:
+                    if st.button("Excluir", key=f"eq_del{row['id']}"):
+                        excluir_equipe(row['id'])
+                        st.success("Equipe excluída!")
+            nome_equipe = st.text_input("Nome da nova equipe")
+            if st.button("Adicionar equipe"):
+                adicionar_equipe(nome_equipe)
+                st.success("Equipe adicionada!")
+
+        with tab2:
+            st.subheader("Pilotos")
+            pilotos = listar_pilotos()
+            equipes = listar_equipes()
+            equipe_nomes = equipes['nome'].tolist()
+            for idx, row in pilotos.iterrows():
+                col1, col2, col3, col4 = st.columns([4,2,2,2])
+                with col1:
+                    novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
+                with col2:
+                    nova_equipe_nome = st.selectbox(f"Equipe piloto {row['id']}", equipe_nomes, index=equipe_nomes.index(row['equipe']), key=f"pl_eq{row['id']}")
+                    nova_equipe_id = equipes[equipes['nome']==nova_equipe_nome]['id'].values[0]
+                with col3:
+                    if st.button("Editar", key=f"pl_edit{row['id']}"):
+                        editar_piloto(row['id'], novo_nome, nova_equipe_id)
+                        st.success("Piloto editado!")
+                with col4:
+                    if st.button("Excluir", key=f"pl_del{row['id']}"):
+                        excluir_piloto(row['id'])
+                        st.success("Piloto excluído!")
+            nome_piloto = st.text_input("Nome do novo piloto")
+            equipe_nome = st.selectbox("Equipe do novo piloto", equipe_nomes)
+            equipe_id = equipes[equipes['nome']==equipe_nome]['id'].values[0] if equipe_nomes else 1
+            if st.button("Adicionar piloto"):
+                adicionar_piloto(nome_piloto, equipe_id)
+                st.success("Piloto adicionado!")
+
+        with tab3:
+            st.subheader("Provas")
+            provas = listar_provas()
+            for idx, row in provas.iterrows():
+                col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
+                with col1:
+                    novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
+                with col2:
+                    nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
+                with col3:
+                    nova_session_key = st.number_input(f"Session Key {row['id']}", min_value=0, value=row['session_key'], key=f"pr_sk{row['id']}")
+                with col4:
+                    if st.button("Editar", key=f"pr_edit{row['id']}"):
+                        editar_prova(row['id'], novo_nome, nova_data.isoformat(), nova_session_key)
+                        st.success("Prova editada!")
+                with col5:
+                    if st.button("Excluir", key=f"pr_del{row['id']}"):
+                        excluir_prova(row['id'])
+                        st.success("Prova excluída!")
+            nome_prova = st.text_input("Nome da nova prova")
+            data_prova = st.date_input("Data da nova prova")
+            session_key = st.number_input("Session Key OpenF1", min_value=0, step=1)
+            if st.button("Adicionar prova"):
+                adicionar_prova(nome_prova, data_prova.isoformat(), session_key)
+                st.success("Prova adicionada!")
+    else:
+        st.warning("Acesso restrito ao usuário master.")
+
+# --- Atualização de resultados (apenas master) ---
+if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
+    payload = get_payload()
+    if payload['perfil'] == 'master':
+        st.title("Atualizar Resultado")
+        provas = listar_provas()
+        if len(provas) > 0:
+            prova_id = st.selectbox("Selecione a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
+            st.write("Você pode buscar automaticamente ou cadastrar manualmente o resultado.")
+            if st.button("Buscar resultado OpenF1"):
+                session_key = provas[provas['id'] == prova_id]['session_key'].values[0]
+                url = f"https://api.openf1.org/v1/classification?session_key={session_key}"
+                resp = requests.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    pontos_pilotos = {str(item['driver_number']): item['points'] for item in data}
+                    piloto_11 = data[10]['driver_number'] if len(data) > 10 else None
+                    salvar_resultado(prova_id, pontos_pilotos, piloto_11)
+                    st.success("Resultado atualizado via OpenF1!")
+                else:
+                    st.error("Erro ao buscar dados da OpenF1.")
+            st.write("Ou preencha manualmente:")
+            pontos_pilotos = st.text_area("Pontos dos pilotos (ex: {'44':25, '33':18, ...})")
+            piloto_11 = st.text_input("Piloto 11º colocado (número)")
+            if st.button("Salvar resultado manualmente"):
+                try:
+                    pontos_dict = eval(pontos_pilotos)
+                    salvar_resultado(prova_id, pontos_dict, piloto_11)
+                    st.success("Resultado manual salvo!")
+                except Exception:
+                    st.error("Erro no formato dos pontos dos pilotos.")
+        else:
+            st.warning("Nenhuma prova cadastrada.")
+    else:
+        st.warning("Acesso restrito ao usuário master.")
+
+# --- Log de apostas (apenas master) ---
+if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
+    payload = get_payload()
+    if payload['perfil'] == 'master':
+        exibir_log_apostas()
+    else:
+        st.warning("Acesso restrito ao usuário master.")
+
+# --- Logout ---
+if st.session_state['pagina'] == "Logout" and st.session_state['token']:
     logout()
