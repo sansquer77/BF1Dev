@@ -22,7 +22,6 @@ Cabe ressaltar, que a pontuação do novo participante será 80% da pontuação 
 As apostas dos participantes devem ser efetuadas até o horário programado da corrida e compartilhadas via formulário padrão que está no grupo do WhatsApp. Fica facultado ao participante a geração de um print da tela do aplicativo com a aposta e o horário da mensagem para futuras validações, mas cabe ressaltar que a ferramenta possui um Time Stamp do horário de envio das mensagens.
 O participante pode enviar quantas apostas quiser até o horário limite, sendo válida a última enviada.
 Apostas registradas após o horário da largada, por exemplo 09:01 sendo a corrida às 09h serão desconsideradas.
-Os horários das corridas deste ano são:
 
 O participante que não efetuar a sua aposta ATÉ O PRAZO DEFINO DO ITEM-3, irá concorrer com a mesma aposta da última corrida.
 Quando se tratar da primeira vez que a aposta não for feita, e apenas neste caso, será computado 100% dos pontos.
@@ -453,7 +452,7 @@ if st.session_state['token']:
     escolha = st.sidebar.radio("Menu", menu)
     st.session_state['pagina'] = escolha
 
-# --- Painel do Participante (inclusão/alteração de apostas) ---
+# --- Painel do Participante (corrigido e robusto) ---
 if st.session_state['pagina'] == "Painel do Participante" and st.session_state['token']:
     payload = get_payload()
     user = get_user_by_id(payload['user_id'])
@@ -461,39 +460,93 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     st.write(f"Bem-vindo, {user[1]} ({user[3]}) - Status: {user[4]}")
     provas = listar_provas()
     pilotos_df = listar_pilotos()
+    equipes_df = listar_equipes()
     if user[4] == "Ativo":
-        if len(provas) > 0 and len(pilotos_df) > 2:
+        if len(provas) > 0 and len(pilotos_df) > 2 and len(equipes_df) > 0:
             prova_id = st.selectbox("Escolha a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
-            pilotos = pilotos_df['nome'].tolist()
+            nome_prova = provas[provas['id']==prova_id]['nome'].values[0]
+            equipes = equipes_df['nome'].tolist()
             aposta_existente = consultar_aposta_usuario_prova(user[0], prova_id)
+            pilotos_apostados_ant = {}
+            fichas_ant = {}
+            piloto_11_ant = ""
             if aposta_existente:
-                pilotos_ant, fichas_ant, piloto_11_ant = aposta_existente
-                fichas_ant = list(map(int, fichas_ant.split(',')))
-                st.info("Você já apostou nesta prova. Altere e salve para atualizar sua aposta.")
-            else:
-                fichas_ant = [0]*len(pilotos)
-                piloto_11_ant = pilotos[0]
-            fichas = []
-            st.write("Distribua 15 fichas entre no mínimo 3 pilotos de equipes diferentes:")
-            for i, piloto in enumerate(pilotos):
-                fichas.append(st.number_input(f"Fichas para {piloto}", min_value=0, max_value=15, value=fichas_ant[i], key=f"fichas_{piloto}"))
-            piloto_11 = st.selectbox("Palpite para 11º colocado", pilotos, index=pilotos.index(piloto_11_ant) if aposta_existente else 0)
-            if st.button("Salvar aposta"):
-                if sum(fichas) == 15 and len([f for f in fichas if f > 0]) >= 3:
-                    salvar_aposta(user[0], prova_id, pilotos, fichas, piloto_11)
-                    ip = get_client_ip()
-                    aposta_str = f"Prova: {prova_id}, Pilotos: {pilotos}, Fichas: {fichas}, 11º: {piloto_11}"
-                    registrar_log_aposta(user[1], ip, aposta_str)
-                    st.success("Aposta registrada/atualizada!")
+                pilotos_ant, fichas_ant_list, piloto_11_ant = aposta_existente
+                pilotos_ant = pilotos_ant.split(",")
+                fichas_ant_list = list(map(int, fichas_ant_list.split(",")))
+                for p, f in zip(pilotos_ant, fichas_ant_list):
+                    equipe_p = pilotos_df[pilotos_df['nome'] == p]['equipe'].values[0]
+                    pilotos_apostados_ant[equipe_p] = p
+                    fichas_ant[equipe_p] = f
+
+            st.write("Escolha **um piloto de cada equipe** e distribua até 15 fichas (mínimo 3 equipes diferentes):")
+            pilotos_apostados = {}
+            fichas = {}
+            for equipe in equipes:
+                pilotos_equipe = pilotos_df[pilotos_df['equipe'] == equipe]['nome'].tolist()
+                if not pilotos_equipe:
+                    continue
+                pilotos_equipe_combo = ["Nenhum"] + [f"{p} ({equipe})" for p in pilotos_equipe]
+                piloto_pre_sel = pilotos_apostados_ant.get(equipe, None)
+                index_sel = pilotos_equipe.index(piloto_pre_sel) + 1 if piloto_pre_sel in pilotos_equipe else 0
+                col1, col2 = st.columns([2,1])
+                with col1:
+                    piloto_sel_combo = st.selectbox(
+                        f"Piloto da equipe {equipe}",
+                        pilotos_equipe_combo,
+                        index=index_sel,
+                        key=f"piloto_{equipe}"
+                    )
+                with col2:
+                    if piloto_sel_combo != "Nenhum":
+                        piloto_sel = piloto_sel_combo.split(" (")[0]
+                        fichas[equipe] = st.number_input(
+                            f"Fichas para {piloto_sel}", min_value=0, max_value=15,
+                            value=fichas_ant.get(equipe, 0), key=f"fichas_{equipe}"
+                        )
+                        pilotos_apostados[equipe] = piloto_sel
+                    else:
+                        fichas[equipe] = 0
+
+            st.markdown("---")
+            pilotos_todos = pilotos_df['nome'].tolist()
+            piloto_11 = st.selectbox(
+                "Palpite para 11º colocado", pilotos_todos,
+                index=pilotos_todos.index(piloto_11_ant) if piloto_11_ant in pilotos_todos else 0
+            )
+            equipes_apostadas = [e for e, f in fichas.items() if f > 0]
+            total_fichas = sum(fichas[e] for e in equipes_apostadas)
+            pilotos_selecionados = [pilotos_apostados[e] for e in equipes_apostadas]
+            if st.button("Efetivar Aposta"):
+                erro = None
+                if len(equipes_apostadas) < 3:
+                    erro = "Você deve apostar em pelo menos 3 equipes diferentes."
+                elif total_fichas != 15:
+                    erro = "A soma das fichas deve ser exatamente 15."
+                elif len(set(pilotos_selecionados)) != len(pilotos_selecionados):
+                    erro = "Não é permitido apostar em dois pilotos iguais."
+                if erro:
+                    st.error(erro)
                 else:
-                    st.error("Distribua exatamente 15 fichas entre pelo menos 3 pilotos diferentes.")
+                    try:
+                        salvar_aposta(
+                            user[0], prova_id, pilotos_selecionados,
+                            [fichas[e] for e in equipes_apostadas],
+                            piloto_11, nome_prova
+                        )
+                        aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos_selecionados}, Fichas: {[fichas[e] for e in equipes_apostadas]}, 11º: {piloto_11}"
+                        registrar_log_aposta(user[1], aposta_str, nome_prova)
+                        st.success("Aposta registrada/atualizada!")
+                    except Exception as ex:
+                        st.error(f"Erro ao salvar aposta: {ex}")
         else:
-            st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
+            st.warning("Administração deve cadastrar provas, equipes e pilotos antes das apostas.")
     else:
         st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
     st.subheader("Minhas apostas")
     apostas = consultar_apostas(user[0])
-    st.table(pd.DataFrame(apostas, columns=["Prova", "Data Envio", "Pilotos", "Fichas", "11º"]))
+    df_apostas = pd.DataFrame(apostas, columns=["#", "Prova", "Prova_id", "Data Envio", "Pilotos", "Fichas", "11º"])
+    st.table(df_apostas[["#", "Prova", "Data Envio", "Pilotos", "Fichas", "11º"]])
 
 # --- Gestão de Usuários (apenas master) ---
 if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
@@ -548,95 +601,101 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
     else:
         st.warning("Acesso restrito ao usuário master.")
 
-# --- Gestão do campeonato (apenas master) ---
+# --- Gestão do campeonato (Pilotos/Equipes juntos, corrigido) ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
         st.title("Gestão do Campeonato")
-        tab1, tab2, tab3 = st.tabs(["Equipes", "Pilotos", "Provas"])
+        tab1, tab2 = st.tabs(["Pilotos/Equipes", "Provas"])
 
         with tab1:
-            st.subheader("Equipes")
+            st.subheader("Adicionar nova equipe")
+            nome_equipe = st.text_input("Nome da nova equipe")
+            if st.button("Adicionar equipe"):
+                adicionar_equipe(nome_equipe)
+                st.success("Equipe adicionada!")
+            st.markdown("---")
+            st.subheader("Adicionar novo piloto")
             equipes = listar_equipes()
+            equipe_nomes = equipes['nome'].tolist()
+            nome_piloto = st.text_input("Nome do novo piloto")
+            equipe_nome = st.selectbox("Equipe do novo piloto", equipe_nomes, key="equipe_combo_novo_piloto")
+            if st.button("Adicionar piloto"):
+                if not nome_piloto.strip():
+                    st.error("Informe o nome do piloto.")
+                elif not equipe_nomes:
+                    st.error("Cadastre uma equipe antes de cadastrar pilotos.")
+                else:
+                    equipe_id = equipes[equipes['nome'] == equipe_nome]['id'].values[0]
+                    adicionar_piloto(nome_piloto, equipe_id)
+                    st.success("Piloto adicionado!")
+            st.markdown("---")
+            st.subheader("Equipes cadastradas")
             for idx, row in equipes.iterrows():
                 col1, col2, col3 = st.columns([4,2,2])
                 with col1:
                     novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
                 with col2:
-                    if st.button("Editar", key=f"eq_edit{row['id']}"):
+                    if st.button("Editar equipe", key=f"eq_edit{row['id']}"):
                         editar_equipe(row['id'], novo_nome)
                         st.success("Equipe editada!")
                 with col3:
-                    if st.button("Excluir", key=f"eq_del{row['id']}"):
+                    if st.button("Excluir equipe", key=f"eq_del{row['id']}"):
                         excluir_equipe(row['id'])
                         st.success("Equipe excluída!")
-            nome_equipe = st.text_input("Nome da nova equipe")
-            if st.button("Adicionar equipe"):
-                adicionar_equipe(nome_equipe)
-                st.success("Equipe adicionada!")
-
-        with tab2:
-            st.subheader("Pilotos")
+            st.markdown("---")
+            st.subheader("Pilotos cadastrados")
             pilotos = listar_pilotos()
-            equipes = listar_equipes()
-            equipe_nomes = equipes['nome'].tolist()
+            equipe_nomes_pilotos = equipes['nome'].tolist()
             for idx, row in pilotos.iterrows():
                 col1, col2, col3, col4 = st.columns([4,2,2,2])
                 with col1:
                     novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
                 with col2:
-                    # CORREÇÃO: Verifica se equipe existe na lista antes de usar .index()
-                    if row['equipe'] in equipe_nomes:
-                        equipe_idx = equipe_nomes.index(row['equipe'])
+                    if row['equipe'] in equipe_nomes_pilotos:
+                        equipe_idx = equipe_nomes_pilotos.index(row['equipe'])
                     else:
                         equipe_idx = 0
                     nova_equipe_nome = st.selectbox(
                         f"Equipe piloto {row['id']}",
-                        equipe_nomes,
+                        equipe_nomes_pilotos,
                         index=equipe_idx,
                         key=f"pl_eq{row['id']}"
                     )
                     nova_equipe_id = equipes[equipes['nome']==nova_equipe_nome]['id'].values[0]
                 with col3:
-                    if st.button("Editar", key=f"pl_edit{row['id']}"):
+                    if st.button("Editar piloto", key=f"pl_edit{row['id']}"):
                         editar_piloto(row['id'], novo_nome, nova_equipe_id)
                         st.success("Piloto editado!")
                 with col4:
-                    if st.button("Excluir", key=f"pl_del{row['id']}"):
+                    if st.button("Excluir piloto", key=f"pl_del{row['id']}"):
                         excluir_piloto(row['id'])
                         st.success("Piloto excluído!")
-            nome_piloto = st.text_input("Nome do novo piloto")
-            equipe_nome = st.selectbox("Equipe do novo piloto", equipe_nomes)
-            equipe_id = equipes[equipes['nome']==equipe_nome]['id'].values[0] if equipe_nomes else 1
-            if st.button("Adicionar piloto"):
-                adicionar_piloto(nome_piloto, equipe_id)
-                st.success("Piloto adicionado!")
 
-        with tab3:
-            st.subheader("Provas")
+        with tab2:
+            st.subheader("Adicionar nova prova")
+            nome_prova = st.text_input("Nome da nova prova")
+            data_prova = st.date_input("Data da nova prova")
+            if st.button("Adicionar prova"):
+                adicionar_prova(nome_prova, data_prova.isoformat(), None)
+                st.success("Prova adicionada!")
+            st.markdown("---")
+            st.subheader("Provas cadastradas")
             provas = listar_provas()
             for idx, row in provas.iterrows():
-                col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
+                col1, col2, col3, col4 = st.columns([4,4,2,2])
                 with col1:
                     novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
                 with col2:
                     nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
                 with col3:
-                    nova_session_key = st.number_input(f"Session Key {row['id']}", min_value=0, value=row['session_key'], key=f"pr_sk{row['id']}")
-                with col4:
-                    if st.button("Editar", key=f"pr_edit{row['id']}"):
-                        editar_prova(row['id'], novo_nome, nova_data.isoformat(), nova_session_key)
+                    if st.button("Editar prova", key=f"pr_edit{row['id']}"):
+                        editar_prova(row['id'], novo_nome, nova_data.isoformat(), None)
                         st.success("Prova editada!")
-                with col5:
-                    if st.button("Excluir", key=f"pr_del{row['id']}"):
+                with col4:
+                    if st.button("Excluir prova", key=f"pr_del{row['id']}"):
                         excluir_prova(row['id'])
                         st.success("Prova excluída!")
-            nome_prova = st.text_input("Nome da nova prova")
-            data_prova = st.date_input("Data da nova prova")
-            session_key = st.number_input("Session Key OpenF1", min_value=0, step=1)
-            if st.button("Adicionar prova"):
-                adicionar_prova(nome_prova, data_prova.isoformat(), session_key)
-                st.success("Prova adicionada!")
     else:
         st.warning("Acesso restrito ao usuário master.")
 
