@@ -602,7 +602,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
     payload = get_payload()
     if payload['perfil'] == 'master':
         st.title("Gestão do Campeonato")
-        tab1, tab2, tab3 = st.tabs(["Equipes", "Pilotos", "Provas"])
+        tab1, tab2 = st.tabs(["Pilotos/Equipes", "Provas"])
 
         with tab1:
             st.subheader("Adicionar nova equipe")
@@ -611,22 +611,6 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 adicionar_equipe(nome_equipe)
                 st.success("Equipe adicionada!")
             st.markdown("---")
-            st.subheader("Equipes cadastradas")
-            equipes = listar_equipes()
-            for idx, row in equipes.iterrows():
-                col1, col2, col3 = st.columns([4,2,2])
-                with col1:
-                    novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
-                with col2:
-                    if st.button("Editar", key=f"eq_edit{row['id']}"):
-                        editar_equipe(row['id'], novo_nome)
-                        st.success("Equipe editada!")
-                with col3:
-                    if st.button("Excluir", key=f"eq_del{row['id']}"):
-                        excluir_equipe(row['id'])
-                        st.success("Equipe excluída!")
-
-        with tab2:
             st.subheader("Adicionar novo piloto")
             equipes = listar_equipes()
             equipe_nomes = equipes['nome'].tolist()
@@ -637,6 +621,21 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 adicionar_piloto(nome_piloto, equipe_id)
                 st.success("Piloto adicionado!")
             st.markdown("---")
+            st.subheader("Equipes cadastradas")
+            equipes = listar_equipes()
+            for idx, row in equipes.iterrows():
+                col1, col2, col3 = st.columns([4,2,2])
+                with col1:
+                    novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
+                with col2:
+                    if st.button("Editar equipe", key=f"eq_edit{row['id']}"):
+                        editar_equipe(row['id'], novo_nome)
+                        st.success("Equipe editada!")
+                with col3:
+                    if st.button("Excluir equipe", key=f"eq_del{row['id']}"):
+                        excluir_equipe(row['id'])
+                        st.success("Equipe excluída!")
+            st.markdown("---")
             st.subheader("Pilotos cadastrados")
             pilotos = listar_pilotos()
             for idx, row in pilotos.iterrows():
@@ -644,6 +643,8 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 with col1:
                     novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
                 with col2:
+                    # Seleciona equipe pelo nome
+                    equipe_nomes = equipes['nome'].tolist()
                     if row['equipe'] in equipe_nomes:
                         equipe_idx = equipe_nomes.index(row['equipe'])
                     else:
@@ -656,15 +657,15 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     )
                     nova_equipe_id = equipes[equipes['nome']==nova_equipe_nome]['id'].values[0]
                 with col3:
-                    if st.button("Editar", key=f"pl_edit{row['id']}"):
+                    if st.button("Editar piloto", key=f"pl_edit{row['id']}"):
                         editar_piloto(row['id'], novo_nome, nova_equipe_id)
                         st.success("Piloto editado!")
                 with col4:
-                    if st.button("Excluir", key=f"pl_del{row['id']}"):
+                    if st.button("Excluir piloto", key=f"pl_del{row['id']}"):
                         excluir_piloto(row['id'])
                         st.success("Piloto excluído!")
 
-        with tab3:
+        with tab2:
             st.subheader("Adicionar nova prova")
             nome_prova = st.text_input("Nome da nova prova")
             data_prova = st.date_input("Data da nova prova")
@@ -681,11 +682,11 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 with col2:
                     nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
                 with col3:
-                    if st.button("Editar", key=f"pr_edit{row['id']}"):
+                    if st.button("Editar prova", key=f"pr_edit{row['id']}"):
                         editar_prova(row['id'], novo_nome, nova_data.isoformat(), None)
                         st.success("Prova editada!")
                 with col4:
-                    if st.button("Excluir", key=f"pr_del{row['id']}"):
+                    if st.button("Excluir prova", key=f"pr_del{row['id']}"):
                         excluir_prova(row['id'])
                         st.success("Prova excluída!")
     else:
