@@ -469,37 +469,69 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
         if len(provas) > 0 and len(pilotos_df) > 2:
             prova_id = st.selectbox("Escolha a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
             nome_prova = provas[provas['id']==prova_id]['nome'].values[0]
-            pilotos = pilotos_df['nome'].tolist()
             equipes = equipes_df['nome'].tolist()
+            pilotos = pilotos_df[['nome', 'equipe']].values.tolist()
             aposta_existente = consultar_aposta_usuario_prova(user[0], prova_id)
+            # Preparar apostas anteriores (se houver)
+            fichas_ant = {}
+            pilotos_apostados_ant = {}
+            piloto_11_ant = ""
             if aposta_existente:
-                pilotos_ant, fichas_ant, piloto_11_ant = aposta_existente
-                fichas_ant = list(map(int, fichas_ant.split(',')))
-                st.info("Você já apostou nesta prova. Altere e salve para atualizar sua aposta.")
-            else:
-                fichas_ant = [0]*len(pilotos)
-                piloto_11_ant = pilotos[0]
-            st.write("Distribua 15 fichas entre no mínimo 3 pilotos de equipes diferentes:")
+                pilotos_ant, fichas_ant_list, piloto_11_ant = aposta_existente
+                pilotos_ant = pilotos_ant.split(",")
+                fichas_ant_list = list(map(int, fichas_ant_list.split(",")))
+                for p, f in zip(pilotos_ant, fichas_ant_list):
+                    if f > 0:
+                        equipe_p = pilotos_df[pilotos_df['nome'] == p]['equipe'].values[0]
+                        fichas_ant[equipe_p] = f
+                        pilotos_apostados_ant[equipe_p] = p
+            # Formulário: escolha de 1 piloto por equipe e fichas
+            st.write("Escolha **um piloto de cada equipe** e distribua até 15 fichas (mínimo 3 equipes diferentes):")
             col1, col2 = st.columns(2)
-            fichas = [0]*len(pilotos)
+            pilotos_apostados = {}
+            fichas = {}
             for equipe in equipes:
-                pilotos_equipe = pilotos_df[pilotos_df['equipe']==equipe]['nome'].tolist()
+                pilotos_equipe = pilotos_df[pilotos_df['equipe'] == equipe]['nome'].tolist()
                 with col1:
-                    st.markdown(f"**{equipe}**")
-                for piloto in pilotos_equipe:
-                    idx = pilotos.index(piloto)
-                    with col2:
-                        fichas[idx] = st.number_input(f"{piloto}", min_value=0, max_value=15, value=fichas_ant[idx], key=f"fichas_{piloto}")
+                    piloto_sel = st.selectbox(
+                        f"Piloto da equipe {equipe}",
+                        ["Nenhum"] + pilotos_equipe,
+                        index=(pilotos_equipe.index(pilotos_apostados_ant[equipe]) + 1) if equipe in pilotos_apostados_ant else 0,
+                        key=f"piloto_{equipe}"
+                    )
+                with col2:
+                    if piloto_sel != "Nenhum":
+                        fichas[equipe] = st.number_input(
+                            f"Fichas para {piloto_sel}", min_value=0, max_value=15,
+                            value=fichas_ant.get(equipe, 0), key=f"fichas_{equipe}"
+                        )
+                        pilotos_apostados[equipe] = piloto_sel
+                    else:
+                        fichas[equipe] = 0
             st.markdown("---")
-            piloto_11 = st.selectbox("Palpite para 11º colocado", pilotos, index=pilotos.index(piloto_11_ant) if aposta_existente else 0)
+            piloto_11 = st.selectbox(
+                "Palpite para 11º colocado", pilotos_df['nome'].tolist(),
+                index=pilotos_df['nome'].tolist().index(piloto_11_ant) if piloto_11_ant else 0
+            )
+            # Validação
+            fichas_validas = [f for f in fichas.values() if f > 0]
+            equipes_apostadas = [e for e, f in fichas.items() if f > 0]
+            total_fichas = sum(fichas.values())
             if st.button("Salvar aposta"):
-                if sum(fichas) == 15 and len([f for f in fichas if f > 0]) >= 3:
-                    salvar_aposta(user[0], prova_id, pilotos, fichas, piloto_11, nome_prova)
-                    aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos}, Fichas: {fichas}, 11º: {piloto_11}"
+                if len(equipes_apostadas) < 3:
+                    st.error("Você deve apostar em pelo menos 3 equipes diferentes.")
+                elif total_fichas != 15:
+                    st.error("A soma das fichas deve ser exatamente 15.")
+                elif any(list(pilotos_apostados.values()).count(p) > 1 for p in pilotos_apostados.values()):
+                    st.error("Não é permitido apostar em dois pilotos iguais.")
+                else:
+                    # Salva apenas pilotos e fichas apostados (>0)
+                    pilotos_salvos = [pilotos_apostados[e] for e in equipes_apostadas]
+                    fichas_salvos = [fichas[e] for e in equipes_apostadas]
+                    salvar_aposta(user[0], prova_id, pilotos_salvos, fichas_salvos, piloto_11, nome_prova)
+                    aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos_salvos}, Fichas: {fichas_salvos}, 11º: {piloto_11}"
                     registrar_log_aposta(user[1], aposta_str, nome_prova)
                     st.success("Aposta registrada/atualizada!")
-                else:
-                    st.error("Distribua exatamente 15 fichas entre pelo menos 3 pilotos diferentes.")
         else:
             st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
     else:
@@ -633,26 +665,23 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
             st.subheader("Adicionar nova prova")
             nome_prova = st.text_input("Nome da nova prova")
             data_prova = st.date_input("Data da nova prova")
-            session_key = st.number_input("Session Key OpenF1", min_value=0, step=1)
             if st.button("Adicionar prova"):
-                adicionar_prova(nome_prova, data_prova.isoformat(), session_key)
+                adicionar_prova(nome_prova, data_prova.isoformat(), None)
                 st.success("Prova adicionada!")
             st.markdown("---")
             st.subheader("Provas cadastradas")
             provas = listar_provas()
             for idx, row in provas.iterrows():
-                col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
+                col1, col2, col3, col4 = st.columns([4,4,2,2])
                 with col1:
                     novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
                 with col2:
                     nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
                 with col3:
-                    nova_session_key = st.number_input(f"Session Key {row['id']}", min_value=0, value=row['session_key'], key=f"pr_sk{row['id']}")
-                with col4:
                     if st.button("Editar", key=f"pr_edit{row['id']}"):
-                        editar_prova(row['id'], novo_nome, nova_data.isoformat(), nova_session_key)
+                        editar_prova(row['id'], novo_nome, nova_data.isoformat(), None)
                         st.success("Prova editada!")
-                with col5:
+                with col4:
                     if st.button("Excluir", key=f"pr_del{row['id']}"):
                         excluir_prova(row['id'])
                         st.success("Prova excluída!")
