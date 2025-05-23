@@ -343,6 +343,7 @@ def menu_master():
         "Gestão do campeonato",
         "Atualização de resultados",
         "Log de Apostas",
+        "Classificação",
         "Regulamento",
         "Logout"
     ]
@@ -351,6 +352,7 @@ def menu_admin():
         "Painel do Participante",
         "Atualização de resultados",
         "Log de Apostas",
+        "Classificação",
         "Regulamento",
         "Logout"
     ]
@@ -358,6 +360,7 @@ def menu_participante():
     return [
         "Painel do Participante",
         "Log de Apostas",
+        "Classificação",
         "Regulamento",
         "Logout"
     ]
@@ -775,6 +778,77 @@ if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
         exibir_log_apostas(is_master=True)
     else:
         exibir_log_apostas(user_id=payload['user_id'], is_master=False)
+
+# --- Tabela de classificação geral ---
+if st.session_state['pagina'] == "Classificação" and st.session_state['token']:
+    st.title("Classificação Geral do Bolão")
+
+    # 1. Tabela de classificação geral
+    usuarios = listar_usuarios()
+    provas = listar_provas()
+    participantes = usuarios[usuarios['status'] == 'Ativo']
+    participantes = participantes.reset_index(drop=True)
+    provas = provas.sort_values('data')
+    tabela_classificacao = []
+    tabela_detalhada = []
+
+    for idx, part in participantes.iterrows():
+        total = 0
+        pontos_por_prova = []
+        for _, prova in provas.iterrows():
+            apostas = consultar_apostas(part['id'])
+            pontos = 0
+            for ap in apostas:
+                _, nome_prova, prova_id, _, pilotos, fichas, piloto_11 = ap
+                if prova_id == prova['id']:
+                    pilotos_lst = pilotos.split(",")
+                    fichas_lst = list(map(int, fichas.split(",")))
+                    p = calcular_pontuacao_aposta(prova_id, pilotos_lst, fichas_lst, piloto_11)
+                    pontos = p if p is not None else 0
+                    break
+            pontos_por_prova.append(pontos)
+            total += pontos
+        tabela_classificacao.append({
+            "Participante": part['nome'],
+            "Total de Pontos": total
+        })
+        tabela_detalhada.append({
+            "Participante": part['nome'],
+            "Pontos por Prova": pontos_por_prova
+        })
+
+    df_class = pd.DataFrame(tabela_classificacao).sort_values("Total de Pontos", ascending=False).reset_index(drop=True)
+    st.subheader("Classificação Geral")
+    st.table(df_class)
+
+    # 2. Tabela cruzada: provas x participantes
+    st.subheader("Pontuação por Prova")
+    provas_nomes = provas['nome'].tolist()
+    participantes_nomes = [p['Participante'] for p in tabela_detalhada]
+    dados_cruzados = {}
+    for idx, prova in enumerate(provas_nomes):
+        linha = {}
+        for part in tabela_detalhada:
+            linha[part['Participante']] = part['Pontos por Prova'][idx] if idx < len(part['Pontos por Prova']) else 0
+        dados_cruzados[prova] = linha
+    df_cruzada = pd.DataFrame(dados_cruzados).T[participantes_nomes]
+    st.dataframe(df_cruzada)
+
+    # 3. Gráfico de evolução
+    st.subheader("Evolução da Pontuação Acumulada")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    for part in tabela_detalhada:
+        pontos_acumulados = []
+        soma = 0
+        for p in part['Pontos por Prova']:
+            soma += p
+            pontos_acumulados.append(soma)
+        ax.plot(provas_nomes, pontos_acumulados, marker='o', label=part['Participante'])
+    ax.set_xlabel("Prova")
+    ax.set_ylabel("Pontuação Acumulada")
+    ax.legend()
+    st.pyplot(fig)
 
 # --- Regulamento ---
 if st.session_state['pagina'] == "Regulamento":
