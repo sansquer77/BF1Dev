@@ -4,6 +4,7 @@ import bcrypt
 import jwt as pyjwt
 import pandas as pd
 from datetime import datetime, timedelta
+import ast
 
 DB_PATH = 'bolao_f1.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
