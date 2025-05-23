@@ -657,7 +657,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                             st.session_state[f'sucesso_eq_del_{row["id"]}'] = ""
 
         # --- Pilotos ---
-         with tab2:
+        with tab2:
              st.subheader("Adicionar novo piloto")
              equipes = listar_equipes()
              equipe_nomes = equipes['nome'].tolist()
@@ -733,7 +733,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                          if st.session_state.get(f'sucesso_pl_del_{row["id"]}'):
                              st.success(st.session_state[f'sucesso_pl_del_{row["id"]}'])
                              st.session_state[f'sucesso_pl_del_{row["id"]}'] = ""
-
+ 
         # --- Provas ---
         with tab3:
             st.subheader("Adicionar nova prova")
