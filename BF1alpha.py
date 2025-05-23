@@ -611,14 +611,23 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
         # --- Equipes ---
         with tab1:
             st.subheader("Adicionar nova equipe")
+            if 'nome_nova_equipe' not in st.session_state:
+                st.session_state['nome_nova_equipe'] = ""
             nome_equipe = st.text_input("Nome da nova equipe", key="nome_nova_equipe")
-            if st.button("Adicionar equipe", key="btn_add_equipe"):
+            def cadastrar_equipe():
                 if nome_equipe.strip():
                     adicionar_equipe(nome_equipe.strip())
-                    st.success("Equipe adicionada!")
+                    st.session_state['sucesso_equipe'] = "Equipe adicionada!"
                     st.session_state['nome_nova_equipe'] = ""
                 else:
-                    st.warning("Informe o nome da equipe.")
+                    st.session_state['erro_equipe'] = "Informe o nome da equipe."
+            st.button("Adicionar equipe", key="btn_add_equipe", on_click=cadastrar_equipe)
+            if st.session_state.get('erro_equipe'):
+                st.error(st.session_state['erro_equipe'])
+                st.session_state['erro_equipe'] = ""
+            if st.session_state.get('sucesso_equipe'):
+                st.success(st.session_state['sucesso_equipe'])
+                st.session_state['sucesso_equipe'] = ""
 
             st.markdown("---")
             st.subheader("Equipes cadastradas")
@@ -631,25 +640,33 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     with col1:
                         novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
                     with col2:
-                        if st.button("Editar equipe", key=f"eq_edit{row['id']}"):
-                            editar_equipe(row['id'], novo_nome)
-                            st.success("Equipe editada!")
+                        def editar_equipe_callback(row_id=row['id'], novo_nome=novo_nome):
+                            editar_equipe(row_id, novo_nome)
+                            st.session_state[f'sucesso_eq_{row_id}'] = "Equipe editada!"
+                        st.button("Editar equipe", key=f"eq_edit{row['id']}", on_click=editar_equipe_callback)
+                        if st.session_state.get(f'sucesso_eq_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_eq_{row["id"]}'])
+                            st.session_state[f'sucesso_eq_{row["id"]}'] = ""
                     with col3:
-                        if st.button("Excluir equipe", key=f"eq_del{row['id']}"):
-                            excluir_equipe(row['id'])
-                            st.success("Equipe excluída!")
+                        def excluir_equipe_callback(row_id=row['id']):
+                            excluir_equipe(row_id)
+                            st.session_state[f'sucesso_eq_del_{row_id}'] = "Equipe excluída!"
+                        st.button("Excluir equipe", key=f"eq_del{row['id']}", on_click=excluir_equipe_callback)
+                        if st.session_state.get(f'sucesso_eq_del_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_eq_del_{row["id"]}'])
+                            st.session_state[f'sucesso_eq_del_{row["id"]}'] = ""
 
         # --- Pilotos ---
         with tab2:
             st.subheader("Adicionar novo piloto")
             equipes = listar_equipes()
             equipe_nomes = equipes['nome'].tolist()
-            nome_piloto = st.text_input("Nome do novo piloto", key="nome_novo_piloto")
-
-            # Controle do combo pelo session_state para resetar após cadastro
+            if 'nome_novo_piloto' not in st.session_state:
+                st.session_state['nome_novo_piloto'] = ""
             if 'equipe_novo_piloto_idx' not in st.session_state:
                 st.session_state['equipe_novo_piloto_idx'] = 0
 
+            nome_piloto = st.text_input("Nome do novo piloto", key="nome_novo_piloto")
             if equipe_nomes:
                 equipe_idx = st.session_state['equipe_novo_piloto_idx']
                 equipe_nome = st.selectbox(
@@ -658,16 +675,22 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     index=equipe_idx,
                     key="combo_equipe_novo_piloto"
                 )
-                if st.button("Adicionar piloto", key="btn_add_piloto"):
+                def cadastrar_piloto():
                     if not nome_piloto.strip():
-                        st.error("Informe o nome do piloto.")
+                        st.session_state['erro_piloto'] = "Informe o nome do piloto."
                     else:
                         equipe_id = equipes[equipes['nome'] == equipe_nome]['id'].values[0]
                         adicionar_piloto(nome_piloto.strip(), equipe_id)
-                        st.success("Piloto adicionado!")
-                        # Resetar combo e campo de nome
-                        st.session_state['equipe_novo_piloto_idx'] = 0
+                        st.session_state['sucesso_piloto'] = "Piloto adicionado!"
                         st.session_state['nome_novo_piloto'] = ""
+                        st.session_state['equipe_novo_piloto_idx'] = 0
+                st.button("Adicionar piloto", key="btn_add_piloto", on_click=cadastrar_piloto)
+                if st.session_state.get('erro_piloto'):
+                    st.error(st.session_state['erro_piloto'])
+                    st.session_state['erro_piloto'] = ""
+                if st.session_state.get('sucesso_piloto'):
+                    st.success(st.session_state['sucesso_piloto'])
+                    st.session_state['sucesso_piloto'] = ""
             else:
                 st.info("Cadastre uma equipe antes de cadastrar pilotos.")
 
@@ -695,26 +718,44 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         )
                         nova_equipe_id = equipes[equipes['nome']==nova_equipe_nome]['id'].values[0]
                     with col3:
-                        if st.button("Editar piloto", key=f"pl_edit{row['id']}"):
-                            editar_piloto(row['id'], novo_nome, nova_equipe_id)
-                            st.success("Piloto editado!")
+                        def editar_piloto_callback(row_id=row['id'], novo_nome=novo_nome, nova_equipe_id=nova_equipe_id):
+                            editar_piloto(row_id, novo_nome, nova_equipe_id)
+                            st.session_state[f'sucesso_pl_{row_id}'] = "Piloto editado!"
+                        st.button("Editar piloto", key=f"pl_edit{row['id']}", on_click=editar_piloto_callback)
+                        if st.session_state.get(f'sucesso_pl_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_pl_{row["id"]}'])
+                            st.session_state[f'sucesso_pl_{row["id"]}'] = ""
                     with col4:
-                        if st.button("Excluir piloto", key=f"pl_del{row['id']}"):
-                            excluir_piloto(row['id'])
-                            st.success("Piloto excluído!")
+                        def excluir_piloto_callback(row_id=row['id']):
+                            excluir_piloto(row_id)
+                            st.session_state[f'sucesso_pl_del_{row_id}'] = "Piloto excluído!"
+                        st.button("Excluir piloto", key=f"pl_del{row['id']}", on_click=excluir_piloto_callback)
+                        if st.session_state.get(f'sucesso_pl_del_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_pl_del_{row["id"]}'])
+                            st.session_state[f'sucesso_pl_del_{row["id"]}'] = ""
 
         # --- Provas ---
         with tab3:
             st.subheader("Adicionar nova prova")
+            if 'nome_nova_prova' not in st.session_state:
+                st.session_state['nome_nova_prova'] = ""
             nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
             data_prova = st.date_input("Data da nova prova", key="data_nova_prova")
-            if st.button("Adicionar prova", key="btn_add_prova"):
+            def cadastrar_prova():
                 if not nome_prova.strip():
-                    st.error("Informe o nome da prova.")
+                    st.session_state['erro_prova'] = "Informe o nome da prova."
                 else:
                     adicionar_prova(nome_prova.strip(), data_prova.isoformat())
-                    st.success("Prova adicionada!")
+                    st.session_state['sucesso_prova'] = "Prova adicionada!"
                     st.session_state['nome_nova_prova'] = ""
+            st.button("Adicionar prova", key="btn_add_prova", on_click=cadastrar_prova)
+            if st.session_state.get('erro_prova'):
+                st.error(st.session_state['erro_prova'])
+                st.session_state['erro_prova'] = ""
+            if st.session_state.get('sucesso_prova'):
+                st.success(st.session_state['sucesso_prova'])
+                st.session_state['sucesso_prova'] = ""
+
             st.markdown("---")
             st.subheader("Provas cadastradas")
             provas = listar_provas()
@@ -728,37 +769,23 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     with col2:
                         nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
                     with col3:
-                        if st.button("Editar prova", key=f"pr_edit{row['id']}"):
-                            editar_prova(row['id'], novo_nome, nova_data.isoformat())
-                            st.success("Prova editada!")
+                        def editar_prova_callback(row_id=row['id'], novo_nome=novo_nome, nova_data=nova_data):
+                            editar_prova(row_id, novo_nome, nova_data.isoformat())
+                            st.session_state[f'sucesso_pr_{row_id}'] = "Prova editada!"
+                        st.button("Editar prova", key=f"pr_edit{row['id']}", on_click=editar_prova_callback)
+                        if st.session_state.get(f'sucesso_pr_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_pr_{row["id"]}'])
+                            st.session_state[f'sucesso_pr_{row["id"]}'] = ""
                     with col4:
-                        if st.button("Excluir prova", key=f"pr_del{row['id']}"):
-                            excluir_prova(row['id'])
-                            st.success("Prova excluída!")
+                        def excluir_prova_callback(row_id=row['id']):
+                            excluir_prova(row_id)
+                            st.session_state[f'sucesso_pr_del_{row_id}'] = "Prova excluída!"
+                        st.button("Excluir prova", key=f"pr_del{row['id']}", on_click=excluir_prova_callback)
+                        if st.session_state.get(f'sucesso_pr_del_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_pr_del_{row["id"]}'])
+                            st.session_state[f'sucesso_pr_del_{row["id"]}'] = ""
     else:
         st.warning("Acesso restrito ao usuário master.")
-
-# --- Atualização de resultados (apenas manual, tabela de posições) ---
-if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
-    payload = get_payload()
-    if payload['perfil'] in ['master', 'admin']:
-        st.title("Atualizar Resultado Manualmente")
-        provas = listar_provas()
-        pilotos_df = listar_pilotos()
-        if len(provas) > 0 and len(pilotos_df) > 0:
-            prova_id = st.selectbox("Selecione a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
-            pilotos = pilotos_df['nome'].tolist()
-            posicoes = {}
-            st.markdown("**Informe o piloto para cada posição:**")
-            for pos in range(1, 12):
-                posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
-            if st.button("Salvar resultado"):
-                salvar_resultado_manual(prova_id, posicoes)
-                st.success("Resultado salvo!")
-        else:
-            st.warning("Cadastre provas e pilotos antes de lançar resultados.")
-    else:
-        st.warning("Acesso restrito ao administrador/master.")
 
 # --- Log de apostas (visível para todos, mas com filtros) ---
 if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
