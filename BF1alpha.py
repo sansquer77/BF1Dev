@@ -481,36 +481,51 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
             equipes = pilotos_df['equipe'].tolist()
             pilotos_equipe = dict(zip(pilotos, equipes))
             # Formulário de aposta
+            max_linhas = 5
+            linhas_visiveis = 3  # inicialmente
             pilotos_aposta = []
             fichas_aposta = []
-            for i in range(5):  # permite até 5 pilotos diferentes
-                col1, col2 = st.columns([3,1])
-                with col1:
-                    piloto_sel = st.selectbox(
-                        f"Piloto {i+1}",
-                        ["Nenhum"] + pilotos,
-                        index=(pilotos.index(pilotos_apostados_ant[i]) + 1) if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos else 0,
-                        key=f"piloto_aposta_{i}"
-                    )
-                with col2:
-                    if piloto_sel != "Nenhum":
-                        valor_ficha = st.number_input(
-                            f"Fichas para {piloto_sel}", min_value=0, max_value=15,
-                            value=fichas_ant[i] if len(fichas_ant) > i else 0,
-                            key=f"fichas_aposta_{i}"
+            for i in range(max_linhas):
+                mostrar = False
+                if i < 3:
+                    mostrar = True
+                elif i == 3 and len([p for p in pilotos_aposta if p != "Nenhum"]) == 3 and sum(fichas_aposta) < 15:
+                    mostrar = True
+                elif i == 4 and len([p for p in pilotos_aposta if p != "Nenhum"]) == 4 and sum(fichas_aposta) < 15:
+                    mostrar = True
+                if mostrar:
+                    col1, col2 = st.columns([3,1])
+                    with col1:
+                        piloto_sel = st.selectbox(
+                            f"Piloto {i+1}",
+                            ["Nenhum"] + pilotos,
+                            index=(pilotos.index(pilotos_apostados_ant[i]) + 1) if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos else 0,
+                            key=f"piloto_aposta_{i}"
                         )
-                        pilotos_aposta.append(piloto_sel)
-                        fichas_aposta.append(valor_ficha)
-            st.markdown("---")
-            piloto_11 = st.selectbox(
-                "Palpite para 11º colocado", pilotos,
-                index=pilotos.index(piloto_11_ant) if piloto_11_ant in pilotos else 0
-            )
-            # Validação das regras
+                    with col2:
+                        if piloto_sel != "Nenhum":
+                            valor_ficha = st.number_input(
+                                f"Fichas para {piloto_sel}", min_value=0, max_value=15,
+                                value=fichas_ant[i] if len(fichas_ant) > i else 0,
+                                key=f"fichas_aposta_{i}"
+                            )
+                            pilotos_aposta.append(piloto_sel)
+                            fichas_aposta.append(valor_ficha)
+                        else:
+                            pilotos_aposta.append("Nenhum")
+                            fichas_aposta.append(0)
+            # 11º colocado não pode ser um dos pilotos apostados
             pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
             fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
             equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
             total_fichas = sum(fichas_validas)
+            pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
+            if not pilotos_11_opcoes:
+                pilotos_11_opcoes = pilotos  # fallback, nunca deve acontecer
+            piloto_11 = st.selectbox(
+                "Palpite para 11º colocado", pilotos_11_opcoes,
+                index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
+            )
             erro = None
             if st.button("Efetivar Aposta"):
                 if len(set(pilotos_validos)) != len(pilotos_validos):
@@ -521,6 +536,8 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                     erro = "Você deve apostar em pelo menos 3 pilotos de equipes diferentes."
                 elif total_fichas != 15:
                     erro = "A soma das fichas deve ser exatamente 15."
+                elif piloto_11 in pilotos_validos:
+                    erro = "O 11º colocado não pode ser um dos pilotos apostados."
                 if erro:
                     st.error(erro)
                 else:
