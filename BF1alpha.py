@@ -657,82 +657,82 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                             st.session_state[f'sucesso_eq_del_{row["id"]}'] = ""
 
         # --- Pilotos ---
-        with tab2:
-            st.subheader("Adicionar novo piloto")
-            equipes = listar_equipes()
-            equipe_nomes = equipes['nome'].tolist()
-            if 'nome_novo_piloto' not in st.session_state:
-                st.session_state['nome_novo_piloto'] = ""
-            if 'equipe_novo_piloto_idx' not in st.session_state:
-                st.session_state['equipe_novo_piloto_idx'] = 0
-
-            nome_piloto = st.text_input("Nome do novo piloto", key="nome_novo_piloto")
-            if equipe_nomes:
-                equipe_idx = st.session_state['equipe_novo_piloto_idx']
-                equipe_nome = st.selectbox(
-                    "Equipe do novo piloto",
-                    equipe_nomes,
-                    index=equipe_idx,
-                    key="combo_equipe_novo_piloto"
-                )
-                def cadastrar_piloto():
-                    if not nome_piloto.strip():
-                        st.session_state['erro_piloto'] = "Informe o nome do piloto."
-                    else:
-                        equipe_id = equipes[equipes['nome'] == equipe_nome]['id'].values[0]
-                        adicionar_piloto(nome_piloto.strip(), equipe_id)
-                        st.session_state['sucesso_piloto'] = "Piloto adicionado!"
-                        st.session_state['nome_novo_piloto'] = ""
-                        st.session_state['equipe_novo_piloto_idx'] = 0
-                st.button("Adicionar piloto", key="btn_add_piloto", on_click=cadastrar_piloto)
-                if st.session_state.get('erro_piloto'):
-                    st.error(st.session_state['erro_piloto'])
-                    st.session_state['erro_piloto'] = ""
-                if st.session_state.get('sucesso_piloto'):
-                    st.success(st.session_state['sucesso_piloto'])
-                    st.session_state['sucesso_piloto'] = ""
-            else:
-                st.info("Cadastre uma equipe antes de cadastrar pilotos.")
-
-            st.markdown("---")
-            st.subheader("Pilotos cadastrados")
-            pilotos = listar_pilotos()
-            equipe_nomes_pilotos = equipes['nome'].tolist()
-            if len(pilotos) == 0:
-                st.info("Nenhum piloto cadastrado.")
-            else:
-                for idx, row in pilotos.iterrows():
-                    col1, col2, col3, col4 = st.columns([4,2,2,2])
-                    with col1:
-                        novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
-                    with col2:
-                        if row['equipe'] in equipe_nomes_pilotos:
-                            equipe_idx = equipe_nomes_pilotos.index(row['equipe'])
-                        else:
-                            equipe_idx = 0
-                        nova_equipe_nome = st.selectbox(
-                            f"Equipe piloto {row['id']}",
-                            equipe_nomes_pilotos,
-                            index=equipe_idx,
-                            key=f"pl_eq{row['id']}"
-                        )
-                        nova_equipe_id = equipes[equipes['nome']==nova_equipe_nome]['id'].values[0]
-                    with col3:
-                        def editar_piloto_callback(row_id=row['id'], novo_nome=novo_nome, nova_equipe_id=nova_equipe_id):
-                            editar_piloto(row_id, novo_nome, nova_equipe_id)
-                            st.session_state[f'sucesso_pl_{row_id}'] = "Piloto editado!"
-                        st.button("Editar piloto", key=f"pl_edit{row['id']}", on_click=editar_piloto_callback)
-                        if st.session_state.get(f'sucesso_pl_{row["id"]}'):
-                            st.success(st.session_state[f'sucesso_pl_{row["id"]}'])
-                            st.session_state[f'sucesso_pl_{row["id"]}'] = ""
-                    with col4:
-                        def excluir_piloto_callback(row_id=row['id']):
-                            excluir_piloto(row_id)
-                            st.session_state[f'sucesso_pl_del_{row_id}'] = "Piloto excluído!"
-                        st.button("Excluir piloto", key=f"pl_del{row['id']}", on_click=excluir_piloto_callback)
-                        if st.session_state.get(f'sucesso_pl_del_{row["id"]}'):
-                            st.success(st.session_state[f'sucesso_pl_del_{row["id"]}'])
-                            st.session_state[f'sucesso_pl_del_{row["id"]}'] = ""
+         with tab2:
+             st.subheader("Adicionar novo piloto")
+             equipes = listar_equipes()
+             equipe_nomes = equipes['nome'].tolist()
+             if 'nome_novo_piloto' not in st.session_state:
+                 st.session_state['nome_novo_piloto'] = ""
+         
+             nome_piloto = st.text_input("Nome do novo piloto", key="nome_novo_piloto")
+             if equipe_nomes:
+                 equipe_nome = st.selectbox(
+                     "Equipe do novo piloto",
+                     equipe_nomes,
+                     key="combo_equipe_novo_piloto"
+                 )
+                 def cadastrar_piloto():
+                     if not nome_piloto.strip():
+                         st.session_state['erro_piloto'] = "Informe o nome do piloto."
+                     else:
+                         equipe_id = equipes[equipes['nome'] == st.session_state["combo_equipe_novo_piloto"]]['id'].values[0]
+                         adicionar_piloto(nome_piloto.strip(), equipe_id)
+                         st.session_state['sucesso_piloto'] = "Piloto adicionado!"
+                         st.session_state['nome_novo_piloto'] = ""
+                 st.button("Adicionar piloto", key="btn_add_piloto", on_click=cadastrar_piloto)
+                 if st.session_state.get('erro_piloto'):
+                     st.error(st.session_state['erro_piloto'])
+                     st.session_state['erro_piloto'] = ""
+                 if st.session_state.get('sucesso_piloto'):
+                     st.success(st.session_state['sucesso_piloto'])
+                     st.session_state['sucesso_piloto'] = ""
+             else:
+                 st.info("Cadastre uma equipe antes de cadastrar pilotos.")
+         
+             st.markdown("---")
+             st.subheader("Pilotos cadastrados")
+             pilotos = listar_pilotos()
+             equipe_nomes_pilotos = equipes['nome'].tolist()
+             if len(pilotos) == 0:
+                 st.info("Nenhum piloto cadastrado.")
+             else:
+                 for idx, row in pilotos.iterrows():
+                     col1, col2, col3, col4 = st.columns([4,2,2,2])
+                     with col1:
+                         novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
+                     with col2:
+                         if row['equipe'] in equipe_nomes_pilotos:
+                             equipe_idx = equipe_nomes_pilotos.index(row['equipe'])
+                         else:
+                             equipe_idx = 0
+                         nova_equipe_nome = st.selectbox(
+                             f"Equipe piloto {row['id']}",
+                             equipe_nomes_pilotos,
+                             index=equipe_idx,
+                             key=f"pl_eq{row['id']}"
+                         )
+                         nova_equipe_id = equipes[equipes['nome']==nova_equipe_nome]['id'].values[0]
+                     with col3:
+                         def editar_piloto_callback(row_id, novo_nome, nova_equipe_id):
+                             editar_piloto(row_id, novo_nome, nova_equipe_id)
+                             st.session_state[f'sucesso_pl_{row_id}'] = "Piloto editado!"
+                         st.button(
+                             "Editar piloto",
+                             key=f"pl_edit{row['id']}",
+                             on_click=editar_piloto_callback,
+                             args=(row['id'], novo_nome, nova_equipe_id)
+                         )
+                         if st.session_state.get(f'sucesso_pl_{row["id"]}'):
+                             st.success(st.session_state[f'sucesso_pl_{row["id"]}'])
+                             st.session_state[f'sucesso_pl_{row["id"]}'] = ""
+                     with col4:
+                         def excluir_piloto_callback(row_id=row['id']):
+                             excluir_piloto(row_id)
+                             st.session_state[f'sucesso_pl_del_{row_id}'] = "Piloto excluído!"
+                         st.button("Excluir piloto", key=f"pl_del{row['id']}", on_click=excluir_piloto_callback)
+                         if st.session_state.get(f'sucesso_pl_del_{row["id"]}'):
+                             st.success(st.session_state[f'sucesso_pl_del_{row["id"]}'])
+                             st.session_state[f'sucesso_pl_del_{row["id"]}'] = ""
 
         # --- Provas ---
         with tab3:
