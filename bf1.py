@@ -3,13 +3,60 @@ import sqlite3
 import bcrypt
 import jwt as pyjwt
 import pandas as pd
-import ast
 from datetime import datetime, timedelta
-import requests
 
 DB_PATH = 'bolao_f1.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
+
+REGULAMENTO = """
+REGULAMENTO BF1-2025
+
+O BF1-2025 terá início, oficialmente, em 16 de março, no dia do GP da Austrália e término em 07 de dezembro, quando será disputado o último GP, o de Abu Dhabi.
+
+Inscrições para o BF1 estão liberadas a partir de qualquer etapa. 
+A inscrição é de R$200,00 a ser pago no ato da inscrição via PIX.
+Em caso de desistência da participação durante o campeonato a taxa de inscrição não será devolvida.
+Cabe ressaltar, que a pontuação do novo participante será 80% da pontuação do participante mais mal colocado no bolão no momento da inscrição e terá 0 pontos na aposta de campeão, caso ocorra após o início do campeonato.
+
+As apostas dos participantes devem ser efetuadas até o horário programado da corrida e compartilhadas via formulário padrão que está no grupo do WhatsApp. Fica facultado ao participante a geração de um print da tela do aplicativo com a aposta e o horário da mensagem para futuras validações, mas cabe ressaltar que a ferramenta possui um Time Stamp do horário de envio das mensagens.
+O participante pode enviar quantas apostas quiser até o horário limite, sendo válida a última enviada.
+Apostas registradas após o horário da largada, por exemplo 09:01 sendo a corrida às 09h serão desconsideradas.
+
+O participante que não efetuar a sua aposta ATÉ O PRAZO DEFINO DO ITEM-3, irá concorrer com a mesma aposta da última corrida.
+Quando se tratar da primeira vez que a aposta não for feita, e apenas neste caso, será computado 100% dos pontos.
+Caso o apostador não aposte na primeira corrida do campeonato, como não haverá base para repetição da aposta a pontuação será 80% do pior pontuador para esta corrida e o benefício do item “a” deste tópico será mantido.
+Para a segundo atraso em diante os pontos sofrerão um desconto de 25%.
+
+Pontuação
+
+Cada participante deve indicar o campeão e o vice do campeonato de pilotos e a equipe vencedora do campeonato de construtores ANTES do início da primeira prova do ano em formulário específico.
+A pontuação será 150 pontos se acertar o campeão, 100 se acertar o vice, 80 acertando equipe – Que serão somados à pontuação ao final do campeonato.
+
+Cada participante possui 15 (quinze) fichas para serem apostadas a cada corrida da seguinte maneira:
+Aposta deve conter no mínimo 3 pilotos de equipes diferentes (Apostou no Hamilton, não pode apostar no Leclerc por ex.)
+Sem limite de ficha por piloto, vale 13 / 1 / 1, desde que respeitada a regra acima.
+As corridas Sprint seguem a mesma regra, sendo consideradas provas válidas para a pontuação.
+Deve ser indicado o piloto que irá chegar em 11 lugar em todas as provas e em caso de acerto será computado 25 pontos
+
+A pontuação do participante será a multiplicação das fichas apostadas em cada piloto pelo número de pontos que ele obteve na prova (fichas x pontos) + pontuação do 11 lugar.
+As apostas serão lançadas na planilha de controle que está hospedada no OneDrive, sendo que o placar atualizado será publicado na página do grupo e no WhatsApp após as corridas.
+
+Critérios de Desempate
+
+Caso haja empate de pontos na classificação final, as posições serão definidas pelos seguintes critérios, na ordem:
+Quem tiver apostado antes mais vezes no ano
+Quem mais vezes acertou o 11 lugar
+Quem acertou o campeão
+Quem acertou a equipe campeã
+Quem acertou o vice
+
+Forma de pagamento e premiação
+
+A premiação será um voucher de 50% do fundo arrecadado das inscrições para o primeiro colocado, 30% para o segundo e 20% para o terceiro gastarem nas bebidas de sua escolha a serem adquiridas após a definição dos vencedores e escolha dos prêmios.
+ 
+A premiação será realizada em um Happy-Hour a ser agendado entre os participantes em data e local a serem definidos posteriormente ao final do campeonato.
+"""
 
 def db_connect():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -28,19 +75,14 @@ def init_db():
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status)
                  VALUES (?, ?, ?, ?, ?)''',
               ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo'))
-    c.execute('''CREATE TABLE IF NOT EXISTS equipes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nome TEXT UNIQUE)''')
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT,
-                    equipe_id INTEGER,
-                    FOREIGN KEY(equipe_id) REFERENCES equipes(id))''')
+                    equipe TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT,
-                    data TEXT,
-                    session_key INTEGER)''')
+                    data TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     usuario_id INTEGER,
@@ -49,20 +91,20 @@ def init_db():
                     pilotos TEXT,
                     fichas TEXT,
                     piloto_11 TEXT,
+                    nome_prova TEXT,
                     FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
                     FOREIGN KEY(prova_id) REFERENCES provas(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
                     prova_id INTEGER PRIMARY KEY,
-                    pontos_pilotos TEXT,
-                    piloto_11 TEXT,
+                    posicoes TEXT,
                     FOREIGN KEY(prova_id) REFERENCES provas(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS log_apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     apostador TEXT,
-                    ip TEXT,
                     data TEXT,
                     horario TEXT,
-                    aposta TEXT)''')
+                    aposta TEXT,
+                    nome_prova TEXT)''')
     conn.commit()
     conn.close()
 
@@ -151,45 +193,21 @@ def excluir_usuario(user_id):
     conn.commit()
     conn.close()
 
-def listar_equipes():
-    conn = db_connect()
-    df = pd.read_sql('SELECT * FROM equipes', conn)
-    conn.close()
-    return df
-def adicionar_equipe(nome):
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute('INSERT INTO equipes (nome) VALUES (?)', (nome,))
-    conn.commit()
-    conn.close()
-def editar_equipe(equipe_id, novo_nome):
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute('UPDATE equipes SET nome=? WHERE id=?', (novo_nome, equipe_id))
-    conn.commit()
-    conn.close()
-def excluir_equipe(equipe_id):
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute('DELETE FROM equipes WHERE id=?', (equipe_id,))
-    conn.commit()
-    conn.close()
-
 def listar_pilotos():
     conn = db_connect()
-    df = pd.read_sql('SELECT p.id, p.nome, e.nome as equipe, p.equipe_id FROM pilotos p LEFT JOIN equipes e ON p.equipe_id=e.id', conn)
+    df = pd.read_sql('SELECT * FROM pilotos', conn)
     conn.close()
     return df
-def adicionar_piloto(nome, equipe_id):
+def adicionar_piloto(nome, equipe):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('INSERT INTO pilotos (nome, equipe_id) VALUES (?, ?)', (nome, equipe_id))
+    c.execute('INSERT INTO pilotos (nome, equipe) VALUES (?, ?)', (nome, equipe))
     conn.commit()
     conn.close()
-def editar_piloto(piloto_id, novo_nome, nova_equipe_id):
+def editar_piloto(piloto_id, novo_nome, nova_equipe):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('UPDATE pilotos SET nome=?, equipe_id=? WHERE id=?', (novo_nome, nova_equipe_id, piloto_id))
+    c.execute('UPDATE pilotos SET nome=?, equipe=? WHERE id=?', (novo_nome, nova_equipe, piloto_id))
     conn.commit()
     conn.close()
 def excluir_piloto(piloto_id):
@@ -204,16 +222,16 @@ def listar_provas():
     df = pd.read_sql('SELECT * FROM provas', conn)
     conn.close()
     return df
-def adicionar_prova(nome, data, session_key):
+def adicionar_prova(nome, data):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('INSERT INTO provas (nome, data, session_key) VALUES (?, ?, ?)', (nome, data, session_key))
+    c.execute('INSERT INTO provas (nome, data) VALUES (?, ?)', (nome, data))
     conn.commit()
     conn.close()
-def editar_prova(prova_id, novo_nome, nova_data, nova_session_key):
+def editar_prova(prova_id, novo_nome, nova_data):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('UPDATE provas SET nome=?, data=?, session_key=? WHERE id=?', (novo_nome, nova_data, nova_session_key, prova_id))
+    c.execute('UPDATE provas SET nome=?, data=? WHERE id=?', (novo_nome, nova_data, prova_id))
     conn.commit()
     conn.close()
 def excluir_prova(prova_id):
@@ -223,27 +241,22 @@ def excluir_prova(prova_id):
     conn.commit()
     conn.close()
 
-def salvar_resultado(prova_id, pontos_pilotos, piloto_11):
+def salvar_resultado_manual(prova_id, posicoes_dict):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('REPLACE INTO resultados (prova_id, pontos_pilotos, piloto_11) VALUES (?, ?, ?)',
-              (prova_id, str(pontos_pilotos), str(piloto_11)))
+    c.execute('REPLACE INTO resultados (prova_id, posicoes) VALUES (?, ?)',
+              (prova_id, str(posicoes_dict)))
     conn.commit()
     conn.close()
 
-def get_client_ip():
-    try:
-        return st.context.ip_address
-    except Exception:
-        return "N/A"
-def registrar_log_aposta(apostador, ip, aposta):
+def registrar_log_aposta(apostador, aposta, nome_prova):
     conn = db_connect()
     c = conn.cursor()
     agora = datetime.now()
     data = agora.strftime('%Y-%m-%d')
     horario = agora.strftime('%H:%M:%S')
-    c.execute('INSERT INTO log_apostas (apostador, ip, data, horario, aposta) VALUES (?, ?, ?, ?, ?)',
-              (apostador, ip, data, horario, aposta))
+    c.execute('INSERT INTO log_apostas (apostador, data, horario, aposta, nome_prova) VALUES (?, ?, ?, ?, ?)',
+              (apostador, data, horario, aposta, nome_prova))
     conn.commit()
     conn.close()
 
@@ -252,24 +265,26 @@ def exibir_log_apostas(user_id=None, is_master=False):
     if is_master:
         df = pd.read_sql('SELECT * FROM log_apostas', conn)
     else:
-        df = pd.read_sql('SELECT * FROM log_apostas WHERE apostador=?', conn, params=(get_user_by_id(user_id)[1],))
+        nome = get_user_by_id(user_id)[1]
+        df = pd.read_sql('SELECT * FROM log_apostas WHERE apostador=?', conn, params=(nome,))
     conn.close()
     st.subheader("Log de Apostas")
     st.dataframe(df)
 
-def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11):
+def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova):
     conn = db_connect()
     c = conn.cursor()
     data_envio = datetime.now().isoformat()
     c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-    c.execute('INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11) VALUES (?, ?, ?, ?, ?, ?)',
-              (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11))
+    c.execute('INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova))
     conn.commit()
     conn.close()
+
 def consultar_apostas(usuario_id):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('SELECT prova_id, data_envio, pilotos, fichas, piloto_11 FROM apostas WHERE usuario_id=?', (usuario_id,))
+    c.execute('SELECT rowid, nome_prova, prova_id, data_envio, pilotos, fichas, piloto_11 FROM apostas WHERE usuario_id=?', (usuario_id,))
     apostas = c.fetchall()
     conn.close()
     return apostas
@@ -280,6 +295,31 @@ def consultar_aposta_usuario_prova(usuario_id, prova_id):
     aposta = c.fetchone()
     conn.close()
     return aposta
+
+def consultar_resultado_prova(prova_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT posicoes FROM resultados WHERE prova_id=?', (prova_id,))
+    res = c.fetchone()
+    conn.close()
+    if res:
+        return ast.literal_eval(res[0])
+    return None
+
+def calcular_pontuacao_aposta(prova_id, pilotos_apostados, fichas_apostadas, piloto_11_apostado):
+    resultado = consultar_resultado_prova(prova_id)
+    if not resultado:
+        return None  # Resultado ainda não lançado
+    pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+    pontos = 0
+    for idx, (piloto, ficha) in enumerate(zip(pilotos_apostados, fichas_apostadas)):
+        for pos, nome_resultado in resultado.items():
+            pos_int = int(pos)
+            if pos_int <= 10 and nome_resultado == piloto:
+                pontos += ficha * pontos_f1[pos_int-1]
+    if '11' in resultado and resultado['11'] == piloto_11_apostado:
+        pontos += 25
+    return pontos
 
 st.set_page_config(page_title="Bolão F1 2025", layout="wide")
 init_db()
@@ -302,6 +342,8 @@ def menu_master():
         "Gestão do campeonato",
         "Atualização de resultados",
         "Log de Apostas",
+        "Classificação",
+        "Regulamento",
         "Logout"
     ]
 def menu_admin():
@@ -309,12 +351,16 @@ def menu_admin():
         "Painel do Participante",
         "Atualização de resultados",
         "Log de Apostas",
+        "Classificação",
+        "Regulamento",
         "Logout"
     ]
 def menu_participante():
     return [
         "Painel do Participante",
         "Log de Apostas",
+        "Classificação",
+        "Regulamento",
         "Logout"
     ]
 
@@ -406,7 +452,7 @@ if st.session_state['token']:
     escolha = st.sidebar.radio("Menu", menu)
     st.session_state['pagina'] = escolha
 
-# --- Painel do Participante (inclusão/alteração de apostas) ---
+# --- Painel do Participante (corrigido, robusto, linhas dinâmicas, 11º diferente) ---
 if st.session_state['pagina'] == "Painel do Participante" and st.session_state['token']:
     payload = get_payload()
     user = get_user_by_id(payload['user_id'])
@@ -417,36 +463,115 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     if user[4] == "Ativo":
         if len(provas) > 0 and len(pilotos_df) > 2:
             prova_id = st.selectbox("Escolha a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
-            pilotos = pilotos_df['nome'].tolist()
+            nome_prova = provas[provas['id']==prova_id]['nome'].values[0]
             aposta_existente = consultar_aposta_usuario_prova(user[0], prova_id)
+            pilotos_apostados_ant = []
+            fichas_ant = []
+            piloto_11_ant = ""
             if aposta_existente:
-                pilotos_ant, fichas_ant, piloto_11_ant = aposta_existente
-                fichas_ant = list(map(int, fichas_ant.split(',')))
-                st.info("Você já apostou nesta prova. Altere e salve para atualizar sua aposta.")
+                pilotos_ant, fichas_ant_list, piloto_11_ant = aposta_existente
+                pilotos_apostados_ant = pilotos_ant.split(",")
+                fichas_ant = list(map(int, fichas_ant_list.split(",")))
             else:
-                fichas_ant = [0]*len(pilotos)
-                piloto_11_ant = pilotos[0]
-            fichas = []
-            st.write("Distribua 15 fichas entre no mínimo 3 pilotos de equipes diferentes:")
-            for i, piloto in enumerate(pilotos):
-                fichas.append(st.number_input(f"Fichas para {piloto}", min_value=0, max_value=15, value=fichas_ant[i], key=f"fichas_{piloto}"))
-            piloto_11 = st.selectbox("Palpite para 11º colocado", pilotos, index=pilotos.index(piloto_11_ant) if aposta_existente else 0)
-            if st.button("Salvar aposta"):
-                if sum(fichas) == 15 and len([f for f in fichas if f > 0]) >= 3:
-                    salvar_aposta(user[0], prova_id, pilotos, fichas, piloto_11)
-                    ip = get_client_ip()
-                    aposta_str = f"Prova: {prova_id}, Pilotos: {pilotos}, Fichas: {fichas}, 11º: {piloto_11}"
-                    registrar_log_aposta(user[1], ip, aposta_str)
-                    st.success("Aposta registrada/atualizada!")
+                fichas_ant = []
+                piloto_11_ant = ""
+            st.write("Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
+            pilotos = pilotos_df['nome'].tolist()
+            equipes = pilotos_df['equipe'].tolist()
+            pilotos_equipe = dict(zip(pilotos, equipes))
+            # Formulário de aposta
+            max_linhas = 5
+            pilotos_aposta = []
+            fichas_aposta = []
+            linhas_visiveis = 3
+            for i in range(max_linhas):
+                mostrar = False
+                if i < 3:
+                    mostrar = True
+                elif i == 3 and len([p for p in pilotos_aposta if p != "Nenhum"]) == 3 and sum(fichas_aposta) < 15:
+                    mostrar = True
+                elif i == 4 and len([p for p in pilotos_aposta if p != "Nenhum"]) == 4 and sum(fichas_aposta) < 15:
+                    mostrar = True
+                if mostrar:
+                    col1, col2 = st.columns([3,1])
+                    with col1:
+                        piloto_sel = st.selectbox(
+                            f"Piloto {i+1}",
+                            ["Nenhum"] + pilotos,
+                            index=(pilotos.index(pilotos_apostados_ant[i]) + 1) if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos else 0,
+                            key=f"piloto_aposta_{i}"
+                        )
+                    with col2:
+                        if piloto_sel != "Nenhum":
+                            valor_ficha = st.number_input(
+                                f"Fichas para {piloto_sel}", min_value=0, max_value=15,
+                                value=fichas_ant[i] if len(fichas_ant) > i else 0,
+                                key=f"fichas_aposta_{i}"
+                            )
+                            pilotos_aposta.append(piloto_sel)
+                            fichas_aposta.append(valor_ficha)
+                        else:
+                            pilotos_aposta.append("Nenhum")
+                            fichas_aposta.append(0)
+            # 11º colocado não pode ser um dos pilotos apostados
+            pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
+            fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
+            equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
+            total_fichas = sum(fichas_validas)
+            pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
+            if not pilotos_11_opcoes:
+                pilotos_11_opcoes = pilotos  # fallback
+            piloto_11 = st.selectbox(
+                "Palpite para 11º colocado", pilotos_11_opcoes,
+                index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
+            )
+            erro = None
+            if st.button("Efetivar Aposta"):
+                if len(set(pilotos_validos)) != len(pilotos_validos):
+                    erro = "Não é permitido apostar em dois pilotos iguais."
+                elif len(set(equipes_apostadas)) != len(equipes_apostadas):
+                    erro = "Não é permitido apostar em dois pilotos da mesma equipe."
+                elif len(pilotos_validos) < 3:
+                    erro = "Você deve apostar em pelo menos 3 pilotos de equipes diferentes."
+                elif total_fichas != 15:
+                    erro = "A soma das fichas deve ser exatamente 15."
+                elif piloto_11 in pilotos_validos:
+                    erro = "O 11º colocado não pode ser um dos pilotos apostados."
+                if erro:
+                    st.error(erro)
                 else:
-                    st.error("Distribua exatamente 15 fichas entre pelo menos 3 pilotos diferentes.")
+                    salvar_aposta(
+                        user[0], prova_id, pilotos_validos,
+                        fichas_validas,
+                        piloto_11, nome_prova
+                    )
+                    aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos_validos}, Fichas: {fichas_validas}, 11º: {piloto_11}"
+                    registrar_log_aposta(user[1], aposta_str, nome_prova)
+                    st.success("Aposta registrada/atualizada!")
         else:
             st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
     else:
         st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
     st.subheader("Minhas apostas")
     apostas = consultar_apostas(user[0])
-    st.table(pd.DataFrame(apostas, columns=["Prova", "Data Envio", "Pilotos", "Fichas", "11º"]))
+    if apostas:
+        apostas_lista = []
+        for idx, (rowid, nome_prova, prova_id, data_envio, pilotos, fichas, piloto_11) in enumerate(apostas, start=1):
+            pilotos_lst = pilotos.split(",")
+            fichas_lst = list(map(int, fichas.split(",")))
+            pontos = calcular_pontuacao_aposta(prova_id, pilotos_lst, fichas_lst, piloto_11)
+            apostas_lista.append({
+                "#": idx,
+                "Prova": nome_prova,
+                "Data Envio": data_envio,
+                "Pilotos": pilotos,
+                "Fichas": fichas,
+                "11º": piloto_11,
+                "Pontuação": pontos if pontos is not None else "Aguardando resultado"
+            })
+        st.table(pd.DataFrame(apostas_lista))
+    else:
+        st.info("Nenhuma aposta registrada.")
 
 # --- Gestão de Usuários (apenas master) ---
 if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
@@ -454,34 +579,37 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
     if payload['perfil'] == 'master':
         st.title("Gestão de Usuários")
         usuarios = listar_usuarios()
-        st.dataframe(usuarios)
-        st.write("Selecione um usuário para editar, excluir ou alterar status/perfil:")
-        usuario_id = st.selectbox("Usuário", usuarios['id'])
-        usuario = usuarios[usuarios['id'] == usuario_id].iloc[0]
-        novo_nome = st.text_input("Nome", value=usuario['nome'])
-        novo_email = st.text_input("Email", value=usuario['email'])
-        novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1)
-        novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1)
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("Atualizar usuário"):
-                if usuario['nome'] == "Password":
-                    st.warning("Não é permitido alterar o status ou perfil do usuário master.")
-                else:
-                    editar_usuario(usuario_id, novo_nome, novo_email)
-                    alterar_status_usuario(usuario_id, novo_status)
-                    alterar_perfil_usuario(usuario_id, novo_perfil)
-                    st.success("Usuário atualizado!")
-        with col2:
-            if st.button("Excluir usuário"):
-                if usuario['nome'] == "Password":
-                    st.warning("Não é permitido excluir o usuário master.")
-                else:
-                    excluir_usuario(usuario_id)
-                    st.success("Usuário excluído!")
-        with col3:
-            if st.button("Logout"):
-                logout()
+        if len(usuarios) == 0:
+            st.info("Nenhum usuário cadastrado.")
+        else:
+            st.dataframe(usuarios)
+            st.write("Selecione um usuário para editar, excluir ou alterar status/perfil:")
+            usuario_id = st.selectbox("Usuário", usuarios['id'])
+            usuario = usuarios[usuarios['id'] == usuario_id].iloc[0]
+            novo_nome = st.text_input("Nome", value=usuario['nome'], key="edit_nome")
+            novo_email = st.text_input("Email", value=usuario['email'], key="edit_email")
+            novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1, key="edit_status")
+            novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1, key="edit_perfil")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("Atualizar usuário"):
+                    if usuario['nome'] == "Password":
+                        st.warning("Não é permitido alterar o status ou perfil do usuário master.")
+                    else:
+                        editar_usuario(usuario_id, novo_nome, novo_email)
+                        alterar_status_usuario(usuario_id, novo_status)
+                        alterar_perfil_usuario(usuario_id, novo_perfil)
+                        st.success("Usuário atualizado!")
+            with col2:
+                if st.button("Excluir usuário"):
+                    if usuario['nome'] == "Password":
+                        st.warning("Não é permitido excluir o usuário master.")
+                    else:
+                        excluir_usuario(usuario_id)
+                        st.success("Usuário excluído!")
+            with col3:
+                if st.button("Logout"):
+                    logout()
     else:
         st.warning("Acesso restrito ao usuário master.")
 
@@ -501,131 +629,144 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
     else:
         st.warning("Acesso restrito ao usuário master.")
 
-# --- Gestão do campeonato (apenas master) ---
+# --- Gestão do Campeonato (Pilotos e Provas) ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
         st.title("Gestão do Campeonato")
-        tab1, tab2, tab3 = st.tabs(["Equipes", "Pilotos", "Provas"])
+        tab1, tab2 = st.tabs(["Pilotos", "Provas"])
 
+        # --- Pilotos ---
         with tab1:
-            st.subheader("Equipes")
-            equipes = listar_equipes()
-            for idx, row in equipes.iterrows():
-                col1, col2, col3 = st.columns([4,2,2])
-                with col1:
-                    novo_nome = st.text_input(f"Nome equipe {row['id']}", value=row['nome'], key=f"eq_nome{row['id']}")
-                with col2:
-                    if st.button("Editar", key=f"eq_edit{row['id']}"):
-                        editar_equipe(row['id'], novo_nome)
-                        st.success("Equipe editada!")
-                with col3:
-                    if st.button("Excluir", key=f"eq_del{row['id']}"):
-                        excluir_equipe(row['id'])
-                        st.success("Equipe excluída!")
-            nome_equipe = st.text_input("Nome da nova equipe")
-            if st.button("Adicionar equipe"):
-                adicionar_equipe(nome_equipe)
-                st.success("Equipe adicionada!")
+            st.subheader("Adicionar novo piloto")
+            if 'nome_novo_piloto' not in st.session_state:
+                st.session_state['nome_novo_piloto'] = ""
+            if 'equipe_novo_piloto' not in st.session_state:
+                st.session_state['equipe_novo_piloto'] = ""
 
-        with tab2:
-            st.subheader("Pilotos")
+            nome_piloto = st.text_input("Nome do novo piloto", key="nome_novo_piloto")
+            equipe_piloto = st.text_input("Nome da equipe do piloto", key="equipe_novo_piloto")
+
+            def cadastrar_piloto():
+                if not nome_piloto.strip():
+                    st.session_state['erro_piloto'] = "Informe o nome do piloto."
+                elif not equipe_piloto.strip():
+                    st.session_state['erro_piloto'] = "Informe o nome da equipe."
+                else:
+                    adicionar_piloto(nome_piloto.strip(), equipe_piloto.strip())
+                    st.session_state['sucesso_piloto'] = "Piloto adicionado!"
+                    st.session_state['nome_novo_piloto'] = ""
+                    st.session_state['equipe_novo_piloto'] = ""
+
+            st.button("Adicionar piloto", key="btn_add_piloto", on_click=cadastrar_piloto)
+            if st.session_state.get('erro_piloto'):
+                st.error(st.session_state['erro_piloto'])
+                st.session_state['erro_piloto'] = ""
+            if st.session_state.get('sucesso_piloto'):
+                st.success(st.session_state['sucesso_piloto'])
+                st.session_state['sucesso_piloto'] = ""
+
+            st.markdown("---")
+            st.subheader("Pilotos cadastrados")
             pilotos = listar_pilotos()
-            equipes = listar_equipes()
-            equipe_nomes = equipes['nome'].tolist()
-            for idx, row in pilotos.iterrows():
-                col1, col2, col3, col4 = st.columns([4,2,2,2])
-                with col1:
-                    novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
-                with col2:
-                    # CORREÇÃO: Verifica se equipe existe na lista antes de usar .index()
-                    if row['equipe'] in equipe_nomes:
-                        equipe_idx = equipe_nomes.index(row['equipe'])
-                    else:
-                        equipe_idx = 0
-                    nova_equipe_nome = st.selectbox(
-                        f"Equipe piloto {row['id']}",
-                        equipe_nomes,
-                        index=equipe_idx,
-                        key=f"pl_eq{row['id']}"
-                    )
-                    nova_equipe_id = equipes[equipes['nome']==nova_equipe_nome]['id'].values[0]
-                with col3:
-                    if st.button("Editar", key=f"pl_edit{row['id']}"):
-                        editar_piloto(row['id'], novo_nome, nova_equipe_id)
-                        st.success("Piloto editado!")
-                with col4:
-                    if st.button("Excluir", key=f"pl_del{row['id']}"):
-                        excluir_piloto(row['id'])
-                        st.success("Piloto excluído!")
-            nome_piloto = st.text_input("Nome do novo piloto")
-            equipe_nome = st.selectbox("Equipe do novo piloto", equipe_nomes)
-            equipe_id = equipes[equipes['nome']==equipe_nome]['id'].values[0] if equipe_nomes else 1
-            if st.button("Adicionar piloto"):
-                adicionar_piloto(nome_piloto, equipe_id)
-                st.success("Piloto adicionado!")
+            if len(pilotos) == 0:
+                st.info("Nenhum piloto cadastrado.")
+            else:
+                for idx, row in pilotos.iterrows():
+                    col1, col2, col3, col4 = st.columns([4,3,2,2])
+                    with col1:
+                        novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
+                    with col2:
+                        nova_equipe = st.text_input(f"Equipe piloto {row['id']}", value=row['equipe'], key=f"pl_eq{row['id']}")
+                    with col3:
+                        def editar_piloto_callback(row_id=row['id'], novo_nome=novo_nome, nova_equipe=nova_equipe):
+                            editar_piloto(row_id, novo_nome, nova_equipe)
+                            st.session_state[f'sucesso_pl_{row_id}'] = "Piloto editado!"
+                        st.button("Editar piloto", key=f"pl_edit{row['id']}", on_click=editar_piloto_callback)
+                        if st.session_state.get(f'sucesso_pl_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_pl_{row["id"]}'])
+                            st.session_state[f'sucesso_pl_{row["id"]}'] = ""
+                    with col4:
+                        def excluir_piloto_callback(row_id=row['id']):
+                            excluir_piloto(row_id)
+                            st.session_state[f'sucesso_pl_del_{row_id}'] = "Piloto excluído!"
+                        st.button("Excluir piloto", key=f"pl_del{row['id']}", on_click=excluir_piloto_callback)
+                        if st.session_state.get(f'sucesso_pl_del_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_pl_del_{row["id"]}'])
+                            st.session_state[f'sucesso_pl_del_{row["id"]}'] = ""
 
-        with tab3:
-            st.subheader("Provas")
+        # --- Provas ---
+        with tab2:
+            st.subheader("Adicionar nova prova")
+            if 'nome_nova_prova' not in st.session_state:
+                st.session_state['nome_nova_prova'] = ""
+            nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
+            data_prova = st.date_input("Data da nova prova", key="data_nova_prova")
+            def cadastrar_prova():
+                if not nome_prova.strip():
+                    st.session_state['erro_prova'] = "Informe o nome da prova."
+                else:
+                    adicionar_prova(nome_prova.strip(), data_prova.isoformat())
+                    st.session_state['sucesso_prova'] = "Prova adicionada!"
+                    st.session_state['nome_nova_prova'] = ""
+            st.button("Adicionar prova", key="btn_add_prova", on_click=cadastrar_prova)
+            if st.session_state.get('erro_prova'):
+                st.error(st.session_state['erro_prova'])
+                st.session_state['erro_prova'] = ""
+            if st.session_state.get('sucesso_prova'):
+                st.success(st.session_state['sucesso_prova'])
+                st.session_state['sucesso_prova'] = ""
+
+            st.markdown("---")
+            st.subheader("Provas cadastradas")
             provas = listar_provas()
-            for idx, row in provas.iterrows():
-                col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
-                with col1:
-                    novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
-                with col2:
-                    nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
-                with col3:
-                    nova_session_key = st.number_input(f"Session Key {row['id']}", min_value=0, value=row['session_key'], key=f"pr_sk{row['id']}")
-                with col4:
-                    if st.button("Editar", key=f"pr_edit{row['id']}"):
-                        editar_prova(row['id'], novo_nome, nova_data.isoformat(), nova_session_key)
-                        st.success("Prova editada!")
-                with col5:
-                    if st.button("Excluir", key=f"pr_del{row['id']}"):
-                        excluir_prova(row['id'])
-                        st.success("Prova excluída!")
-            nome_prova = st.text_input("Nome da nova prova")
-            data_prova = st.date_input("Data da nova prova")
-            session_key = st.number_input("Session Key OpenF1", min_value=0, step=1)
-            if st.button("Adicionar prova"):
-                adicionar_prova(nome_prova, data_prova.isoformat(), session_key)
-                st.success("Prova adicionada!")
+            if len(provas) == 0:
+                st.info("Nenhuma prova cadastrada.")
+            else:
+                for idx, row in provas.iterrows():
+                    col1, col2, col3, col4 = st.columns([4,4,2,2])
+                    with col1:
+                        novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
+                    with col2:
+                        nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
+                    with col3:
+                        def editar_prova_callback(row_id=row['id'], novo_nome=novo_nome, nova_data=nova_data):
+                            editar_prova(row_id, novo_nome, nova_data.isoformat())
+                            st.session_state[f'sucesso_pr_{row_id}'] = "Prova editada!"
+                        st.button("Editar prova", key=f"pr_edit{row['id']}", on_click=editar_prova_callback)
+                        if st.session_state.get(f'sucesso_pr_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_pr_{row["id"]}'])
+                            st.session_state[f'sucesso_pr_{row["id"]}'] = ""
+                    with col4:
+                        def excluir_prova_callback(row_id=row['id']):
+                            excluir_prova(row_id)
+                            st.session_state[f'sucesso_pr_del_{row_id}'] = "Prova excluída!"
+                        st.button("Excluir prova", key=f"pr_del{row['id']}", on_click=excluir_prova_callback)
+                        if st.session_state.get(f'sucesso_pr_del_{row["id"]}'):
+                            st.success(st.session_state[f'sucesso_pr_del_{row["id"]}'])
+                            st.session_state[f'sucesso_pr_del_{row["id"]}'] = ""
     else:
         st.warning("Acesso restrito ao usuário master.")
 
-# --- Atualização de resultados (admin e master) ---
+# --- Atualização de resultados (apenas manual, tabela de posições) ---
 if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] in ['master', 'admin']:
-        st.title("Atualizar Resultado")
+        st.title("Atualizar Resultado Manualmente")
         provas = listar_provas()
-        if len(provas) > 0:
+        pilotos_df = listar_pilotos()
+        if len(provas) > 0 and len(pilotos_df) > 0:
             prova_id = st.selectbox("Selecione a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
-            st.write("Você pode buscar automaticamente ou cadastrar manualmente o resultado.")
-            if st.button("Buscar resultado OpenF1"):
-                session_key = provas[provas['id'] == prova_id]['session_key'].values[0]
-                url = f"https://api.openf1.org/v1/classification?session_key={session_key}"
-                resp = requests.get(url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    pontos_pilotos = {str(item['driver_number']): item['points'] for item in data}
-                    piloto_11 = data[10]['driver_number'] if len(data) > 10 else None
-                    salvar_resultado(prova_id, pontos_pilotos, piloto_11)
-                    st.success("Resultado atualizado via OpenF1!")
-                else:
-                    st.error("Erro ao buscar dados da OpenF1.")
-            st.write("Ou preencha manualmente:")
-            pontos_pilotos = st.text_area("Pontos dos pilotos (ex: {'44':25, '33':18, ...})")
-            piloto_11 = st.text_input("Piloto 11º colocado (número)")
-            if st.button("Salvar resultado manualmente"):
-                try:
-                    pontos_dict = ast.literal_eval(pontos_pilotos)
-                    salvar_resultado(prova_id, pontos_dict, piloto_11)
-                    st.success("Resultado manual salvo!")
-                except Exception:
-                    st.error("Erro no formato dos pontos dos pilotos.")
+            pilotos = pilotos_df['nome'].tolist()
+            posicoes = {}
+            st.markdown("**Informe o piloto para cada posição:**")
+            for pos in range(1, 12):
+                posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+            if st.button("Salvar resultado"):
+                salvar_resultado_manual(prova_id, posicoes)
+                st.success("Resultado salvo!")
         else:
-            st.warning("Nenhuma prova cadastrada.")
+            st.warning("Cadastre provas e pilotos antes de lançar resultados.")
     else:
         st.warning("Acesso restrito ao administrador/master.")
 
@@ -636,6 +777,79 @@ if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
         exibir_log_apostas(is_master=True)
     else:
         exibir_log_apostas(user_id=payload['user_id'], is_master=False)
+
+# --- Tabela de classificação geral ---
+if st.session_state['pagina'] == "Classificação" and st.session_state['token']:
+    st.title("Classificação Geral do Bolão")
+
+    # 1. Tabela de classificação geral
+    usuarios = listar_usuarios()
+    provas = listar_provas()
+    participantes = usuarios[usuarios['status'] == 'Ativo']
+    participantes = participantes.reset_index(drop=True)
+    provas = provas.sort_values('data')
+    tabela_classificacao = []
+    tabela_detalhada = []
+
+    for idx, part in participantes.iterrows():
+        total = 0
+        pontos_por_prova = []
+        for _, prova in provas.iterrows():
+            apostas = consultar_apostas(part['id'])
+            pontos = 0
+            for ap in apostas:
+                _, nome_prova, prova_id, _, pilotos, fichas, piloto_11 = ap
+                if prova_id == prova['id']:
+                    pilotos_lst = pilotos.split(",")
+                    fichas_lst = list(map(int, fichas.split(",")))
+                    p = calcular_pontuacao_aposta(prova_id, pilotos_lst, fichas_lst, piloto_11)
+                    pontos = p if p is not None else 0
+                    break
+            pontos_por_prova.append(pontos)
+            total += pontos
+        tabela_classificacao.append({
+            "Participante": part['nome'],
+            "Total de Pontos": total
+        })
+        tabela_detalhada.append({
+            "Participante": part['nome'],
+            "Pontos por Prova": pontos_por_prova
+        })
+
+    df_class = pd.DataFrame(tabela_classificacao).sort_values("Total de Pontos", ascending=False).reset_index(drop=True)
+    st.subheader("Classificação Geral")
+    st.table(df_class)
+
+    # 2. Tabela cruzada: provas x participantes
+    st.subheader("Pontuação por Prova")
+    provas_nomes = provas['nome'].tolist()
+    participantes_nomes = [p['Participante'] for p in tabela_detalhada]
+    dados_cruzados = {}
+    for idx, prova in enumerate(provas_nomes):
+        linha = {}
+        for part in tabela_detalhada:
+            linha[part['Participante']] = part['Pontos por Prova'][idx] if idx < len(part['Pontos por Prova']) else 0
+        dados_cruzados[prova] = linha
+    df_cruzada = pd.DataFrame(dados_cruzados).T
+    df_cruzada = df_cruzada.reindex(columns=participantes_nomes, fill_value=0)
+    st.dataframe(df_cruzada)
+
+    # 3. Gráfico de evolução (corrigido para participantes com zero)
+    st.subheader("Evolução da Pontuação Acumulada")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    for participante in participantes_nomes:
+        pontos = df_cruzada[participante].cumsum()
+        ax.plot(provas_nomes, pontos, marker='o', label=participante)
+    ax.set_xlabel("Prova")
+    ax.set_ylabel("Pontuação Acumulada")
+    ax.legend()
+    st.pyplot(fig)
+
+# --- Regulamento ---
+if st.session_state['pagina'] == "Regulamento":
+    st.title("Regulamento BF1-2025")
+    st.markdown(REGULAMENTO)
 
 # --- Logout ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
