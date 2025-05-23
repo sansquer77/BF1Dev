@@ -3,3 +3,4 @@ pandas
 bcrypt
 pyjwt[crypto]
 requests
+matplotlib
