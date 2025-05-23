@@ -11,10 +11,12 @@ DB_PATH = 'bolao_f1alpha.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
-REGULAMENTO = """
-REGULAMENTO BF1-2025
-... (mantenha o texto do regulamento aqui) ...
-"""
+def ler_regulamento(arquivo="regulamento.txt"):
+    try:
+        with open(arquivo, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"Erro ao carregar o regulamento: {e}"
 
 def db_connect():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -672,7 +674,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
 # --- Regulamento ---
 if st.session_state['pagina'] == "Regulamento":
     st.title("Regulamento BF1-2025")
-    st.markdown(REGULAMENTO)
+    st.markdown(ler_regulamento())
 
 # --- Logout ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
