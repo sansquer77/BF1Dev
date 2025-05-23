@@ -831,20 +831,17 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
         for part in tabela_detalhada:
             linha[part['Participante']] = part['Pontos por Prova'][idx] if idx < len(part['Pontos por Prova']) else 0
         dados_cruzados[prova] = linha
-    df_cruzada = pd.DataFrame(dados_cruzados).T[participantes_nomes]
+    df_cruzada = pd.DataFrame(dados_cruzados).T
+    df_cruzada = df_cruzada.reindex(columns=participantes_nomes, fill_value=0)
     st.dataframe(df_cruzada)
 
-    # 3. Gráfico de evolução
+    # 3. Gráfico de evolução (corrigido para participantes com zero)
     st.subheader("Evolução da Pontuação Acumulada")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
-    for part in tabela_detalhada:
-        pontos_acumulados = []
-        soma = 0
-        for p in part['Pontos por Prova']:
-            soma += p
-            pontos_acumulados.append(soma)
-        ax.plot(provas_nomes, pontos_acumulados, marker='o', label=part['Participante'])
+    for participante in participantes_nomes:
+        pontos = df_cruzada[participante].cumsum()
+        ax.plot(provas_nomes, pontos, marker='o', label=participante)
     ax.set_xlabel("Prova")
     ax.set_ylabel("Pontuação Acumulada")
     ax.legend()
