@@ -4,4 +4,3 @@ bcrypt
 pyjwt[crypto]
 requests
 matplotlib
-ast
