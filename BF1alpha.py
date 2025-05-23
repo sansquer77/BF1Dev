@@ -311,16 +311,13 @@ def calcular_pontuacao_aposta(prova_id, pilotos_apostados, fichas_apostadas, pil
     resultado = consultar_resultado_prova(prova_id)
     if not resultado:
         return None  # Resultado ainda não lançado
-    # Pontuação oficial F1 para os 10 primeiros
     pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
     pontos = 0
-    # Pontos dos 10 primeiros
     for idx, (piloto, ficha) in enumerate(zip(pilotos_apostados, fichas_apostadas)):
         for pos, nome_resultado in resultado.items():
             pos_int = int(pos)
             if pos_int <= 10 and nome_resultado == piloto:
                 pontos += ficha * pontos_f1[pos_int-1]
-    # Pontos para 11º colocado
     if '11' in resultado and resultado['11'] == piloto_11_apostado:
         pontos += 25
     return pontos
@@ -453,7 +450,7 @@ if st.session_state['token']:
     escolha = st.sidebar.radio("Menu", menu)
     st.session_state['pagina'] = escolha
 
-# --- Painel do Participante (corrigido, robusto e com pontuação) ---
+# --- Painel do Participante (corrigido, robusto, linhas dinâmicas, 11º diferente) ---
 if st.session_state['pagina'] == "Painel do Participante" and st.session_state['token']:
     payload = get_payload()
     user = get_user_by_id(payload['user_id'])
@@ -482,9 +479,9 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
             pilotos_equipe = dict(zip(pilotos, equipes))
             # Formulário de aposta
             max_linhas = 5
-            linhas_visiveis = 3  # inicialmente
             pilotos_aposta = []
             fichas_aposta = []
+            linhas_visiveis = 3
             for i in range(max_linhas):
                 mostrar = False
                 if i < 3:
@@ -521,7 +518,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
             total_fichas = sum(fichas_validas)
             pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
             if not pilotos_11_opcoes:
-                pilotos_11_opcoes = pilotos  # fallback, nunca deve acontecer
+                pilotos_11_opcoes = pilotos  # fallback
             piloto_11 = st.selectbox(
                 "Palpite para 11º colocado", pilotos_11_opcoes,
                 index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
@@ -573,6 +570,62 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
         st.table(pd.DataFrame(apostas_lista))
     else:
         st.info("Nenhuma aposta registrada.")
+
+# --- Gestão de Usuários (apenas master) ---
+if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
+    payload = get_payload()
+    if payload['perfil'] == 'master':
+        st.title("Gestão de Usuários")
+        usuarios = listar_usuarios()
+        if len(usuarios) == 0:
+            st.info("Nenhum usuário cadastrado.")
+        else:
+            st.dataframe(usuarios)
+            st.write("Selecione um usuário para editar, excluir ou alterar status/perfil:")
+            usuario_id = st.selectbox("Usuário", usuarios['id'])
+            usuario = usuarios[usuarios['id'] == usuario_id].iloc[0]
+            novo_nome = st.text_input("Nome", value=usuario['nome'], key="edit_nome")
+            novo_email = st.text_input("Email", value=usuario['email'], key="edit_email")
+            novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1, key="edit_status")
+            novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1, key="edit_perfil")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("Atualizar usuário"):
+                    if usuario['nome'] == "Password":
+                        st.warning("Não é permitido alterar o status ou perfil do usuário master.")
+                    else:
+                        editar_usuario(usuario_id, novo_nome, novo_email)
+                        alterar_status_usuario(usuario_id, novo_status)
+                        alterar_perfil_usuario(usuario_id, novo_perfil)
+                        st.success("Usuário atualizado!")
+            with col2:
+                if st.button("Excluir usuário"):
+                    if usuario['nome'] == "Password":
+                        st.warning("Não é permitido excluir o usuário master.")
+                    else:
+                        excluir_usuario(usuario_id)
+                        st.success("Usuário excluído!")
+            with col3:
+                if st.button("Logout"):
+                    logout()
+    else:
+        st.warning("Acesso restrito ao usuário master.")
+
+# --- Cadastro de novo participante (apenas master) ---
+if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_state['token']:
+    payload = get_payload()
+    if payload['perfil'] == 'master':
+        st.title("Cadastro de novo participante")
+        nome = st.text_input("Nome")
+        email = st.text_input("Email")
+        senha = st.text_input("Senha", type="password")
+        if st.button("Cadastrar"):
+            if cadastrar_usuario(nome, email, senha):
+                st.success("Usuário cadastrado com sucesso!")
+            else:
+                st.error("Email já cadastrado.")
+    else:
+        st.warning("Acesso restrito ao usuário master.")
 
 # --- Gestão do Campeonato (Pilotos e Provas) ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
