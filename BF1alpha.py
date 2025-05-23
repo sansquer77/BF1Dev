@@ -616,7 +616,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 if nome_equipe.strip():
                     adicionar_equipe(nome_equipe.strip())
                     st.success("Equipe adicionada!")
-                    st.experimental_rerun()
+                    st.session_state['nome_nova_equipe'] = ""
                 else:
                     st.warning("Informe o nome da equipe.")
 
@@ -634,12 +634,10 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         if st.button("Editar equipe", key=f"eq_edit{row['id']}"):
                             editar_equipe(row['id'], novo_nome)
                             st.success("Equipe editada!")
-                            st.experimental_rerun()
                     with col3:
                         if st.button("Excluir equipe", key=f"eq_del{row['id']}"):
                             excluir_equipe(row['id'])
                             st.success("Equipe excluída!")
-                            st.experimental_rerun()
 
         # --- Pilotos ---
         with tab2:
@@ -670,7 +668,6 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         # Resetar combo e campo de nome
                         st.session_state['equipe_novo_piloto_idx'] = 0
                         st.session_state['nome_novo_piloto'] = ""
-                        st.experimental_rerun()
             else:
                 st.info("Cadastre uma equipe antes de cadastrar pilotos.")
 
@@ -701,12 +698,10 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         if st.button("Editar piloto", key=f"pl_edit{row['id']}"):
                             editar_piloto(row['id'], novo_nome, nova_equipe_id)
                             st.success("Piloto editado!")
-                            st.experimental_rerun()
                     with col4:
                         if st.button("Excluir piloto", key=f"pl_del{row['id']}"):
                             excluir_piloto(row['id'])
                             st.success("Piloto excluído!")
-                            st.experimental_rerun()
 
         # --- Provas ---
         with tab3:
@@ -719,7 +714,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 else:
                     adicionar_prova(nome_prova.strip(), data_prova.isoformat())
                     st.success("Prova adicionada!")
-                    st.experimental_rerun()
+                    st.session_state['nome_nova_prova'] = ""
             st.markdown("---")
             st.subheader("Provas cadastradas")
             provas = listar_provas()
@@ -736,15 +731,12 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         if st.button("Editar prova", key=f"pr_edit{row['id']}"):
                             editar_prova(row['id'], novo_nome, nova_data.isoformat())
                             st.success("Prova editada!")
-                            st.experimental_rerun()
                     with col4:
                         if st.button("Excluir prova", key=f"pr_del{row['id']}"):
                             excluir_prova(row['id'])
                             st.success("Prova excluída!")
-                            st.experimental_rerun()
     else:
         st.warning("Acesso restrito ao usuário master.")
-
 
 # --- Atualização de resultados (apenas manual, tabela de posições) ---
 if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
