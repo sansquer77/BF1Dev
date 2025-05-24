@@ -26,35 +26,64 @@ b.	Apostas registradas após o horário da largada, por exemplo 09:01 sendo a co
 c.	Os horários das corridas deste ano são:
 Grande Prêmio	                        Data	Horário	
 1	Grande Prêmio da Austrália	        16 de março	01:00	
-2	Grande Prêmio da China Sprint	      22 de março	00:00	
+
+2	Grande Prêmio da China Sprint	     22 de março	00:00	
+
 3	Grande Prêmio da China	            23 de março	04:00	
+
 4	Grande Prêmio do Japão	            6 de abril	02:00	
+
 5	Grande Prêmio do Bahrain	          13 de abril	12:00	
-6	Grande Prêmio da Arábia Saudita	    20 de abril	14:00	
-7	Grande Prêmio de Miami Sprint	      3 de maio	13:00	
+
+6	Grande Prêmio da Arábia Saudita	   20 de abril	14:00	
+
+7	Grande Prêmio de Miami Sprint	     3 de maio	13:00	
+
 8	Grande Prêmio de Miami	            4 de maio	17:00	
-9	Grande Prêmio da Emília-Romanha	    18 de maio	10:00	
+
+9	Grande Prêmio da Emília-Romanha	   18 de maio	10:00	
+
 10	Grande Prêmio de Mônaco	          25 de maio	10:00	
-11	Grande Prêmio da Espanha	        1 de junho	10:00	
+
+11	Grande Prêmio da Espanha	         1 de junho	10:00	
+
 12	Grande Prêmio do Canadá	          15 de junho	15:00	
-13	Grande Prêmio da Áustria	        29 de junho	10:00	
+
+13	Grande Prêmio da Áustria	         29 de junho	10:00	
+
 14	Grande Prêmio da Grã-Bretanha	    6 de julho	11:00	
+
 15	Grande Prêmio da Bélgica Sprint	  26 de julho	07:00	
-16	Grande Prêmio da Bélgica	        27 de julho	10:00	
-17	Grande Prêmio da Hungria	        3 de agosto	10:00	
+
+16	Grande Prêmio da Bélgica	         27 de julho	10:00	
+
+17	Grande Prêmio da Hungria	         3 de agosto	10:00	
+
 18	Grande Prêmio dos Países Baixos	  31 de agosto	10:00	
+
 19	Grande Prêmio da Itália	          7 de setembro	10:00	
+
 20	Grande Prêmio do Azerbaijão	      21 de setembro	08:00	
-21	Grande Prêmio de Singapura	      5 de outubro	09:00	
-22	Grande Prêmio dos EUA Sprint	    18 de outubro	14:00	
+
+21	Grande Prêmio de Singapura	       5 de outubro	09:00	
+
+22	Grande Prêmio dos EUA Sprint	     18 de outubro	14:00	
+
 23	Grande Prêmio dos EUA	            19 de outubro	16:00	
+
 24	Grande Prêmio da Cidade do México	26 de outubro	17:00	
+
 25	Grande Prêmio de São Paulo Sprint	8 de novembro	11:00	
-26	Grande Prêmio de São Paulo	      9 de novembro	14:00	
-27	Grande Prêmio de Las Vegas	      22 de novembro	01:00	
+
+26	Grande Prêmio de São Paulo	       9 de novembro	14:00	
+
+27	Grande Prêmio de Las Vegas	       22 de novembro	01:00	
+
 28	Grande Prêmio do Catar Sprint	    29 de novembro	11:00	
-23	Grande Prêmio do Catar	          30 de novembro	13:00	
-24	Grande Prêmio de Abu Dhabi	      7 de dezembro	10:00	
+
+29	Grande Prêmio do Catar	           30 de novembro	13:00	
+
+20	Grande Prêmio de Abu Dhabi	       7 de dezembro	10:00	
 
 4)	O participante que não efetuar a sua aposta ATÉ O PRAZO DEFINO DO ITEM-3, irá concorrer com a mesma aposta da última corrida.
 a.	Quando se tratar da primeira vez que a aposta não for feita, e apenas neste caso, será computado 100% dos pontos.
