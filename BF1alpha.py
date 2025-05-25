@@ -445,6 +445,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     user = get_user_by_id(payload['user_id'])
     st.title("Painel do Participante")
     st.write(f"Bem-vindo, {user[1]} ({user[3]}) - Status: {user[4]}")
+    st.cache_data.clear()
     provas = get_provas_df()
     pilotos_df = get_pilotos_df()
     if user[4] == "Ativo":
@@ -534,6 +535,8 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                     aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos_validos}, Fichas: {fichas_validas}, 11º: {piloto_11}"
                     registrar_log_aposta(user[1], aposta_str, nome_prova)
                     st.success("Aposta registrada/atualizada!")
+                    st.cache_data.clear()
+                    st.rerun()
         else:
             st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
     else:
@@ -578,6 +581,7 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
     payload = get_payload()
     if payload['perfil'] == 'master':
         st.title("Gestão de Usuários")
+        st.cache_data.clear()
         usuarios = get_usuarios_df()
         if len(usuarios) == 0:
             st.info("Nenhum usuário cadastrado.")
@@ -632,6 +636,7 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
 if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
+        st.cache_data.clear()
         st.title("Cadastro de novo participante")
         nome = st.text_input("Nome")
         email = st.text_input("Email")
@@ -639,6 +644,8 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
         if st.button("Cadastrar"):
             if cadastrar_usuario(nome, email, senha):
                 st.success("Usuário cadastrado com sucesso!")
+                st.cache_data.clear()
+                st.rerun()
             else:
                 st.error("Email já cadastrado.")
     else:
@@ -648,6 +655,7 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
+        st.cache_data.clear()
         st.title("Gestão do Campeonato")
         tab1, tab2 = st.tabs(["Pilotos", "Provas"])
         with tab1:
@@ -679,6 +687,8 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
             if st.session_state.get('sucesso_piloto'):
                 st.success(st.session_state['sucesso_piloto'])
                 st.session_state['sucesso_piloto'] = ""
+                st.cache_data.clear()
+                st.rerun()
             st.markdown("---")
             st.subheader("Pilotos cadastrados")
             pilotos = get_pilotos_df()
@@ -717,6 +727,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                             st.session_state[f'sucesso_pl_del_{row["id"]}'] = ""
         with tab2:
             st.subheader("Adicionar nova prova")
+            st.cache_data.clear()
             if 'nome_nova_prova' not in st.session_state:
                 st.session_state['nome_nova_prova'] = ""
             nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
@@ -739,6 +750,8 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
             if st.session_state.get('sucesso_prova'):
                 st.success(st.session_state['sucesso_prova'])
                 st.session_state['sucesso_prova'] = ""
+                st.cache_data.clear()
+                st.rerun()
             st.markdown("---")
             st.subheader("Provas cadastradas")
             provas = get_provas_df()
