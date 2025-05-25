@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import ast
 import matplotlib.pyplot as plt
 
-DB_PATH = 'bolao_f1homol.db'
+DB_PATH = 'bolao_f1Dev.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
@@ -591,6 +591,11 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
         st.title("Gestão de Usuários")
         st.cache_data.clear()
         usuarios = get_usuarios_df()
+
+        # Remove a coluna de hash de senha se existir
+        if 'senha_hash' in usuarios.columns:
+            usuarios = usuarios.drop(columns=['senha_hash'])
+
         if len(usuarios) == 0:
             st.info("Nenhum usuário cadastrado.")
         else:
@@ -602,7 +607,7 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
             novo_email = st.text_input("Email", value=usuario['email'], key="edit_email")
             novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1, key="edit_status")
             novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1, key="edit_perfil")
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             with col1:
                 if st.button("Atualizar usuário"):
                     if usuario['nome'] == "Password":
@@ -631,12 +636,6 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
                         st.success("Usuário excluído!")
                         st.cache_data.clear()
                         st.rerun()
-                        
-            with col3:
-                if st.button("Logout"):
-                    st.session_state['token'] = None
-                    st.session_state['pagina'] = "Login"
-                    st.success("Logout realizado com sucesso!")
     else:
         st.warning("Acesso restrito ao usuário master.")
 
@@ -805,6 +804,8 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
         provas_df = get_provas_df()
         usuarios_df = get_usuarios_df()
         apostas_df = get_apostas_df()
+        resultados_df = get_resultados_df()
+        pilotos_df = get_pilotos_df()
         participantes = usuarios_df[usuarios_df['status'] == 'Ativo']
         provas_df = provas_df.sort_values('data')
         tabs = st.tabs(participantes['nome'].tolist())
@@ -813,18 +814,92 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                 st.subheader(f"Apostas de {part.nome}")
                 apostas_part = apostas_df[apostas_df['usuario_id'] == part.id]
                 apostas_dict = dict(zip(apostas_part['prova_id'], apostas_part.itertuples()))
-                faltas = 0
                 for _, prova in provas_df.iterrows():
                     st.write(f"**Prova:** {prova['nome']} ({prova['data']})")
                     if prova['id'] in apostas_dict:
                         ap = apostas_dict[prova['id']]
-                        st.success(f"Aposta registrada em {ap.data_envio[:16]}: Pilotos: {ap.pilotos}, Fichas: {ap.fichas}, 11º: {ap.piloto_11}")
+                        data_hora = ap.data_envio[:16] if ap.data_envio else "Data não registrada"
+                        st.success(f"Aposta registrada em {data_hora}")
                     else:
-                        faltas += 1
                         st.warning("Sem aposta registrada.")
                         if st.button(f"Gerar aposta automática para {prova['nome']}", key=f"auto_{part.id}_{prova['id']}"):
+                            # Incrementa o campo faltas do usuário
+                            conn = db_connect()
+                            c = conn.cursor()
+                            c.execute('SELECT faltas FROM usuarios WHERE id=?', (part.id,))
+                            faltas_atual = c.fetchone()
+                            faltas_novo = (faltas_atual[0] if faltas_atual and faltas_atual[0] else 0) + 1
+                            c.execute('UPDATE usuarios SET faltas=? WHERE id=?', (faltas_novo, part.id))
+                            conn.commit()
+                            conn.close()
+                            # Tenta copiar aposta anterior
                             ok, msg = gerar_aposta_automatica(part.id, prova['id'], prova['nome'], apostas_df, provas_df)
-                            st.success(msg) if ok else st.error(msg)
+                            if ok:
+                                st.cache_data.clear()  # Limpa o cache antes de buscar a aposta recém-criada!
+                                nova_aposta_df = get_apostas_df()
+                                filtro = (
+                                    (nova_aposta_df['usuario_id'] == part.id) &
+                                    (nova_aposta_df['prova_id'] == prova['id'])
+                                )
+                                resultado = nova_aposta_df[filtro]
+                                if not resultado.empty:
+                                    nova_aposta = resultado.iloc[0]
+                                    aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
+                                    registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
+                                else:
+                                    st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                resultado_row = resultados_df[resultados_df['prova_id'] == prova['id']]
+                                pilotos_nao_pontuaram = []
+                                piloto_11_nao = None
+                                if not resultado_row.empty:
+                                    resultado = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                                    pontuaram = set(resultado.get(str(pos), "") for pos in range(1, 11))
+                                    todos_pilotos = set(pilotos_df['nome'])
+                                    pilotos_nao_pontuaram = list(todos_pilotos - pontuaram)
+                                    piloto_11 = resultado.get("11", None)
+                                    pilotos_11_opcoes = [p for p in todos_pilotos if p != piloto_11]
+                                    piloto_11_nao = pilotos_11_opcoes[0] if pilotos_11_opcoes else list(todos_pilotos)[0]
+                                else:
+                                    pilotos_nao_pontuaram = [pilotos_df['nome'].iloc[0]]
+                                    piloto_11_nao = pilotos_df['nome'].iloc[0]
+                                piloto_aposta = pilotos_nao_pontuaram[0] if pilotos_nao_pontuaram else pilotos_df['nome'].iloc[0]
+                                salvar_aposta(
+                                    part.id,
+                                    prova['id'],
+                                    [piloto_aposta],
+                                    [15],
+                                    piloto_11_nao,
+                                    prova['nome'],
+                                    automatica=1
+                                )
+                                # Incrementa o campo faltas do usuário novamente (caso gere aposta "zerada")
+                                conn = db_connect()
+                                c = conn.cursor()
+                                c.execute('SELECT faltas FROM usuarios WHERE id=?', (part.id,))
+                                faltas_atual = c.fetchone()
+                                faltas_novo = (faltas_atual[0] if faltas_atual and faltas_atual[0] else 0) + 1
+                                c.execute('UPDATE usuarios SET faltas=? WHERE id=?', (faltas_novo, part.id))
+                                conn.commit()
+                                conn.close()
+                                st.cache_data.clear()
+                                # Registrar no log com "*"
+                                nova_aposta_df = get_apostas_df()
+                                filtro = (
+                                    (nova_aposta_df['usuario_id'] == part.id) &
+                                    (nova_aposta_df['prova_id'] == prova['id'])
+                                )
+                                resultado = nova_aposta_df[filtro]
+                                if not resultado.empty:
+                                    nova_aposta = resultado.iloc[0]
+                                    aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
+                                    registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
+                                else:
+                                    st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
+                                st.success(f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}")
+                                st.rerun()
     else:
         st.warning("Acesso restrito ao administrador/master.")
 
@@ -888,13 +963,21 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
         st.title("Atualizar Resultado Manualmente")
         provas = get_provas_df()
         pilotos_df = get_pilotos_df()
+        resultados_df = get_resultados_df()
         if len(provas) > 0 and len(pilotos_df) > 0:
             prova_id = st.selectbox("Selecione a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
             pilotos = pilotos_df['nome'].tolist()
             posicoes = {}
             st.markdown("**Informe o piloto para cada posição:**")
-            for pos in range(1, 12):
-                posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+            col1, col2 = st.columns(2)
+            for pos in range(1, 6):
+                with col1:
+                    posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+            for pos in range(6, 11):
+                with col2:
+                    posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+            st.markdown("**11º colocado:**")
+            posicoes[11] = st.selectbox("11º colocado", pilotos, key="pos_11")
             if st.button("Salvar resultado"):
                 conn = db_connect()
                 c = conn.cursor()
@@ -903,6 +986,28 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
                 conn.commit()
                 conn.close()
                 st.success("Resultado salvo!")
+                st.cache_data.clear()
+                st.rerun()
+            # Mostra abaixo as provas já cadastradas e seus resultados
+            st.markdown("---")
+            st.subheader("Resultados cadastrados")
+            resultados_df = get_resultados_df()
+            provas_resultados = []
+            for _, prova in provas.iterrows():
+                res = resultados_df[resultados_df['prova_id'] == prova['id']]
+                if not res.empty:
+                    posicoes_dict = ast.literal_eval(res.iloc[0]['posicoes'])
+                    linha = {
+                        "Prova": prova['nome'],
+                        "Data": prova['data'],
+                    }
+                    for pos in range(1, 12):
+                        linha[f"{pos}º"] = posicoes_dict.get(pos, "")
+                    provas_resultados.append(linha)
+            if provas_resultados:
+                st.dataframe(pd.DataFrame(provas_resultados))
+            else:
+                st.info("Nenhum resultado cadastrado ainda.")
         else:
             st.warning("Cadastre provas e pilotos antes de lançar resultados.")
     else:
