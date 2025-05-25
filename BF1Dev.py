@@ -804,6 +804,8 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
         provas_df = get_provas_df()
         usuarios_df = get_usuarios_df()
         apostas_df = get_apostas_df()
+        resultados_df = get_resultados_df()
+        pilotos_df = get_pilotos_df()
         participantes = usuarios_df[usuarios_df['status'] == 'Ativo']
         provas_df = provas_df.sort_values('data')
         tabs = st.tabs(participantes['nome'].tolist())
@@ -812,20 +814,56 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                 st.subheader(f"Apostas de {part.nome}")
                 apostas_part = apostas_df[apostas_df['usuario_id'] == part.id]
                 apostas_dict = dict(zip(apostas_part['prova_id'], apostas_part.itertuples()))
-                faltas = 0
                 for _, prova in provas_df.iterrows():
                     st.write(f"**Prova:** {prova['nome']} ({prova['data']})")
                     if prova['id'] in apostas_dict:
                         ap = apostas_dict[prova['id']]
-                        st.success(f"Aposta registrada em {ap.data_envio[:16]}: Pilotos: {ap.pilotos}, Fichas: {ap.fichas}, 11º: {ap.piloto_11}")
+                        data_hora = ap.data_envio[:16] if ap.data_envio else "Data não registrada"
+                        st.success(f"Aposta registrada em {data_hora}")
                     else:
-                        faltas += 1
                         st.warning("Sem aposta registrada.")
                         if st.button(f"Gerar aposta automática para {prova['nome']}", key=f"auto_{part.id}_{prova['id']}"):
+                            # Tenta copiar aposta anterior
                             ok, msg = gerar_aposta_automatica(part.id, prova['id'], prova['nome'], apostas_df, provas_df)
-                            st.success(msg) if ok else st.error(msg)
+                            if ok:
+                                st.success(msg)
+                            else:
+                                # Gera aposta "zerada" conforme solicitado
+                                # Busca pilotos que não pontuaram na prova
+                                resultado_row = resultados_df[resultados_df['prova_id'] == prova['id']]
+                                pilotos_nao_pontuaram = []
+                                piloto_11_nao = None
+                                if not resultado_row.empty:
+                                    resultado = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                                    # Pontuaram: posições 1 a 10
+                                    pontuaram = set(resultado.get(str(pos), "") for pos in range(1, 11))
+                                    todos_pilotos = set(pilotos_df['nome'])
+                                    pilotos_nao_pontuaram = list(todos_pilotos - pontuaram)
+                                    # Quem ficou em 11º
+                                    piloto_11 = resultado.get("11", None)
+                                    # Escolhe um piloto que não ficou em 11º
+                                    pilotos_11_opcoes = [p for p in todos_pilotos if p != piloto_11]
+                                    piloto_11_nao = pilotos_11_opcoes[0] if pilotos_11_opcoes else list(todos_pilotos)[0]
+                                else:
+                                    # Se não há resultado, pega o primeiro piloto da lista
+                                    pilotos_nao_pontuaram = [pilotos_df['nome'].iloc[0]]
+                                    piloto_11_nao = pilotos_df['nome'].iloc[0]
+                                piloto_aposta = pilotos_nao_pontuaram[0] if pilotos_nao_pontuaram else pilotos_df['nome'].iloc[0]
+                                salvar_aposta(
+                                    part.id,
+                                    prova['id'],
+                                    [piloto_aposta],
+                                    [15],
+                                    piloto_11_nao,
+                                    prova['nome'],
+                                    automatica=1
+                                )
+                                st.success(f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}")
+                                st.cache_data.clear()
+                                st.rerun()
     else:
         st.warning("Acesso restrito ao administrador/master.")
+
 
 # --- CLASSIFICAÇÃO ---
 if st.session_state['pagina'] == "Classificação" and st.session_state['token']:
