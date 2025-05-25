@@ -603,6 +603,9 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
                         conn.commit()
                         conn.close()
                         st.success("Usuário atualizado!")
+                        st.cache_data.clear()
+                        st.rerun()
+
             with col2:
                 if st.button("Excluir usuário"):
                     if usuario['nome'] == "Password":
@@ -614,6 +617,9 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
                         conn.commit()
                         conn.close()
                         st.success("Usuário excluído!")
+                        st.cache_data.clear()
+                        st.rerun()
+                        
             with col3:
                 if st.button("Logout"):
                     st.session_state['token'] = None
