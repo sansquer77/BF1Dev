@@ -591,6 +591,11 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
         st.title("Gestão de Usuários")
         st.cache_data.clear()
         usuarios = get_usuarios_df()
+
+        # Remove a coluna de hash de senha se existir
+        if 'senha_hash' in usuarios.columns:
+            usuarios = usuarios.drop(columns=['senha_hash'])
+
         if len(usuarios) == 0:
             st.info("Nenhum usuário cadastrado.")
         else:
@@ -602,7 +607,7 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
             novo_email = st.text_input("Email", value=usuario['email'], key="edit_email")
             novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1, key="edit_status")
             novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1, key="edit_perfil")
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             with col1:
                 if st.button("Atualizar usuário"):
                     if usuario['nome'] == "Password":
@@ -631,12 +636,6 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
                         st.success("Usuário excluído!")
                         st.cache_data.clear()
                         st.rerun()
-                        
-            with col3:
-                if st.button("Logout"):
-                    st.session_state['token'] = None
-                    st.session_state['pagina'] = "Login"
-                    st.success("Logout realizado com sucesso!")
     else:
         st.warning("Acesso restrito ao usuário master.")
 
