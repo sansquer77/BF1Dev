@@ -95,13 +95,6 @@ A premiação será um voucher de 50% do fundo arrecadado das inscrições para 
 A premiação será realizada em um Happy-Hour a ser agendado entre os participantes em data e local a serem definidos posteriormente ao final do campeonato.
 """
 
-def ler_regulamento(arquivo="regulamento.txt"):
-    try:
-        with open(arquivo, "r", encoding="utf-8") as f:
-            return f.read()
-    except Exception as e:
-        return f"Erro ao carregar o regulamento: {e}"
-
 def db_connect():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
@@ -460,9 +453,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
 # --- Regulamento (arquivo externo) ---
 if st.session_state['pagina'] == "Regulamento":
     st.title("Regulamento BF1-2025")
-    texto_reg = ler_regulamento()
-    texto_reg = texto_reg.replace('\n', '  \n')
-    st.markdown(texto_reg)
+    st.markdown(REGULAMENTO.replace('\n', '  \n'))
 
 # --- Logout ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
