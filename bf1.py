@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import ast
 import matplotlib.pyplot as plt
 
-DB_PATH = 'bolao_f1alpha.db'
+DB_PATH = 'bolao_f1homol.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
