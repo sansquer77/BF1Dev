@@ -828,12 +828,17 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                             if ok:
                                 # Buscar aposta recém-gerada para log
                                 nova_aposta_df = get_apostas_df()
-                                nova_aposta = nova_aposta_df[
+                                filtro = (
                                     (nova_aposta_df['usuario_id'] == part.id) &
                                     (nova_aposta_df['prova_id'] == prova['id'])
-                                ].iloc[0]
-                                aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
-                                registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
+                                )
+                                resultado = nova_aposta_df[filtro]
+                                if not resultado.empty:
+                                    nova_aposta = resultado.iloc[0]
+                                    aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
+                                    registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
+                                else:
+                                    st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
                                 st.success(msg)
                             else:
                                 # Gera aposta "zerada" conforme solicitado
@@ -869,6 +874,7 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 st.rerun()
     else:
         st.warning("Acesso restrito ao administrador/master.")
+
 
 # --- CLASSIFICAÇÃO ---
 if st.session_state['pagina'] == "Classificação" and st.session_state['token']:
