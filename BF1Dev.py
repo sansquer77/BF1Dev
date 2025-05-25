@@ -925,13 +925,21 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
         st.title("Atualizar Resultado Manualmente")
         provas = get_provas_df()
         pilotos_df = get_pilotos_df()
+        resultados_df = get_resultados_df()
         if len(provas) > 0 and len(pilotos_df) > 0:
             prova_id = st.selectbox("Selecione a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
             pilotos = pilotos_df['nome'].tolist()
             posicoes = {}
             st.markdown("**Informe o piloto para cada posição:**")
-            for pos in range(1, 12):
-                posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+            col1, col2 = st.columns(2)
+            for pos in range(1, 6):
+                with col1:
+                    posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+            for pos in range(6, 11):
+                with col2:
+                    posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+            st.markdown("**11º colocado:**")
+            posicoes[11] = st.selectbox("11º colocado", pilotos, key="pos_11")
             if st.button("Salvar resultado"):
                 conn = db_connect()
                 c = conn.cursor()
@@ -940,6 +948,28 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
                 conn.commit()
                 conn.close()
                 st.success("Resultado salvo!")
+                st.cache_data.clear()
+                st.rerun()
+            # Mostra abaixo as provas já cadastradas e seus resultados
+            st.markdown("---")
+            st.subheader("Resultados cadastrados")
+            resultados_df = get_resultados_df()
+            provas_resultados = []
+            for _, prova in provas.iterrows():
+                res = resultados_df[resultados_df['prova_id'] == prova['id']]
+                if not res.empty:
+                    posicoes_dict = ast.literal_eval(res.iloc[0]['posicoes'])
+                    linha = {
+                        "Prova": prova['nome'],
+                        "Data": prova['data'],
+                    }
+                    for pos in range(1, 12):
+                        linha[f"{pos}º"] = posicoes_dict.get(pos, "")
+                    provas_resultados.append(linha)
+            if provas_resultados:
+                st.dataframe(pd.DataFrame(provas_resultados))
+            else:
+                st.info("Nenhum resultado cadastrado ainda.")
         else:
             st.warning("Cadastre provas e pilotos antes de lançar resultados.")
     else:
