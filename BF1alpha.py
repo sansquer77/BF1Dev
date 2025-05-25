@@ -363,6 +363,69 @@ def get_payload():
         st.stop()
     return payload
 
+# --- Login, Esqueceu a Senha e Criar Usuário Inativo ---
+if st.session_state['pagina'] == "Login":
+    st.title("Login")
+    if 'esqueceu_senha' not in st.session_state:
+        st.session_state['esqueceu_senha'] = False
+    if 'criar_usuario' not in st.session_state:
+        st.session_state['criar_usuario'] = False
+
+    if not st.session_state['esqueceu_senha'] and not st.session_state['criar_usuario']:
+        email = st.text_input("Email")
+        senha = st.text_input("Senha", type="password")
+        col1, col2, col3 = st.columns([2,1,1])
+        with col1:
+            if st.button("Entrar"):
+                user = autenticar_usuario(email, senha)
+                if user:
+                    token = generate_token(user[0], user[4], user[5])
+                    st.session_state['token'] = token
+                    st.session_state['pagina'] = "Painel do Participante"
+                    st.success(f"Bem-vindo, {user[1]}!")
+                else:
+                    st.error("Usuário ou senha inválidos.")
+        with col2:
+            if st.button("Esqueceu a senha?"):
+                st.session_state['esqueceu_senha'] = True
+        with col3:
+            if st.button("Criar usuário"):
+                st.session_state['criar_usuario'] = True
+
+    elif st.session_state['esqueceu_senha']:
+        st.subheader("Redefinir senha")
+        email_reset = st.text_input("Email cadastrado")
+        nova_senha = st.text_input("Nova senha", type="password")
+        if st.button("Salvar nova senha"):
+            user = get_user_by_email(email_reset)
+            if user:
+                conn = db_connect()
+                c = conn.cursor()
+                nova_hash = hash_password(nova_senha)
+                c.execute('UPDATE usuarios SET senha_hash=? WHERE email=?', (nova_hash, email_reset))
+                conn.commit()
+                conn.close()
+                st.success("Senha redefinida com sucesso! Faça login com a nova senha.")
+                st.session_state['esqueceu_senha'] = False
+            else:
+                st.error("Email não cadastrado.")
+        if st.button("Voltar para login"):
+            st.session_state['esqueceu_senha'] = False
+
+    elif st.session_state['criar_usuario']:
+        st.subheader("Criar novo usuário")
+        nome_novo = st.text_input("Nome completo")
+        email_novo = st.text_input("Email")
+        senha_novo = st.text_input("Senha", type="password")
+        if st.button("Cadastrar usuário"):
+            if cadastrar_usuario(nome_novo, email_novo, senha_novo, perfil='participante', status='Inativo'):
+                st.success("Usuário criado com sucesso! Aguarde aprovação do administrador.")
+                st.session_state['criar_usuario'] = False
+            else:
+                st.error("Email já cadastrado.")
+        if st.button("Voltar para login", key="voltar_login_criar"):
+            st.session_state['criar_usuario'] = False
+
 # ---------------- MENU LATERAL ----------------
 if st.session_state['token']:
     payload = get_payload()
