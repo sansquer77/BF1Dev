@@ -823,10 +823,18 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                     else:
                         st.warning("Sem aposta registrada.")
                         if st.button(f"Gerar aposta automática para {prova['nome']}", key=f"auto_{part.id}_{prova['id']}"):
+                            # Incrementa o campo faltas do usuário
+                            conn = db_connect()
+                            c = conn.cursor()
+                            c.execute('SELECT faltas FROM usuarios WHERE id=?', (part.id,))
+                            faltas_atual = c.fetchone()
+                            faltas_novo = (faltas_atual[0] if faltas_atual and faltas_atual[0] else 0) + 1
+                            c.execute('UPDATE usuarios SET faltas=? WHERE id=?', (faltas_novo, part.id))
+                            conn.commit()
+                            conn.close()
                             # Tenta copiar aposta anterior
                             ok, msg = gerar_aposta_automatica(part.id, prova['id'], prova['nome'], apostas_df, provas_df)
                             if ok:
-                                # Buscar aposta recém-gerada para log
                                 nova_aposta_df = get_apostas_df()
                                 filtro = (
                                     (nova_aposta_df['usuario_id'] == part.id) &
@@ -841,7 +849,6 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                     st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
                                 st.success(msg)
                             else:
-                                # Gera aposta "zerada" conforme solicitado
                                 resultado_row = resultados_df[resultados_df['prova_id'] == prova['id']]
                                 pilotos_nao_pontuaram = []
                                 piloto_11_nao = None
@@ -866,7 +873,15 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                     prova['nome'],
                                     automatica=1
                                 )
-                                # Registrar no log com "*"
+                                # Incrementa o campo faltas do usuário novamente (caso gere aposta "zerada")
+                                conn = db_connect()
+                                c = conn.cursor()
+                                c.execute('SELECT faltas FROM usuarios WHERE id=?', (part.id,))
+                                faltas_atual = c.fetchone()
+                                faltas_novo = (faltas_atual[0] if faltas_atual and faltas_atual[0] else 0) + 1
+                                c.execute('UPDATE usuarios SET faltas=? WHERE id=?', (faltas_novo, part.id))
+                                conn.commit()
+                                conn.close()
                                 aposta_str = f"Prova: {prova['nome']}*, Pilotos: {piloto_aposta}, Fichas: 15, 11º: {piloto_11_nao}"
                                 registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
                                 st.success(f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}")
@@ -874,7 +889,6 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 st.rerun()
     else:
         st.warning("Acesso restrito ao administrador/master.")
-
 
 # --- CLASSIFICAÇÃO ---
 if st.session_state['pagina'] == "Classificação" and st.session_state['token']:
