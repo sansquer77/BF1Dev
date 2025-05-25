@@ -1,6 +1,5 @@
 streamlit
 pandas
-bcrypt
-pyjwt[crypto]
-requests
 matplotlib
+bcrypt
+pyjwt
