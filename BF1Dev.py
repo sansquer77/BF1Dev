@@ -826,26 +826,29 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                             # Tenta copiar aposta anterior
                             ok, msg = gerar_aposta_automatica(part.id, prova['id'], prova['nome'], apostas_df, provas_df)
                             if ok:
+                                # Buscar aposta recém-gerada para log
+                                nova_aposta_df = get_apostas_df()
+                                nova_aposta = nova_aposta_df[
+                                    (nova_aposta_df['usuario_id'] == part.id) &
+                                    (nova_aposta_df['prova_id'] == prova['id'])
+                                ].iloc[0]
+                                aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
+                                registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
                                 st.success(msg)
                             else:
                                 # Gera aposta "zerada" conforme solicitado
-                                # Busca pilotos que não pontuaram na prova
                                 resultado_row = resultados_df[resultados_df['prova_id'] == prova['id']]
                                 pilotos_nao_pontuaram = []
                                 piloto_11_nao = None
                                 if not resultado_row.empty:
                                     resultado = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
-                                    # Pontuaram: posições 1 a 10
                                     pontuaram = set(resultado.get(str(pos), "") for pos in range(1, 11))
                                     todos_pilotos = set(pilotos_df['nome'])
                                     pilotos_nao_pontuaram = list(todos_pilotos - pontuaram)
-                                    # Quem ficou em 11º
                                     piloto_11 = resultado.get("11", None)
-                                    # Escolhe um piloto que não ficou em 11º
                                     pilotos_11_opcoes = [p for p in todos_pilotos if p != piloto_11]
                                     piloto_11_nao = pilotos_11_opcoes[0] if pilotos_11_opcoes else list(todos_pilotos)[0]
                                 else:
-                                    # Se não há resultado, pega o primeiro piloto da lista
                                     pilotos_nao_pontuaram = [pilotos_df['nome'].iloc[0]]
                                     piloto_11_nao = pilotos_df['nome'].iloc[0]
                                 piloto_aposta = pilotos_nao_pontuaram[0] if pilotos_nao_pontuaram else pilotos_df['nome'].iloc[0]
@@ -858,12 +861,14 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                     prova['nome'],
                                     automatica=1
                                 )
+                                # Registrar no log com "*"
+                                aposta_str = f"Prova: {prova['nome']}*, Pilotos: {piloto_aposta}, Fichas: 15, 11º: {piloto_11_nao}"
+                                registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
                                 st.success(f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}")
                                 st.cache_data.clear()
                                 st.rerun()
     else:
         st.warning("Acesso restrito ao administrador/master.")
-
 
 # --- CLASSIFICAÇÃO ---
 if st.session_state['pagina'] == "Classificação" and st.session_state['token']:
