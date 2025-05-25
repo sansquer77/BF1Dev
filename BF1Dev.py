@@ -835,6 +835,7 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                             # Tenta copiar aposta anterior
                             ok, msg = gerar_aposta_automatica(part.id, prova['id'], prova['nome'], apostas_df, provas_df)
                             if ok:
+                                st.cache_data.clear()  # Limpa o cache antes de buscar a aposta recém-criada!
                                 nova_aposta_df = get_apostas_df()
                                 filtro = (
                                     (nova_aposta_df['usuario_id'] == part.id) &
@@ -848,6 +849,7 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 else:
                                     st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
                                 st.success(msg)
+                                st.rerun()
                             else:
                                 resultado_row = resultados_df[resultados_df['prova_id'] == prova['id']]
                                 pilotos_nao_pontuaram = []
@@ -882,10 +884,21 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 c.execute('UPDATE usuarios SET faltas=? WHERE id=?', (faltas_novo, part.id))
                                 conn.commit()
                                 conn.close()
-                                aposta_str = f"Prova: {prova['nome']}*, Pilotos: {piloto_aposta}, Fichas: 15, 11º: {piloto_11_nao}"
-                                registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
-                                st.success(f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}")
                                 st.cache_data.clear()
+                                # Registrar no log com "*"
+                                nova_aposta_df = get_apostas_df()
+                                filtro = (
+                                    (nova_aposta_df['usuario_id'] == part.id) &
+                                    (nova_aposta_df['prova_id'] == prova['id'])
+                                )
+                                resultado = nova_aposta_df[filtro]
+                                if not resultado.empty:
+                                    nova_aposta = resultado.iloc[0]
+                                    aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
+                                    registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
+                                else:
+                                    st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
+                                st.success(f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}")
                                 st.rerun()
     else:
         st.warning("Acesso restrito ao administrador/master.")
