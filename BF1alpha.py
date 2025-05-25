@@ -11,6 +11,8 @@ DB_PATH = 'bolao_f1alpha.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
+REGULAMENTO = """
+
 def ler_regulamento(arquivo="regulamento.txt"):
     try:
         with open(arquivo, "r", encoding="utf-8") as f:
