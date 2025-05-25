@@ -572,7 +572,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
         df_apostas = pd.DataFrame(apostas_lista)
         def colorir_linha(row):
             return [row["Cor"]] * len(row)
-        st.dataframe(df_apostas[["#", "Prova", "Data Envio", "Pilotos", "Fichas", "11º", "Pontuação"]].style.apply(colorir_linha, axis=1))
+        st.dataframe(df_apostas.style.apply(colorir_linha, axis=1)[["#", "Prova", "Data Envio", "Pilotos", "Fichas", "11º", "Pontuação"]])
     else:
         st.info("Nenhuma aposta registrada.")
 
