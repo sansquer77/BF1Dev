@@ -124,7 +124,8 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         data TEXT,
-        status TEXT DEFAULT 'Ativo')''')
+        status TEXT DEFAULT 'Ativo',
+        tipo TEXT DEFAULT 'Normal'
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
@@ -267,11 +268,14 @@ def registrar_log_aposta(apostador, aposta, nome_prova):
     conn.commit()
     conn.close()
 
-def calcular_pontuacao_lote(apostas_df, resultados_df):
+def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]  # Para Sprint
     resultados = {}
     for _, row in resultados_df.iterrows():
         resultados[row['prova_id']] = ast.literal_eval(row['posicoes'])
+    # Cria um dicionário de tipos das provas
+    tipos_prova = dict(zip(provas_df['id'], provas_df['tipo'] if 'tipo' in provas_df.columns else ['Normal']*len(provas_df)))
     pontos = []
     for _, aposta in apostas_df.iterrows():
         prova_id = aposta['prova_id']
@@ -284,13 +288,26 @@ def calcular_pontuacao_lote(apostas_df, resultados_df):
         piloto_11 = aposta['piloto_11']
         automatica = int(aposta['automatica'])
         pt = 0
-        for p, f in zip(pilotos, fichas):
-            for pos, nome in res.items():
-                pos_int = int(pos)
-                if pos_int <= 10 and nome == p:
-                    pt += f * pontos_f1[pos_int-1]
-        if '11' in res and res['11'] == piloto_11:
-            pt += 25
+        tipo = tipos_prova.get(prova_id, 'Normal')
+        if tipo == 'Sprint':
+            # Pontuam só os 8 primeiros (8 para 1º, 7 para 2º, ..., 1 para 8º)
+            for p, f in zip(pilotos, fichas):
+                for pos, nome in res.items():
+                    pos_int = int(pos)
+                    if pos_int <= 8 and nome == p:
+                        pt += f * pontos_sprint[pos_int-1]
+            # Bônus para 11º colocado na Sprint também
+            if '11' in res and res['11'] == piloto_11:
+                pt += 25
+        else:
+            # Prova normal
+            for p, f in zip(pilotos, fichas):
+                for pos, nome in res.items():
+                    pos_int = int(pos)
+                    if pos_int <= 10 and nome == p:
+                        pt += f * pontos_f1[pos_int-1]
+            if '11' in res and res['11'] == piloto_11:
+                pt += 25
         if automatica >= 2:
             pt = int(pt * 0.75)
         pontos.append(pt)
@@ -735,6 +752,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
             nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
             data_prova_str = st.text_input("Data da nova prova (DD/MM/AAAA)", key="data_nova_prova")
             status_prova = st.selectbox("Status da prova", ["Ativo", "Inativo"], key="status_nova_prova")
+            tipo_prova = st.selectbox("Tipo da prova", ["Normal", "Sprint"], key="tipo_nova_prova")
             if st.button("Adicionar prova", key="btn_add_prova_form"):
                 if not nome_prova.strip():
                     st.error("Informe o nome da prova.")
@@ -743,7 +761,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         data_prova = datetime.strptime(data_prova_str, "%d/%m/%Y")
                         conn = db_connect()
                         c = conn.cursor()
-                        c.execute('INSERT INTO provas (nome, data, status) VALUES (?, ?, ?)', (nome_prova.strip(), data_prova.strftime("%Y-%m-%d"), status_prova))
+                        c.execute('INSERT INTO provas (nome, data, status, tipo) VALUES (?, ?, ?, ?)', (nome_prova.strip(), data_prova.strftime("%Y-%m-%d"), status_prova, tipo_prova))
                         conn.commit()
                         conn.close()
                         st.success("Prova adicionada!")
