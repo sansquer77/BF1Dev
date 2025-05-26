@@ -782,8 +782,13 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     with col1:
                         novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome_{row['id']}")
                     with col2:
-                        # Exibe data em DD/MM/AAAA
-                        data_formatada = pd.to_datetime(row['data']).strftime("%d/%m/%Y")
+                        if pd.notnull(row['data']) and str(row['data']).strip() != "":
+                            try:
+                                data_formatada = pd.to_datetime(row['data']).strftime("%d/%m/%Y")
+                            except Exception:
+                                data_formatada = "Data inválida"
+                        else:
+                            data_formatada = "Data não informada"
                         nova_data_str = st.text_input(f"Data prova {row['id']} (DD/MM/AAAA)", value=data_formatada, key=f"pr_data_{row['id']}")
                     with col3:
                         novo_status = st.selectbox(f"Status prova {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pr_status_{row['id']}")
