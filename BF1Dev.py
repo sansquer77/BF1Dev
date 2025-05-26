@@ -1037,9 +1037,6 @@ import sqlite3
 import os
 import pandas as pd
 
-if not os.path.exists(banco_origem):
-    st.info("Banco de dados de origem não encontrado. Preencha o caminho corretamente.")
-
 def listar_tabelas(banco):
     try:
         if not os.path.exists(banco):
