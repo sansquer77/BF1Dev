@@ -122,21 +122,23 @@ def init_db():
         status TEXT DEFAULT 'Ativo')''')
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
+        nome TEXT,    
         data TEXT,
-        status TEXT DEFAULT 'Ativo')''')
+        status TEXT DEFAULT 'Ativo',
+        tipo TEXT DEFAULT 'Normal'
+        )''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER,
-        prova_id INTEGER,
-        data_envio TEXT,
-        pilotos TEXT,
-        fichas TEXT,
-        piloto_11 TEXT,
-        nome_prova TEXT,
-        automatica INTEGER DEFAULT 0,
-        FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-        FOREIGN KEY(prova_id) REFERENCES provas(id))''')
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id INTEGER,
+    prova_id INTEGER,
+    data_envio TEXT,
+    pilotos TEXT,
+    fichas TEXT,
+    piloto_11 TEXT,
+    nome_prova TEXT,
+    automatica INTEGER DEFAULT 0,
+    FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY(prova_id) REFERENCES provas(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
         prova_id INTEGER PRIMARY KEY,
         posicoes TEXT,
@@ -267,11 +269,14 @@ def registrar_log_aposta(apostador, aposta, nome_prova):
     conn.commit()
     conn.close()
 
-def calcular_pontuacao_lote(apostas_df, resultados_df):
+def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]  # Para Sprint
     resultados = {}
     for _, row in resultados_df.iterrows():
         resultados[row['prova_id']] = ast.literal_eval(row['posicoes'])
+    # Cria um dicionário de tipos das provas
+    tipos_prova = dict(zip(provas_df['id'], provas_df['tipo'] if 'tipo' in provas_df.columns else ['Normal']*len(provas_df)))
     pontos = []
     for _, aposta in apostas_df.iterrows():
         prova_id = aposta['prova_id']
@@ -284,13 +289,26 @@ def calcular_pontuacao_lote(apostas_df, resultados_df):
         piloto_11 = aposta['piloto_11']
         automatica = int(aposta['automatica'])
         pt = 0
-        for p, f in zip(pilotos, fichas):
-            for pos, nome in res.items():
-                pos_int = int(pos)
-                if pos_int <= 10 and nome == p:
-                    pt += f * pontos_f1[pos_int-1]
-        if '11' in res and res['11'] == piloto_11:
-            pt += 25
+        tipo = tipos_prova.get(prova_id, 'Normal')
+        if tipo == 'Sprint':
+            # Pontuam só os 8 primeiros (8 para 1º, 7 para 2º, ..., 1 para 8º)
+            for p, f in zip(pilotos, fichas):
+                for pos, nome in res.items():
+                    pos_int = int(pos)
+                    if pos_int <= 8 and nome == p:
+                        pt += f * pontos_sprint[pos_int-1]
+            # Bônus para 11º colocado na Sprint também
+            if '11' in res and res['11'] == piloto_11:
+                pt += 25
+        else:
+            # Prova normal
+            for p, f in zip(pilotos, fichas):
+                for pos, nome in res.items():
+                    pos_int = int(pos)
+                    if pos_int <= 10 and nome == p:
+                        pt += f * pontos_f1[pos_int-1]
+            if '11' in res and res['11'] == piloto_11:
+                pt += 25
         if automatica >= 2:
             pt = int(pt * 0.75)
         pontos.append(pt)
@@ -553,10 +571,11 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
         apostas_lista = []
         auto_count = 0
         resultados_df = get_resultados_df()
+        provas_df = get_provas_df()
         for idx, ap in enumerate(apostas.itertuples(), start=1):
             pilotos_lst = ap.pilotos.split(",")
             fichas_lst = list(map(int, ap.fichas.split(",")))
-            pontos = calcular_pontuacao_lote(pd.DataFrame([ap]), resultados_df)[0]
+            pontos = calcular_pontuacao_lote(pd.DataFrame([ap]), resultados_df, provas_df)[0]
             cor = ""
             if int(ap.automatica) == 1:
                 auto_count += 1
@@ -735,6 +754,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
             nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
             data_prova_str = st.text_input("Data da nova prova (DD/MM/AAAA)", key="data_nova_prova")
             status_prova = st.selectbox("Status da prova", ["Ativo", "Inativo"], key="status_nova_prova")
+            tipo_prova = st.selectbox("Tipo da prova", ["Normal", "Sprint"], key="tipo_nova_prova")
             if st.button("Adicionar prova", key="btn_add_prova_form"):
                 if not nome_prova.strip():
                     st.error("Informe o nome da prova.")
@@ -743,7 +763,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         data_prova = datetime.strptime(data_prova_str, "%d/%m/%Y")
                         conn = db_connect()
                         c = conn.cursor()
-                        c.execute('INSERT INTO provas (nome, data, status) VALUES (?, ?, ?)', (nome_prova.strip(), data_prova.strftime("%Y-%m-%d"), status_prova))
+                        c.execute('INSERT INTO provas (nome, data, status, tipo) VALUES (?, ?, ?, ?)', (nome_prova.strip(), data_prova.strftime("%Y-%m-%d"), status_prova, tipo_prova))
                         conn.commit()
                         conn.close()
                         st.success("Prova adicionada!")
@@ -763,8 +783,13 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     with col1:
                         novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome_{row['id']}")
                     with col2:
-                        # Exibe data em DD/MM/AAAA
-                        data_formatada = pd.to_datetime(row['data']).strftime("%d/%m/%Y")
+                        if pd.notnull(row['data']) and str(row['data']).strip() != "":
+                            try:
+                                data_formatada = pd.to_datetime(row['data']).strftime("%d/%m/%Y")
+                            except Exception:
+                                data_formatada = "Data inválida"
+                        else:
+                            data_formatada = "Data não informada"
                         nova_data_str = st.text_input(f"Data prova {row['id']} (DD/MM/AAAA)", value=data_formatada, key=f"pr_data_{row['id']}")
                     with col3:
                         novo_status = st.selectbox(f"Status prova {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pr_status_{row['id']}")
