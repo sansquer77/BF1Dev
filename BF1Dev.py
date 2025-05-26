@@ -329,6 +329,7 @@ def menu_master():
         "Atualização de resultados",
         "Log de Apostas",
         "Classificação",
+        "Backup",
         "Regulamento",
         "Logout"
     ]
@@ -1025,11 +1026,124 @@ if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
     conn.close()
     st.subheader("Log de Apostas")
     st.dataframe(df)
-
+# --- Regulamento ---
 if st.session_state['pagina'] == "Regulamento":
     st.title("Regulamento BF1-2025")
     st.markdown(REGULAMENTO.replace('\n', '  \n'))
 
+# --- Backup ---
+if (
+    st.session_state.get('token')
+    and st.session_state.get('pagina') == "Backup/Restore"
+    and get_payload()['perfil'] == 'master'
+):
+    modulo_backup_restore_visualizacao()
+def listar_tabelas(banco):
+    if not os.path.exists(banco):
+        return []
+    conn = sqlite3.connect(banco)
+    c = conn.cursor()
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+    tabelas = [row[0] for row in c.fetchall()]
+    conn.close()
+    return tabelas
+
+def backup_banco(origem_db, arquivo_backup, tabela=None):
+    conn = sqlite3.connect(origem_db)
+    with open(arquivo_backup, 'w', encoding='utf-8') as f:
+        if tabela is None:
+            for linha in conn.iterdump():
+                f.write(f'{linha}\n')
+        else:
+            c = conn.cursor()
+            c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (tabela,))
+            create_table = c.fetchone()
+            if create_table:
+                f.write(f'{create_table[0]};\n')
+                c.execute(f"SELECT * FROM {tabela}")
+                rows = c.fetchall()
+                for row in rows:
+                    valores = ', '.join([f"'{str(v).replace('\'', '\'\'')}'" if v is not None else 'NULL' for v in row])
+                    f.write(f"INSERT INTO {tabela} VALUES ({valores});\n")
+            else:
+                raise ValueError(f'Tabela {tabela} não encontrada no banco.')
+    conn.close()
+
+def restaurar_banco(destino_db, arquivo_backup, tabela=None):
+    if not os.path.exists(arquivo_backup):
+        st.error(f'Arquivo {arquivo_backup} não encontrado!')
+        return
+    conn = sqlite3.connect(destino_db)
+    with open(arquivo_backup, 'r', encoding='utf-8') as f:
+        sql_script = f.read()
+    if tabela:
+        # Remove a tabela antes de restaurar (para evitar conflito de chave primária)
+        c = conn.cursor()
+        c.execute(f"DROP TABLE IF EXISTS {tabela}")
+        conn.commit()
+    conn.executescript(sql_script)
+    conn.close()
+
+def visualizar_tabela(banco, tabela):
+    conn = sqlite3.connect(banco)
+    df = pd.read_sql(f"SELECT * FROM {tabela}", conn)
+    conn.close()
+    return df
+
+def modulo_backup_restore_visualizacao():
+    st.title("Backup, Restore e Visualização do Banco de Dados (Master)")
+    banco_origem = st.text_input('Caminho do banco de dados de origem', value='bolao_f1alpha.db')
+    banco_destino = st.text_input('Caminho do banco de dados de destino', value='bolao_f1alpha_restaurado.db')
+    arquivo_backup = st.text_input('Nome do arquivo de backup (.sql)', value='backup_bolao.sql')
+
+    tabelas = listar_tabelas(banco_origem) if os.path.exists(banco_origem) else []
+
+    st.header("Backup")
+    tabela_escolhida = st.selectbox("Tabela para backup (opcional)", ['-- Banco Completo --'] + tabelas)
+    if st.button("Fazer Backup"):
+        try:
+            if tabela_escolhida == '-- Banco Completo --':
+                backup_banco(banco_origem, arquivo_backup)
+                st.success(f'Backup do banco completo realizado em: {arquivo_backup}')
+            else:
+                backup_banco(banco_origem, arquivo_backup, tabela_escolhida)
+                st.success(f'Backup da tabela {tabela_escolhida} realizado em: {arquivo_backup}')
+        except Exception as e:
+            st.error(f'Erro ao fazer backup: {e}')
+
+    st.header("Restore")
+    tabela_restore = st.selectbox("Tabela para restaurar (opcional)", ['-- Banco Completo --'] + tabelas, key="restore")
+    if st.button("Restaurar Banco"):
+        try:
+            if tabela_restore == '-- Banco Completo --':
+                restaurar_banco(banco_destino, arquivo_backup)
+                st.success(f'Banco restaurado com sucesso a partir de: {arquivo_backup}')
+            else:
+                restaurar_banco(banco_destino, arquivo_backup, tabela_restore)
+                st.success(f'Tabela {tabela_restore} restaurada com sucesso a partir de: {arquivo_backup}')
+        except Exception as e:
+            st.error(f'Erro ao restaurar banco: {e}')
+
+    st.header("Visualização e Exportação")
+    banco_visu = st.text_input("Caminho do banco de dados para visualizar", value=banco_origem, key="visu")
+    tabelas_visu = listar_tabelas(banco_visu) if os.path.exists(banco_visu) else []
+    if tabelas_visu:
+        tabela = st.selectbox("Escolha a tabela para visualizar", tabelas_visu, key="visu2")
+        if tabela:
+            df = visualizar_tabela(banco_visu, tabela)
+            st.dataframe(df)
+            # Exportação para Excel
+            xlsx = df.to_excel(index=False, engine='openpyxl')
+            st.download_button(
+                label="Exportar dados para Excel",
+                data=xlsx,
+                file_name=f"{tabela}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    else:
+        st.info("Nenhuma tabela encontrada no banco de dados ou banco não existe.")
+
+# --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
     st.session_state['token'] = None
     st.session_state['pagina'] = "Login"
