@@ -148,7 +148,7 @@ def init_db():
         data TEXT,
         horario TEXT,
         aposta TEXT,
-        nome_prova TEXT)''')
+        nome_prova TEXT)'')
     conn.commit()
     conn.close()
 
