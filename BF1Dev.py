@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import ast
 import os
 import matplotlib.pyplot as plt
+import dash
 
 DB_PATH = 'bolao_f1Dev.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
@@ -350,6 +351,7 @@ def menu_master():
         "Atualização de resultados",
         "Log de Apostas",
         "Classificação",
+        "Dash F1",
         "Exportar/Importar Excel",
         "Regulamento",
         "Logout"
@@ -361,6 +363,7 @@ def menu_admin():
         "Atualização de resultados",
         "Log de Apostas",
         "Classificação",
+        "Dash F1",
         "Regulamento",
         "Logout"
     ]
@@ -369,6 +372,7 @@ def menu_participante():
         "Painel do Participante",
         "Log de Apostas",
         "Classificação",
+        "Dash F1",
         "Regulamento",
         "Logout"
     ]
@@ -1203,6 +1207,10 @@ if (
     and get_payload()['perfil'] == 'master'
 ):
     modulo_exportar_importar_excel()
+
+# --- Dash F1 ---
+if st.session_state['pagina'] == "Dash F1":
+    dash.main()
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
