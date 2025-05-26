@@ -1037,6 +1037,9 @@ import sqlite3
 import os
 import pandas as pd
 
+if not os.path.exists(banco_origem):
+    st.info("Banco de dados de origem não encontrado. Preencha o caminho corretamente.")
+
 def listar_tabelas(banco):
     try:
         if not os.path.exists(banco):
@@ -1114,8 +1117,6 @@ def modulo_backup_restore_visualizacao():
     tabelas = listar_tabelas(banco_origem) if os.path.exists(banco_origem) else []
 
     st.header("Backup")
-    if not tabelas:
-        st.info("Nenhuma tabela encontrada no banco de dados de origem.")
     tabela_escolhida = st.selectbox("Tabela para backup (opcional)", ['-- Banco Completo --'] + tabelas)
     if st.button("Fazer Backup"):
         with st.spinner("Realizando backup..."):
