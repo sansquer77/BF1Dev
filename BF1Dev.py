@@ -928,57 +928,56 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
         st.warning("Acesso restrito ao administrador/master.")
 
 # --- CLASSIFICAÇÃO ---
+import plotly.graph_objects as go
 if st.session_state['pagina'] == "Classificação" and st.session_state['token']:
-    st.title("Classificação Geral do Bolão")
-    usuarios_df = get_usuarios_df()
-    provas_df = get_provas_df()
+    payload = get_payload()
+    user = get_user_by_id(payload['user_id'])
+    st.title("Minha Evolução no Campeonato")
+
+    # Carrega dados necessários
     apostas_df = get_apostas_df()
     resultados_df = get_resultados_df()
-    participantes = usuarios_df[usuarios_df['status'] == 'Ativo']
-    provas_df = provas_df.sort_values('data')
-    tabela_classificacao = []
-    tabela_detalhada = []
-    for idx, part in participantes.iterrows():
-        apostas_part = apostas_df[apostas_df['usuario_id'] == part['id']].sort_values('prova_id')
-        pontos_part = calcular_pontuacao_lote(apostas_part, resultados_df, provas_df)
-        total = sum([p for p in pontos_part if p is not None])
-        tabela_classificacao.append({
-            "Participante": part['nome'],
-            "Total de Pontos": total
-        })
-        tabela_detalhada.append({
-            "Participante": part['nome'],
-            "Pontos por Prova": pontos_part
-        })
-    df_class = pd.DataFrame(tabela_classificacao).sort_values("Total de Pontos", ascending=False).reset_index(drop=True)
-    st.subheader("Classificação Geral")
-    st.table(df_class)
+    provas_df = get_provas_df()
 
-    st.subheader("Pontuação por Prova")
-    provas_nomes = provas_df['nome'].tolist()
-    participantes_nomes = [p['Participante'] for p in tabela_detalhada]
-    dados_cruzados = {}
-    for idx, prova in enumerate(provas_nomes):
-        linha = {}
-        for part in tabela_detalhada:
-            linha[part['Participante']] = part['Pontos por Prova'][idx] if idx < len(part['Pontos por Prova']) and part['Pontos por Prova'][idx] is not None else 0
-        dados_cruzados[prova] = linha
-    df_cruzada = pd.DataFrame(dados_cruzados).T
-    df_cruzada = df_cruzada.reindex(columns=participantes_nomes, fill_value=0)
-    st.dataframe(df_cruzada)
+    # Filtra apostas do usuário
+    apostas_part = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
+    provas_nomes = []
+    pontos_part = []
 
-    st.subheader("Evolução da Pontuação Acumulada")
-    if not df_cruzada.empty:
-        fig, ax = plt.subplots()
-        for participante in participantes_nomes:
-            pontos = df_cruzada[participante].cumsum()
-            ax.plot(provas_nomes, pontos, marker='o', label=participante)
-        ax.set_xlabel("Prova")
-        ax.set_ylabel("Pontuação Acumulada")
-        ax.legend()
-        st.pyplot(fig)
+    if not apostas_part.empty:
+        for ap in apostas_part.itertuples():
+            prova_id = ap.prova_id
+            # Busca nome da prova
+            nome_prova = provas_df[provas_df['id'] == prova_id]['nome'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else f"Prova {prova_id}"
+            provas_nomes.append(nome_prova)
+            # Calcula pontuação para cada aposta
+            pt = calcular_pontuacao_lote(pd.DataFrame([ap]), resultados_df, provas_df)[0]
+            pontos_part.append(pt if pt is not None else 0)
+
+        # Gráfico com Plotly
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=provas_nomes,
+            y=pontos_part,
+            mode='lines+markers',
+            line=dict(color='royalblue', width=3),
+            marker=dict(size=8, color='royalblue'),
+            name='Pontuação'
+        ))
+        fig.update_layout(
+            title="Evolução da Pontuação",
+            xaxis_title="Provas",
+            yaxis_title="Pontuação",
+            xaxis_tickangle=-45,
+            xaxis=dict(tickfont=dict(size=11)),
+            yaxis=dict(tickfont=dict(size=11)),
+            margin=dict(l=40, r=20, t=60, b=80),
+            plot_bgcolor='rgba(240,240,255,0.9)',
+            hovermode='x unified'
+        )
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Sem dados para exibir o gráfico de evolução.")
+        st.info("Nenhuma aposta registrada para exibir evolução.")
 
 # --- ATUALIZAÇÃO DE RESULTADOS (apenas master/admin) ---
 if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
