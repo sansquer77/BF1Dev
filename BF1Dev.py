@@ -697,17 +697,17 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     st.session_state['equipe_novo_piloto'] = ""
                     st.session_state['status_novo_piloto'] = ""
             if st.button("Adicionar piloto", key="btn_add_piloto"):
-            if st.session_state.get('erro_piloto'):
-                st.error(st.session_state['erro_piloto'])
-                st.session_state['erro_piloto'] = ""
-            if st.session_state.get('sucesso_piloto'):
-                st.success(st.session_state['sucesso_piloto'])
-                st.session_state['sucesso_piloto'] = ""
-                st.cache_data.clear()
-                st.rerun()
-            st.markdown("---")
-            st.subheader("Pilotos cadastrados")
-            pilotos = get_pilotos_df()
+                if st.session_state.get('erro_piloto'):
+                    st.error(st.session_state['erro_piloto'])
+                    st.session_state['erro_piloto'] = ""
+                if st.session_state.get('sucesso_piloto'):
+                    st.success(st.session_state['sucesso_piloto'])
+                    st.session_state['sucesso_piloto'] = ""
+                    st.cache_data.clear()
+                    st.rerun()
+                st.markdown("---")
+                st.subheader("Pilotos cadastrados")
+                pilotos = get_pilotos_df()
             if len(pilotos) == 0:
                 st.info("Nenhum piloto cadastrado.")
             else:
