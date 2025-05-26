@@ -10,8 +10,6 @@ from data_utils import (
 )
 def main():
     st.title("Dash F1")
-    # Configure Streamlit page
-    st.set_page_config(page_title="F1 Live Performance Dashboard", layout="wide")
     
     # Page Title with current season
     season = get_current_season()
