@@ -1,5 +1,4 @@
 import streamlit as st
-st.set_page_config(page_title="Bolão F1", layout="wide")
 import sqlite3
 import bcrypt
 import jwt as pyjwt
