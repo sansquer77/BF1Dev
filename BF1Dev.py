@@ -123,7 +123,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
-        data TEXT)''')
+        data TEXT)'''),
+        status TEXT DEFAULT 'Ativo')''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
@@ -665,6 +666,9 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
     else:
         st.warning("Acesso restrito ao usuário master.")
 
+import pandas as pd
+from datetime import datetime
+
 # --- GESTÃO DO CAMPEONATO (Pilotos e Provas) ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
@@ -732,19 +736,24 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
         with tab2:
             st.subheader("Adicionar nova prova")
             nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
-            data_prova = st.date_input("Data da nova prova", key="data_nova_prova")
+            data_prova_str = st.text_input("Data da nova prova (DD/MM/AAAA)", key="data_nova_prova")
+            status_prova = st.selectbox("Status da prova", ["Ativo", "Inativo"], key="status_nova_prova")
             if st.button("Adicionar prova", key="btn_add_prova_form"):
                 if not nome_prova.strip():
                     st.error("Informe o nome da prova.")
                 else:
-                    conn = db_connect()
-                    c = conn.cursor()
-                    c.execute('INSERT INTO provas (nome, data) VALUES (?, ?)', (nome_prova.strip(), data_prova.isoformat()))
-                    conn.commit()
-                    conn.close()
-                    st.success("Prova adicionada!")
-                    st.cache_data.clear()
-                    st.rerun()
+                    try:
+                        data_prova = datetime.strptime(data_prova_str, "%d/%m/%Y")
+                        conn = db_connect()
+                        c = conn.cursor()
+                        c.execute('INSERT INTO provas (nome, data, status) VALUES (?, ?, ?)', (nome_prova.strip(), data_prova.strftime("%Y-%m-%d"), status_prova))
+                        conn.commit()
+                        conn.close()
+                        st.success("Prova adicionada!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except ValueError:
+                        st.error("Data inválida! Use o formato DD/MM/AAAA.")
 
             st.markdown("---")
             st.subheader("Provas cadastradas")
@@ -753,22 +762,30 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 st.info("Nenhuma prova cadastrada.")
             else:
                 for idx, row in provas.iterrows():
-                    col1, col2, col3, col4 = st.columns([4,4,2,2])
+                    col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
                     with col1:
                         novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome_{row['id']}")
                     with col2:
-                        nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data_{row['id']}")
+                        # Exibe data em DD/MM/AAAA
+                        data_formatada = pd.to_datetime(row['data']).strftime("%d/%m/%Y")
+                        nova_data_str = st.text_input(f"Data prova {row['id']} (DD/MM/AAAA)", value=data_formatada, key=f"pr_data_{row['id']}")
                     with col3:
-                        if st.button("Editar prova", key=f"pr_edit_{row['id']}"):
-                            conn = db_connect()
-                            c = conn.cursor()
-                            c.execute('UPDATE provas SET nome=?, data=? WHERE id=?', (novo_nome, nova_data.isoformat(), row['id']))
-                            conn.commit()
-                            conn.close()
-                            st.success("Prova editada!")
-                            st.cache_data.clear()
-                            st.rerun()
+                        novo_status = st.selectbox(f"Status prova {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pr_status_{row['id']}")
                     with col4:
+                        if st.button("Editar prova", key=f"pr_edit_{row['id']}"):
+                            try:
+                                nova_data = datetime.strptime(nova_data_str, "%d/%m/%Y")
+                                conn = db_connect()
+                                c = conn.cursor()
+                                c.execute('UPDATE provas SET nome=?, data=?, status=? WHERE id=?', (novo_nome, nova_data.strftime("%Y-%m-%d"), novo_status, row['id']))
+                                conn.commit()
+                                conn.close()
+                                st.success("Prova editada!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except ValueError:
+                                st.error("Data inválida! Use o formato DD/MM/AAAA.")
+                    with col5:
                         if st.button("Excluir prova", key=f"pr_del_{row['id']}"):
                             conn = db_connect()
                             c = conn.cursor()
@@ -780,7 +797,6 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                             st.rerun()
     else:
         st.warning("Acesso restrito ao usuário master.")
-
 
 # --- GESTÃO DE APOSTAS (apenas master/admin) ---
 if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['token']:
