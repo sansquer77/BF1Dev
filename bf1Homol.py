@@ -928,6 +928,7 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
         st.warning("Acesso restrito ao administrador/master.")
 
 # --- CLASSIFICAÇÃO ---
+import plotly.graph_objects as go
 if st.session_state['pagina'] == "Classificação" and st.session_state['token']:
     st.title("Classificação Geral do Bolão")
     usuarios_df = get_usuarios_df()
@@ -938,6 +939,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
     provas_df = provas_df.sort_values('data')
     tabela_classificacao = []
     tabela_detalhada = []
+
     for idx, part in participantes.iterrows():
         apostas_part = apostas_df[apostas_df['usuario_id'] == part['id']].sort_values('prova_id')
         pontos_part = calcular_pontuacao_lote(apostas_part, resultados_df, provas_df)
@@ -950,6 +952,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
             "Participante": part['nome'],
             "Pontos por Prova": pontos_part
         })
+
     df_class = pd.DataFrame(tabela_classificacao).sort_values("Total de Pontos", ascending=False).reset_index(drop=True)
     st.subheader("Classificação Geral")
     st.table(df_class)
@@ -969,14 +972,27 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
 
     st.subheader("Evolução da Pontuação Acumulada")
     if not df_cruzada.empty:
-        fig, ax = plt.subplots()
+        fig = go.Figure()
         for participante in participantes_nomes:
-            pontos = df_cruzada[participante].cumsum()
-            ax.plot(provas_nomes, pontos, marker='o', label=participante)
-        ax.set_xlabel("Prova")
-        ax.set_ylabel("Pontuação Acumulada")
-        ax.legend()
-        st.pyplot(fig)
+            pontos_acumulados = df_cruzada[participante].cumsum()
+            fig.add_trace(go.Scatter(
+                x=provas_nomes,
+                y=pontos_acumulados,
+                mode='lines+markers',
+                name=participante
+            ))
+        fig.update_layout(
+            title="Evolução da Pontuação Acumulada",
+            xaxis_title="Prova",
+            yaxis_title="Pontuação Acumulada",
+            xaxis_tickangle=-45,
+            xaxis=dict(tickfont=dict(size=11)),
+            yaxis=dict(tickfont=dict(size=11)),
+            margin=dict(l=40, r=20, t=60, b=80),
+            plot_bgcolor='rgba(240,240,255,0.9)',
+            hovermode='x unified'
+        )
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Sem dados para exibir o gráfico de evolução.")
 
