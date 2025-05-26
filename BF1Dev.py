@@ -1032,151 +1032,86 @@ if st.session_state['pagina'] == "Regulamento":
     st.title("Regulamento BF1-2025")
     st.markdown(REGULAMENTO.replace('\n', '  \n'))
 
-# --- INTEGRAÇÃO NO SEU APP ---
-if (
-    st.session_state.get('token')
-    and st.session_state.get('pagina') == "Backup/Restore"
-    and get_payload()['perfil'] == 'master'
-):
-    modulo_backup_restore_visualizacao()
-
 # --- Backup ---
 import streamlit as st
 import sqlite3
 import pandas as pd
-import os
 import io
+import os
 
-def listar_tabelas(banco):
-    try:
-        if not os.path.exists(banco):
-            return []
-        conn = sqlite3.connect(banco)
-        c = conn.cursor()
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
-        tabelas = [row[0] for row in c.fetchall()]
-        conn.close()
-        return tabelas
-    except Exception as e:
-        st.error(f"Erro ao listar tabelas: {e}")
-        return []
+DB_PATH = 'bolao_f1alpha.db'  # Ajuste para o caminho do seu banco
 
-def backup_banco(origem_db, arquivo_backup, tabela=None):
-    try:
-        conn = sqlite3.connect(origem_db)
-        with open(arquivo_backup, 'w', encoding='utf-8') as f:
-            if tabela is None:
-                for linha in conn.iterdump():
-                    f.write(f'{linha}\n')
-            else:
-                c = conn.cursor()
-                c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (tabela,))
-                create_table = c.fetchone()
-                if create_table:
-                    f.write(f'{create_table[0]};\n')
-                    c.execute(f"SELECT * FROM {tabela}")
-                    rows = c.fetchall()
-                    for row in rows:
-                        valores = ', '.join([
-                            f"'{str(v).replace('\'', '\'\'')}'" if v is not None else 'NULL' for v in row
-                        ])
-                        f.write(f"INSERT INTO {tabela} VALUES ({valores});\n")
-                else:
-                    raise ValueError(f'Tabela {tabela} não encontrada no banco.')
-        conn.close()
-        return True, None
-    except Exception as e:
-        return False, str(e)
-
-def restaurar_banco(destino_db, arquivo_backup, tabela=None):
-    try:
-        if not os.path.exists(arquivo_backup):
-            return False, f'Arquivo {arquivo_backup} não encontrado!'
-        conn = sqlite3.connect(destino_db)
-        if tabela:
-            # Remove a tabela antes de restaurar (para evitar conflito de chave primária)
-            c = conn.cursor()
-            c.execute(f"DROP TABLE IF EXISTS {tabela}")
-            conn.commit()
-        with open(arquivo_backup, 'r', encoding='utf-8') as f:
-            sql_script = f.read()
-        conn.executescript(sql_script)
-        conn.close()
-        return True, None
-    except Exception as e:
-        return False, str(e)
-
-def visualizar_tabela(banco, tabela):
-    try:
-        conn = sqlite3.connect(banco)
+def exportar_tabelas_para_excel(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+    tabelas = [row[0] for row in cursor.fetchall()]
+    arquivos_excel = {}
+    for tabela in tabelas:
         df = pd.read_sql(f"SELECT * FROM {tabela}", conn)
-        conn.close()
-        return df
-    except Exception as e:
-        st.error(f"Erro ao carregar tabela: {e}")
-        return pd.DataFrame()
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name=tabela)
+        arquivos_excel[tabela] = output.getvalue()
+    conn.close()
+    return arquivos_excel
 
-def modulo_backup_restore_visualizacao():
-    st.title("Backup, Restore e Visualização do Banco de Dados (Master)")
+def importar_excel_para_tabela(db_path, tabela, arquivo_excel_bytes):
+    df = pd.read_excel(io.BytesIO(arquivo_excel_bytes), engine='openpyxl')
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute(f'DELETE FROM {tabela}')  # Limpa a tabela antes de importar (opcional)
+    conn.commit()
+    df.to_sql(tabela, conn, if_exists='append', index=False)
+    conn.commit()
+    conn.close()
+    return f'Dados importados para a tabela {tabela} com sucesso.'
 
-    st.header("Backup")
-    banco_origem = st.text_input('Caminho do banco de dados de origem', value='bolao_f1Dev.db')
-    arquivo_backup = st.text_input('Arquivo de backup (.sql)', value='backup_bf1Dev.sql')
-    tabelas = listar_tabelas(banco_origem) if os.path.exists(banco_origem) else []
-    tabela_escolhida = st.selectbox("Tabela para backup (opcional)", ['-- Banco Completo --'] + tabelas)
+def modulo_exportar_importar_excel():
+    st.title("Exportação e Importação Excel (Master)")
 
-    if st.button("Fazer Backup"):
-        with st.spinner("Realizando backup..."):
-            if tabela_escolhida == '-- Banco Completo --':
-                ok, erro = backup_banco(banco_origem, arquivo_backup)
-            else:
-                ok, erro = backup_banco(banco_origem, arquivo_backup, tabela_escolhida)
-        if ok:
-            st.success(f'Backup realizado em: {arquivo_backup}')
-        else:
-            st.error(f'Erro ao fazer backup: {erro}')
+    if not os.path.exists(DB_PATH):
+        st.error("Banco de dados não encontrado.")
+        return
 
-    st.header("Restore")
-    banco_destino = st.text_input('Caminho do banco de dados de destino', value='bolao_f1Dev.db')
-    tabela_restore = st.selectbox("Tabela para restaurar (opcional)", ['-- Banco Completo --'] + tabelas, key="restore")
-
-    if st.button("Restaurar Banco"):
-        with st.spinner("Restaurando banco..."):
-            if tabela_restore == '-- Banco Completo --':
-                ok, erro = restaurar_banco(banco_destino, arquivo_backup)
-            else:
-                ok, erro = restaurar_banco(banco_destino, arquivo_backup, tabela_restore)
-        if ok:
-            st.success(f'Restore concluído com sucesso.')
-        else:
-            st.error(f'Erro ao restaurar banco: {erro}')
-
-    st.header("Visualização e Exportação")
-    banco_visu = st.text_input("Caminho do banco de dados para visualizar", value=banco_origem, key="visu")
-    tabelas_visu = listar_tabelas(banco_visu) if os.path.exists(banco_visu) else []
-    if tabelas_visu:
-        tabela = st.selectbox("Escolha a tabela para visualizar", tabelas_visu, key="visu2")
-        if tabela:
-            df = visualizar_tabela(banco_visu, tabela)
-            if not df.empty:
-                st.dataframe(df)
-                # Exportação para Excel
-                try:
-                    output = io.BytesIO()
-                    df.to_excel(output, index=False, engine='openpyxl')
-                    output.seek(0)
-                    st.download_button(
-                        label="Exportar dados para Excel",
-                        data=output.getvalue(),
-                        file_name=f"{tabela}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                except Exception as e:
-                    st.error(f"Erro ao exportar para Excel: {e}")
-            else:
-                st.info("Tabela vazia ou erro ao carregar.")
+    # Exportação
+    st.header("Exportar tabelas para Excel")
+    arquivos_excel = exportar_tabelas_para_excel(DB_PATH)
+    if not arquivos_excel:
+        st.info('Nenhuma tabela encontrada no banco para exportar.')
     else:
-        st.info("Nenhuma tabela encontrada para visualização ou banco não existe.")
+        for tabela, conteudo in arquivos_excel.items():
+            st.download_button(
+                label=f'Download da tabela {tabela} em Excel',
+                data=conteudo,
+                file_name=f'{tabela}.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+
+    # Importação
+    st.header("Importar dados de Excel para uma tabela")
+    tabelas = list(arquivos_excel.keys())
+    if tabelas:
+        tabela_escolhida = st.selectbox("Tabela para importar", tabelas)
+        arquivo = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx"])
+        if arquivo and tabela_escolhida:
+            if st.button("Importar dados"):
+                try:
+                    msg = importar_excel_para_tabela(DB_PATH, tabela_escolhida, arquivo.read())
+                    st.success(msg)
+                except Exception as e:
+                    st.error(f"Erro ao importar: {e}")
+    else:
+        st.info("Nenhuma tabela disponível para importação.")
+
+# --- INTEGRAÇÃO NO APP ---
+if (
+    st.session_state.get('token')
+    and st.session_state.get('pagina') == "Backup"
+    and get_payload()['perfil'] == 'master'
+):
+    modulo_exportar_importar_excel()
+
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
