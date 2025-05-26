@@ -1033,11 +1033,6 @@ if st.session_state['pagina'] == "Regulamento":
     st.markdown(REGULAMENTO.replace('\n', '  \n'))
 
 # --- Backup ---
-import streamlit as st
-import sqlite3
-import os
-import pandas as pd
-
 def listar_tabelas(banco):
     try:
         if not os.path.exists(banco):
