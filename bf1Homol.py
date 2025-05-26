@@ -571,6 +571,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
         apostas_lista = []
         auto_count = 0
         resultados_df = get_resultados_df()
+        provas_df = get_provas_df()
         for idx, ap in enumerate(apostas.itertuples(), start=1):
             pilotos_lst = ap.pilotos.split(",")
             fichas_lst = list(map(int, ap.fichas.split(",")))
