@@ -116,9 +116,10 @@ def init_db():
         VALUES (?, ?, ?, ?, ?, ?)''',
         ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo', 0))
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        equipe TEXT)''')
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT,
+    equipe TEXT,
+    status TEXT DEFAULT 'Ativo')''')
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
@@ -450,6 +451,10 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     st.cache_data.clear()
     provas = get_provas_df()
     pilotos_df = get_pilotos_df()
+    pilotos_ativos_df = pilotos_df[pilotos_df['status'] == "Ativo"]
+    pilotos = pilotos_ativos_df['nome'].tolist()
+    equipes = pilotos_ativos_df['equipe'].tolist()
+    pilotos_equipe = dict(zip(pilotos, equipes))
     if user[4] == "Ativo":
         if len(provas) > 0 and len(pilotos_df) > 2:
             prova_id = st.selectbox("Escolha a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
@@ -675,20 +680,23 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 st.session_state['equipe_novo_piloto'] = ""
             nome_piloto = st.text_input("Nome do novo piloto", key="nome_novo_piloto")
             equipe_piloto = st.text_input("Nome da equipe do piloto", key="equipe_novo_piloto")
+            status_piloto = st.selectbox("Status do piloto", ["Ativo", "Inativo"], key="status_novo_piloto")
             def cadastrar_piloto():
+                if st.button("Adicionar piloto", key="btn_add_piloto"):
                 if not nome_piloto.strip():
-                    st.session_state['erro_piloto'] = "Informe o nome do piloto."
+                    st.error("Informe o nome do piloto.")
                 elif not equipe_piloto.strip():
-                    st.session_state['erro_piloto'] = "Informe o nome da equipe."
+                    st.error("Informe o nome da equipe.")
                 else:
                     conn = db_connect()
                     c = conn.cursor()
-                    c.execute('INSERT INTO pilotos (nome, equipe) VALUES (?, ?)', (nome_piloto.strip(), equipe_piloto.strip()))
+                    c.execute('INSERT INTO pilotos (nome, equipe, status) VALUES (?, ?, ?)', (nome_piloto.strip(), equipe_piloto.strip(), status_piloto))
                     conn.commit()
                     conn.close()
-                    st.session_state['sucesso_piloto'] = "Piloto adicionado!"
+                    st.success("Piloto adicionado!")
                     st.session_state['nome_novo_piloto'] = ""
                     st.session_state['equipe_novo_piloto'] = ""
+                    st.session_state['status_novo_piloto'] = ""
             st.button("Adicionar piloto", key="btn_add_piloto", on_click=cadastrar_piloto)
             if st.session_state.get('erro_piloto'):
                 st.error(st.session_state['erro_piloto'])
@@ -710,11 +718,13 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
                     with col2:
                         nova_equipe = st.text_input(f"Equipe piloto {row['id']}", value=row['equipe'], key=f"pl_eq{row['id']}")
-                    with col3:
+                     with col3:
+                        novo_status = st.selectbox(f"Status piloto {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pl_status{row['id']}")
+                    with col4:
                         def editar_piloto_callback(row_id=row['id'], novo_nome=novo_nome, nova_equipe=nova_equipe):
                             conn = db_connect()
                             c = conn.cursor()
-                            c.execute('UPDATE pilotos SET nome=?, equipe=? WHERE id=?', (novo_nome, nova_equipe, row_id))
+                            c.execute('UPDATE pilotos SET nome=?, equipe=?, status=? WHERE id=?', (novo_nome, nova_equipe, novo_status, row['id']))
                             conn.commit()
                             conn.close()
                             st.session_state[f'sucesso_pl_{row_id}'] = "Piloto editado!"
@@ -722,7 +732,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         if st.session_state.get(f'sucesso_pl_{row["id"]}'):
                             st.success(st.session_state[f'sucesso_pl_{row["id"]}'])
                             st.session_state[f'sucesso_pl_{row["id"]}'] = ""
-                    with col4:
+                    with col5:
                         def excluir_piloto_callback(row_id=row['id']):
                             conn = db_connect()
                             c = conn.cursor()
