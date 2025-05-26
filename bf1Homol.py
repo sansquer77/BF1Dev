@@ -574,7 +574,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
         for idx, ap in enumerate(apostas.itertuples(), start=1):
             pilotos_lst = ap.pilotos.split(",")
             fichas_lst = list(map(int, ap.fichas.split(",")))
-            pontos = calcular_pontuacao_lote(pd.DataFrame([ap]), resultados_df)[0]
+            pontos = calcular_pontuacao_lote(pd.DataFrame([ap]), resultados_df, provas_df)[0]
             cor = ""
             if int(ap.automatica) == 1:
                 auto_count += 1
