@@ -717,7 +717,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                         novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
                     with col2:
                         nova_equipe = st.text_input(f"Equipe piloto {row['id']}", value=row['equipe'], key=f"pl_eq{row['id']}")
-                     with col3:
+                    with col3:
                         novo_status = st.selectbox(f"Status piloto {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pl_status{row['id']}")
                     with col4:
                         def editar_piloto_callback(row_id=row['id'], novo_nome=novo_nome, nova_equipe=nova_equipe):
