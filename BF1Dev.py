@@ -1107,11 +1107,10 @@ def visualizar_tabela(banco, tabela):
 
 def modulo_backup_restore_visualizacao():
     st.title("Backup, Restore e Visualização do Banco de Dados (Master)")
-
-    banco_origem = st.text_input('Caminho do banco de dados de origem', value='bolao_f1alpha.db')
-    banco_destino = st.text_input('Caminho do banco de dados de destino', value='bolao_f1alpha_restaurado.db')
-    arquivo_backup = st.text_input('Nome do arquivo de backup (.sql)', value='backup_bolao.sql')
-
+    def modulo_backup_restore_visualizacao():
+    banco_origem = st.text_input('Caminho do banco de dados de origem', value='bolao_f1dev.db')
+    if not os.path.exists(banco_origem):
+        st.info("Banco de dados de origem não encontrado. Preencha o caminho corretamente.")
     tabelas = listar_tabelas(banco_origem) if os.path.exists(banco_origem) else []
 
     st.header("Backup")
