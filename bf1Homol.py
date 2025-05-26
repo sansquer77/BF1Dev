@@ -940,7 +940,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
     tabela_detalhada = []
     for idx, part in participantes.iterrows():
         apostas_part = apostas_df[apostas_df['usuario_id'] == part['id']].sort_values('prova_id')
-        pontos_part = calcular_pontuacao_lote(apostas_part, resultados_df)
+        pontos_part = calcular_pontuacao_lote(apostas_part, resultados_df, provas_df)
         total = sum([p for p in pontos_part if p is not None])
         tabela_classificacao.append({
             "Participante": part['nome'],
@@ -987,31 +987,83 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
         st.title("Atualizar Resultado Manualmente")
         provas = get_provas_df()
         pilotos_df = get_pilotos_df()
+        pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
         resultados_df = get_resultados_df()
-        if len(provas) > 0 and len(pilotos_df) > 0:
-            prova_id = st.selectbox("Selecione a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
-            pilotos = pilotos_df['nome'].tolist()
+        if len(provas) > 0 and len(pilotos_ativos_df) > 0:
+            prova_id = st.selectbox(
+                "Selecione a prova",
+                provas['id'],
+                format_func=lambda x: f"{provas[provas['id'] == x]['nome'].values[0]} ({provas[provas['id'] == x]['tipo'].values[0]})"
+            )
+            tipo_prova = provas[provas['id'] == prova_id]['tipo'].values[0]
+            st.info(f"Tipo da prova selecionada: {tipo_prova}")
+            pilotos = pilotos_ativos_df['nome'].tolist()
+
             posicoes = {}
             st.markdown("**Informe o piloto para cada posição:**")
             col1, col2 = st.columns(2)
+            # Inicializa opções para cada posição
+            pilotos_usados = set()
+            # 1º ao 5º
             for pos in range(1, 6):
                 with col1:
-                    posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+                    opcoes = [""] + [p for p in pilotos if p not in pilotos_usados]
+                    piloto_sel = st.selectbox(
+                        f"{pos}º colocado",
+                        opcoes,
+                        index=0,
+                        key=f"pos_{pos}"
+                    )
+                    if piloto_sel:
+                        posicoes[pos] = piloto_sel
+                        pilotos_usados.add(piloto_sel)
+            # 6º ao 10º
             for pos in range(6, 11):
                 with col2:
-                    posicoes[pos] = st.selectbox(f"{pos}º colocado", pilotos, key=f"pos_{pos}")
+                    opcoes = [""] + [p for p in pilotos if p not in pilotos_usados]
+                    piloto_sel = st.selectbox(
+                        f"{pos}º colocado",
+                        opcoes,
+                        index=0,
+                        key=f"pos_{pos}"
+                    )
+                    if piloto_sel:
+                        posicoes[pos] = piloto_sel
+                        pilotos_usados.add(piloto_sel)
+            # 11º colocado (pode ser qualquer piloto ativo, inclusive já usado)
             st.markdown("**11º colocado:**")
-            posicoes[11] = st.selectbox("11º colocado", pilotos, key="pos_11")
+            piloto_11 = st.selectbox(
+                "11º colocado",
+                [""] + pilotos,
+                index=0,
+                key="pos_11"
+            )
+            if piloto_11:
+                posicoes[11] = piloto_11
+
+            erro = None
+            # Validação antes de salvar
             if st.button("Salvar resultado"):
-                conn = db_connect()
-                c = conn.cursor()
-                c.execute('REPLACE INTO resultados (prova_id, posicoes) VALUES (?, ?)',
-                          (prova_id, str(posicoes)))
-                conn.commit()
-                conn.close()
-                st.success("Resultado salvo!")
-                st.cache_data.clear()
-                st.rerun()
+                # Checa se todos os combos de 1º ao 10º estão preenchidos
+                if len(posicoes) < 11 or any(not posicoes.get(pos) for pos in range(1, 11)):
+                    erro = "Preencha todos os campos de 1º ao 10º colocado (não deixe em branco)."
+                # Checa se há pilotos repetidos entre 1º e 10º
+                elif len(set([posicoes.get(pos) for pos in range(1, 11)])) < 10:
+                    erro = "Não é permitido repetir piloto entre 1º e 10º colocado."
+                elif not posicoes.get(11):
+                    erro = "Selecione o piloto para 11º colocado."
+                if erro:
+                    st.error(erro)
+                else:
+                    conn = db_connect()
+                    c = conn.cursor()
+                    c.execute('REPLACE INTO resultados (prova_id, posicoes) VALUES (?, ?)', (prova_id, str(posicoes)))
+                    conn.commit()
+                    conn.close()
+                    st.success("Resultado salvo!")
+                    st.cache_data.clear()
+                    st.rerun()
+
             # Mostra abaixo as provas já cadastradas e seus resultados
             st.markdown("---")
             st.subheader("Resultados cadastrados")
@@ -1023,7 +1075,8 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
                     posicoes_dict = ast.literal_eval(res.iloc[0]['posicoes'])
                     linha = {
                         "Prova": prova['nome'],
-                        "Data": prova['data'],
+                        "Data": pd.to_datetime(prova['data']).strftime("%d/%m/%Y"),
+                        "Tipo": prova.get('tipo', 'Normal')
                     }
                     for pos in range(1, 12):
                         linha[f"{pos}º"] = posicoes_dict.get(pos, "")
@@ -1033,9 +1086,10 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
             else:
                 st.info("Nenhum resultado cadastrado ainda.")
         else:
-            st.warning("Cadastre provas e pilotos antes de lançar resultados.")
+            st.warning("Cadastre provas e pilotos ativos antes de lançar resultados.")
     else:
         st.warning("Acesso restrito ao administrador/master.")
+
 
 # --- LOG DE APOSTAS (visível para todos, mas com filtros) ---
 if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
