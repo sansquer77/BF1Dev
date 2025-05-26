@@ -116,15 +116,15 @@ def init_db():
         VALUES (?, ?, ?, ?, ?, ?)''',
         ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo', 0))
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,
-    equipe TEXT,
-    status TEXT DEFAULT 'Ativo')''')
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        equipe TEXT,
+        status TEXT DEFAULT 'Ativo')''')
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,
-    data TEXT,
-    status TEXT DEFAULT 'Ativo')''')
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        data TEXT,
+        status TEXT DEFAULT 'Ativo')''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
