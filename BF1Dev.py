@@ -452,7 +452,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     st.cache_data.clear()
     provas = get_provas_df()
     pilotos_df = get_pilotos_df()
-    pilotos_ativos_df = pilotos_df[pilotos_df['status'] == "Ativo"]
+    pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
     pilotos = pilotos_ativos_df['nome'].tolist()
     equipes = pilotos_ativos_df['equipe'].tolist()
     pilotos_equipe = dict(zip(pilotos, equipes))
@@ -474,9 +474,6 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                 fichas_ant = []
                 piloto_11_ant = ""
             st.write("Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
-            pilotos = pilotos_df['nome'].tolist()
-            equipes = pilotos_df['equipe'].tolist()
-            pilotos_equipe = dict(zip(pilotos, equipes))
             max_linhas = 5
             pilotos_aposta = []
             fichas_aposta = []
