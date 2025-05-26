@@ -696,7 +696,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                     st.session_state['nome_novo_piloto'] = ""
                     st.session_state['equipe_novo_piloto'] = ""
                     st.session_state['status_novo_piloto'] = ""
-            st.button("Adicionar piloto", key="btn_add_piloto", on_click=cadastrar_piloto)
+            if st.button("Adicionar piloto", key="btn_add_piloto"):
             if st.session_state.get('erro_piloto'):
                 st.error(st.session_state['erro_piloto'])
                 st.session_state['erro_piloto'] = ""
