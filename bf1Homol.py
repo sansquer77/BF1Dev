@@ -128,17 +128,18 @@ def init_db():
         tipo TEXT DEFAULT 'Normal'
         )''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER,
-        prova_id INTEGER,
-        data_envio TEXT,
-        pilotos TEXT,
-        fichas TEXT,
-        piloto_11 TEXT,
-        nome_prova TEXT,
-        automatica INTEGER DEFAULT 0,
-        FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-        FOREIGN KEY(prova_id) REFERENCES provas(id))''')
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id INTEGER,
+    prova_id INTEGER,
+    data_envio TEXT,
+    pilotos TEXT,
+    fichas TEXT,
+    piloto_11 TEXT,
+    nome_prova TEXT,
+    automatica INTEGER DEFAULT 0,
+    FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY(prova_id) REFERENCES provas(id)
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
         prova_id INTEGER PRIMARY KEY,
         posicoes TEXT,
