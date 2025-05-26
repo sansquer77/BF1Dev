@@ -682,7 +682,7 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
             equipe_piloto = st.text_input("Nome da equipe do piloto", key="equipe_novo_piloto")
             status_piloto = st.selectbox("Status do piloto", ["Ativo", "Inativo"], key="status_novo_piloto")
             def cadastrar_piloto():
-                if st.button("Adicionar piloto", key="btn_add_piloto"):
+            if st.button("Adicionar piloto", key="btn_add_piloto"):
                 if not nome_piloto.strip():
                     st.error("Informe o nome do piloto.")
                 elif not equipe_piloto.strip():
