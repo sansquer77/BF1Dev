@@ -5,9 +5,10 @@ import jwt as pyjwt
 import pandas as pd
 from datetime import datetime, timedelta
 import ast
+import os
 import matplotlib.pyplot as plt
 
-DB_PATH = 'bolao_f1Homol.db'
+DB_PATH = 'bolao_f1Dev.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
@@ -329,6 +330,7 @@ def menu_master():
         "Atualização de resultados",
         "Log de Apostas",
         "Classificação",
+        "Exportar/Importar Excel",
         "Regulamento",
         "Logout"
     ]
@@ -1025,11 +1027,92 @@ if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
     conn.close()
     st.subheader("Log de Apostas")
     st.dataframe(df)
-
+# --- Regulamento ---
 if st.session_state['pagina'] == "Regulamento":
     st.title("Regulamento BF1-2025")
     st.markdown(REGULAMENTO.replace('\n', '  \n'))
 
+# --- Backup ---
+import streamlit as st
+import sqlite3
+import pandas as pd
+import io
+import os
+
+DB_PATH = 'bolao_f1Dev.db'  # Ajuste para o caminho do seu banco
+
+def exportar_tabelas_para_excel(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+    tabelas = [row[0] for row in cursor.fetchall()]
+    arquivos_excel = {}
+    for tabela in tabelas:
+        df = pd.read_sql(f"SELECT * FROM {tabela}", conn)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name=tabela)
+        arquivos_excel[tabela] = output.getvalue()
+    conn.close()
+    return arquivos_excel
+
+def importar_excel_para_tabela(db_path, tabela, arquivo_excel_bytes):
+    df = pd.read_excel(io.BytesIO(arquivo_excel_bytes), engine='openpyxl')
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute(f'DELETE FROM {tabela}')  # Limpa a tabela antes de importar (opcional)
+    conn.commit()
+    df.to_sql(tabela, conn, if_exists='append', index=False)
+    conn.commit()
+    conn.close()
+    return f'Dados importados para a tabela {tabela} com sucesso.'
+
+def modulo_exportar_importar_excel():
+    st.title("Exportação e Importação Excel (Master)")
+
+    if not os.path.exists(DB_PATH):
+        st.error("Banco de dados não encontrado.")
+        return
+
+    # Exportação
+    st.header("Exportar tabelas para Excel")
+    arquivos_excel = exportar_tabelas_para_excel(DB_PATH)
+    if not arquivos_excel:
+        st.info('Nenhuma tabela encontrada no banco para exportar.')
+    else:
+        for tabela, conteudo in arquivos_excel.items():
+            st.download_button(
+                label=f'Download da tabela {tabela} em Excel',
+                data=conteudo,
+                file_name=f'{tabela}.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+
+    # Importação
+    st.header("Importar dados de Excel para uma tabela")
+    tabelas = list(arquivos_excel.keys())
+    if tabelas:
+        tabela_escolhida = st.selectbox("Tabela para importar", tabelas)
+        arquivo = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx"])
+        if arquivo and tabela_escolhida:
+            if st.button("Importar dados"):
+                try:
+                    msg = importar_excel_para_tabela(DB_PATH, tabela_escolhida, arquivo.read())
+                    st.success(msg)
+                except Exception as e:
+                    st.error(f"Erro ao importar: {e}")
+    else:
+        st.info("Nenhuma tabela disponível para importação.")
+
+# --- INTEGRAÇÃO NO APP ---
+if (
+    st.session_state.get('token')
+    and st.session_state.get('pagina') == "Exportar/Importar Excel"
+    and get_payload()['perfil'] == 'master'
+):
+    modulo_exportar_importar_excel()
+
+# --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
     st.session_state['token'] = None
     st.session_state['pagina'] = "Login"
