@@ -138,8 +138,7 @@ def init_db():
     nome_prova TEXT,
     automatica INTEGER DEFAULT 0,
     FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-    FOREIGN KEY(prova_id) REFERENCES provas(id)
-)''')
+    FOREIGN KEY(prova_id) REFERENCES provas(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
         prova_id INTEGER PRIMARY KEY,
         posicoes TEXT,
@@ -150,7 +149,7 @@ def init_db():
         data TEXT,
         horario TEXT,
         aposta TEXT,
-        nome_prova TEXT)'')
+        nome_prova TEXT)''')
     conn.commit()
     conn.close()
 
