@@ -8,7 +8,7 @@ import ast
 import os
 import matplotlib.pyplot as plt
 
-DB_PATH = 'bolao_f1Dev.db'
+DB_PATH = 'bolao_f1Hom.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
