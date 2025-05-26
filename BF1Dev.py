@@ -1032,6 +1032,14 @@ if st.session_state['pagina'] == "Regulamento":
     st.title("Regulamento BF1-2025")
     st.markdown(REGULAMENTO.replace('\n', '  \n'))
 
+# --- INTEGRAÇÃO NO SEU APP ---
+if (
+    st.session_state.get('token')
+    and st.session_state.get('pagina') == "Backup/Restore"
+    and get_payload()['perfil'] == 'master'
+):
+    modulo_backup_restore_visualizacao()
+
 # --- Backup ---
 def listar_tabelas(banco):
     try:
@@ -1156,14 +1164,6 @@ def modulo_backup_restore_visualizacao():
                 st.info("Tabela vazia ou erro ao carregar.")
     else:
         st.info("Nenhuma tabela encontrada para visualização ou banco não existe.")
-
-# --- INTEGRAÇÃO NO SEU APP ---
-if (
-    st.session_state.get('token')
-    and st.session_state.get('pagina') == "Backup/Restore"
-    and get_payload()['perfil'] == 'master'
-):
-    modulo_backup_restore_visualizacao()
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
