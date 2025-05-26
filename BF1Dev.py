@@ -330,7 +330,7 @@ def menu_master():
         "Atualização de resultados",
         "Log de Apostas",
         "Classificação",
-        "Backup",
+        "Exportar/Importar Excel",
         "Regulamento",
         "Logout"
     ]
@@ -1039,7 +1039,7 @@ import pandas as pd
 import io
 import os
 
-DB_PATH = 'bolao_f1alpha.db'  # Ajuste para o caminho do seu banco
+DB_PATH = 'bolao_f1Dev.db'  # Ajuste para o caminho do seu banco
 
 def exportar_tabelas_para_excel(db_path):
     conn = sqlite3.connect(db_path)
@@ -1107,11 +1107,10 @@ def modulo_exportar_importar_excel():
 # --- INTEGRAÇÃO NO APP ---
 if (
     st.session_state.get('token')
-    and st.session_state.get('pagina') == "Backup"
+    and st.session_state.get('pagina') == "Exportar/Importar Excel"
     and get_payload()['perfil'] == 'master'
 ):
     modulo_exportar_importar_excel()
-
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
