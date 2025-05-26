@@ -940,7 +940,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
     tabela_detalhada = []
     for idx, part in participantes.iterrows():
         apostas_part = apostas_df[apostas_df['usuario_id'] == part['id']].sort_values('prova_id')
-        pontos_part = calcular_pontuacao_lote(apostas_part, resultados_df)
+        pontos_part = calcular_pontuacao_lote(apostas_part, resultados_df, provas_df)
         total = sum([p for p in pontos_part if p is not None])
         tabela_classificacao.append({
             "Participante": part['nome'],
