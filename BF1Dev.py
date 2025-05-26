@@ -1041,6 +1041,12 @@ if (
     modulo_backup_restore_visualizacao()
 
 # --- Backup ---
+import streamlit as st
+import sqlite3
+import pandas as pd
+import os
+import io
+
 def listar_tabelas(banco):
     try:
         if not os.path.exists(banco):
@@ -1071,7 +1077,9 @@ def backup_banco(origem_db, arquivo_backup, tabela=None):
                     c.execute(f"SELECT * FROM {tabela}")
                     rows = c.fetchall()
                     for row in rows:
-                        valores = ', '.join([f"'{str(v).replace('\'', '\'\'')}'" if v is not None else 'NULL' for v in row])
+                        valores = ', '.join([
+                            f"'{str(v).replace('\'', '\'\'')}'" if v is not None else 'NULL' for v in row
+                        ])
                         f.write(f"INSERT INTO {tabela} VALUES ({valores});\n")
                 else:
                     raise ValueError(f'Tabela {tabela} não encontrada no banco.')
@@ -1110,31 +1118,34 @@ def visualizar_tabela(banco, tabela):
 
 def modulo_backup_restore_visualizacao():
     st.title("Backup, Restore e Visualização do Banco de Dados (Master)")
-    def modulo_backup_restore_visualizacao():
-    banco_origem = st.text_input('Caminho do banco de dados de origem', value='bolao_f1dev.db')
-    if not os.path.exists(banco_origem):
-        st.info("Banco de dados de origem não encontrado. Preencha o caminho corretamente.")
-    tabelas = listar_tabelas(banco_origem) if os.path.exists(banco_origem) else []
 
     st.header("Backup")
+    banco_origem = st.text_input('Caminho do banco de dados de origem', value='bolao_f1Dev.db')
+    arquivo_backup = st.text_input('Arquivo de backup (.sql)', value='backup_bf1Dev.sql')
+    tabelas = listar_tabelas(banco_origem) if os.path.exists(banco_origem) else []
     tabela_escolhida = st.selectbox("Tabela para backup (opcional)", ['-- Banco Completo --'] + tabelas)
+
     if st.button("Fazer Backup"):
         with st.spinner("Realizando backup..."):
-            ok, erro = (backup_banco(banco_origem, arquivo_backup)
-                        if tabela_escolhida == '-- Banco Completo --'
-                        else backup_banco(banco_origem, arquivo_backup, tabela_escolhida))
+            if tabela_escolhida == '-- Banco Completo --':
+                ok, erro = backup_banco(banco_origem, arquivo_backup)
+            else:
+                ok, erro = backup_banco(banco_origem, arquivo_backup, tabela_escolhida)
         if ok:
             st.success(f'Backup realizado em: {arquivo_backup}')
         else:
             st.error(f'Erro ao fazer backup: {erro}')
 
     st.header("Restore")
+    banco_destino = st.text_input('Caminho do banco de dados de destino', value='bolao_f1Dev.db')
     tabela_restore = st.selectbox("Tabela para restaurar (opcional)", ['-- Banco Completo --'] + tabelas, key="restore")
+
     if st.button("Restaurar Banco"):
         with st.spinner("Restaurando banco..."):
-            ok, erro = (restaurar_banco(banco_destino, arquivo_backup)
-                        if tabela_restore == '-- Banco Completo --'
-                        else restaurar_banco(banco_destino, arquivo_backup, tabela_restore))
+            if tabela_restore == '-- Banco Completo --':
+                ok, erro = restaurar_banco(banco_destino, arquivo_backup)
+            else:
+                ok, erro = restaurar_banco(banco_destino, arquivo_backup, tabela_restore)
         if ok:
             st.success(f'Restore concluído com sucesso.')
         else:
@@ -1151,10 +1162,12 @@ def modulo_backup_restore_visualizacao():
                 st.dataframe(df)
                 # Exportação para Excel
                 try:
-                    xlsx = df.to_excel(index=False, engine='openpyxl')
+                    output = io.BytesIO()
+                    df.to_excel(output, index=False, engine='openpyxl')
+                    output.seek(0)
                     st.download_button(
                         label="Exportar dados para Excel",
-                        data=xlsx,
+                        data=output.getvalue(),
                         file_name=f"{tabela}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
