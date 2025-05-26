@@ -8,7 +8,7 @@ import ast
 import os
 import matplotlib.pyplot as plt
 
-DB_PATH = 'bolao_f1Hom.db'
+DB_PATH = 'bolao_f1Homol.db'
 JWT_SECRET = 'sua_chave_secreta_supersegura'
 JWT_EXP_MINUTES = 120
 
@@ -118,11 +118,13 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
-        equipe TEXT)''')
+        equipe TEXT,
+        status TEXT DEFAULT 'Ativo')''')
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
-        data TEXT)''')
+        data TEXT,
+        status TEXT DEFAULT 'Ativo')''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
@@ -450,6 +452,10 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     st.cache_data.clear()
     provas = get_provas_df()
     pilotos_df = get_pilotos_df()
+    pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
+    pilotos = pilotos_ativos_df['nome'].tolist()
+    equipes = pilotos_ativos_df['equipe'].tolist()
+    pilotos_equipe = dict(zip(pilotos, equipes))
     if user[4] == "Ativo":
         if len(provas) > 0 and len(pilotos_df) > 2:
             prova_id = st.selectbox("Escolha a prova", provas['id'], format_func=lambda x: provas[provas['id']==x]['nome'].values[0])
@@ -468,9 +474,6 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                 fichas_ant = []
                 piloto_11_ant = ""
             st.write("Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
-            pilotos = pilotos_df['nome'].tolist()
-            equipes = pilotos_df['equipe'].tolist()
-            pilotos_equipe = dict(zip(pilotos, equipes))
             max_linhas = 5
             pilotos_aposta = []
             fichas_aposta = []
@@ -660,44 +663,37 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
     else:
         st.warning("Acesso restrito ao usuário master.")
 
+import pandas as pd
+from datetime import datetime
+
 # --- GESTÃO DO CAMPEONATO (Pilotos e Provas) ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
     if payload['perfil'] == 'master':
-        st.cache_data.clear()
         st.title("Gestão do Campeonato")
         tab1, tab2 = st.tabs(["Pilotos", "Provas"])
+
+        # --- PILOTOS ---
         with tab1:
             st.subheader("Adicionar novo piloto")
-            if 'nome_novo_piloto' not in st.session_state:
-                st.session_state['nome_novo_piloto'] = ""
-            if 'equipe_novo_piloto' not in st.session_state:
-                st.session_state['equipe_novo_piloto'] = ""
             nome_piloto = st.text_input("Nome do novo piloto", key="nome_novo_piloto")
             equipe_piloto = st.text_input("Nome da equipe do piloto", key="equipe_novo_piloto")
-            def cadastrar_piloto():
+            status_piloto = st.selectbox("Status do piloto", ["Ativo", "Inativo"], key="status_novo_piloto")
+            if st.button("Adicionar piloto", key="btn_add_piloto_form"):
                 if not nome_piloto.strip():
-                    st.session_state['erro_piloto'] = "Informe o nome do piloto."
+                    st.error("Informe o nome do piloto.")
                 elif not equipe_piloto.strip():
-                    st.session_state['erro_piloto'] = "Informe o nome da equipe."
+                    st.error("Informe o nome da equipe.")
                 else:
                     conn = db_connect()
                     c = conn.cursor()
-                    c.execute('INSERT INTO pilotos (nome, equipe) VALUES (?, ?)', (nome_piloto.strip(), equipe_piloto.strip()))
+                    c.execute('INSERT INTO pilotos (nome, equipe, status) VALUES (?, ?, ?)', (nome_piloto.strip(), equipe_piloto.strip(), status_piloto))
                     conn.commit()
                     conn.close()
-                    st.session_state['sucesso_piloto'] = "Piloto adicionado!"
-                    st.session_state['nome_novo_piloto'] = ""
-                    st.session_state['equipe_novo_piloto'] = ""
-            st.button("Adicionar piloto", key="btn_add_piloto", on_click=cadastrar_piloto)
-            if st.session_state.get('erro_piloto'):
-                st.error(st.session_state['erro_piloto'])
-                st.session_state['erro_piloto'] = ""
-            if st.session_state.get('sucesso_piloto'):
-                st.success(st.session_state['sucesso_piloto'])
-                st.session_state['sucesso_piloto'] = ""
-                st.cache_data.clear()
-                st.rerun()
+                    st.success("Piloto adicionado!")
+                    st.cache_data.clear()
+                    st.rerun()
+
             st.markdown("---")
             st.subheader("Pilotos cadastrados")
             pilotos = get_pilotos_df()
@@ -705,62 +701,57 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 st.info("Nenhum piloto cadastrado.")
             else:
                 for idx, row in pilotos.iterrows():
-                    col1, col2, col3, col4 = st.columns([4,3,2,2])
+                    col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
                     with col1:
-                        novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome{row['id']}")
+                        novo_nome = st.text_input(f"Nome piloto {row['id']}", value=row['nome'], key=f"pl_nome_{row['id']}")
                     with col2:
-                        nova_equipe = st.text_input(f"Equipe piloto {row['id']}", value=row['equipe'], key=f"pl_eq{row['id']}")
+                        nova_equipe = st.text_input(f"Equipe piloto {row['id']}", value=row['equipe'], key=f"pl_eq_{row['id']}")
                     with col3:
-                        def editar_piloto_callback(row_id=row['id'], novo_nome=novo_nome, nova_equipe=nova_equipe):
-                            conn = db_connect()
-                            c = conn.cursor()
-                            c.execute('UPDATE pilotos SET nome=?, equipe=? WHERE id=?', (novo_nome, nova_equipe, row_id))
-                            conn.commit()
-                            conn.close()
-                            st.session_state[f'sucesso_pl_{row_id}'] = "Piloto editado!"
-                        st.button("Editar piloto", key=f"pl_edit{row['id']}", on_click=editar_piloto_callback)
-                        if st.session_state.get(f'sucesso_pl_{row["id"]}'):
-                            st.success(st.session_state[f'sucesso_pl_{row["id"]}'])
-                            st.session_state[f'sucesso_pl_{row["id"]}'] = ""
+                        novo_status = st.selectbox(f"Status piloto {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pl_status_{row['id']}")
                     with col4:
-                        def excluir_piloto_callback(row_id=row['id']):
+                        if st.button("Editar piloto", key=f"pl_edit_{row['id']}"):
                             conn = db_connect()
                             c = conn.cursor()
-                            c.execute('DELETE FROM pilotos WHERE id=?', (row_id,))
+                            c.execute('UPDATE pilotos SET nome=?, equipe=?, status=? WHERE id=?', (novo_nome, nova_equipe, novo_status, row['id']))
                             conn.commit()
                             conn.close()
-                            st.session_state[f'sucesso_pl_del_{row_id}'] = "Piloto excluído!"
-                        st.button("Excluir piloto", key=f"pl_del{row['id']}", on_click=excluir_piloto_callback)
-                        if st.session_state.get(f'sucesso_pl_del_{row["id"]}'):
-                            st.success(st.session_state[f'sucesso_pl_del_{row["id"]}'])
-                            st.session_state[f'sucesso_pl_del_{row["id"]}'] = ""
+                            st.success("Piloto editado!")
+                            st.cache_data.clear()
+                            st.rerun()
+                    with col5:
+                        if st.button("Excluir piloto", key=f"pl_del_{row['id']}"):
+                            conn = db_connect()
+                            c = conn.cursor()
+                            c.execute('DELETE FROM pilotos WHERE id=?', (row['id'],))
+                            conn.commit()
+                            conn.close()
+                            st.success("Piloto excluído!")
+                            st.cache_data.clear()
+                            st.rerun()
+
+        # --- PROVAS ---
         with tab2:
             st.subheader("Adicionar nova prova")
-            st.cache_data.clear()
-            if 'nome_nova_prova' not in st.session_state:
-                st.session_state['nome_nova_prova'] = ""
             nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
-            data_prova = st.date_input("Data da nova prova", key="data_nova_prova")
-            def cadastrar_prova():
+            data_prova_str = st.text_input("Data da nova prova (DD/MM/AAAA)", key="data_nova_prova")
+            status_prova = st.selectbox("Status da prova", ["Ativo", "Inativo"], key="status_nova_prova")
+            if st.button("Adicionar prova", key="btn_add_prova_form"):
                 if not nome_prova.strip():
-                    st.session_state['erro_prova'] = "Informe o nome da prova."
+                    st.error("Informe o nome da prova.")
                 else:
-                    conn = db_connect()
-                    c = conn.cursor()
-                    c.execute('INSERT INTO provas (nome, data) VALUES (?, ?)', (nome_prova.strip(), data_prova.isoformat()))
-                    conn.commit()
-                    conn.close()
-                    st.session_state['sucesso_prova'] = "Prova adicionada!"
-                    st.session_state['nome_nova_prova'] = ""
-            st.button("Adicionar prova", key="btn_add_prova", on_click=cadastrar_prova)
-            if st.session_state.get('erro_prova'):
-                st.error(st.session_state['erro_prova'])
-                st.session_state['erro_prova'] = ""
-            if st.session_state.get('sucesso_prova'):
-                st.success(st.session_state['sucesso_prova'])
-                st.session_state['sucesso_prova'] = ""
-                st.cache_data.clear()
-                st.rerun()
+                    try:
+                        data_prova = datetime.strptime(data_prova_str, "%d/%m/%Y")
+                        conn = db_connect()
+                        c = conn.cursor()
+                        c.execute('INSERT INTO provas (nome, data, status) VALUES (?, ?, ?)', (nome_prova.strip(), data_prova.strftime("%Y-%m-%d"), status_prova))
+                        conn.commit()
+                        conn.close()
+                        st.success("Prova adicionada!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except ValueError:
+                        st.error("Data inválida! Use o formato DD/MM/AAAA.")
+
             st.markdown("---")
             st.subheader("Provas cadastradas")
             provas = get_provas_df()
@@ -768,35 +759,41 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
                 st.info("Nenhuma prova cadastrada.")
             else:
                 for idx, row in provas.iterrows():
-                    col1, col2, col3, col4 = st.columns([4,4,2,2])
+                    col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
                     with col1:
-                        novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome{row['id']}")
+                        novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome_{row['id']}")
                     with col2:
-                        nova_data = st.date_input(f"Data prova {row['id']}", value=pd.to_datetime(row['data']), key=f"pr_data{row['id']}")
+                        # Exibe data em DD/MM/AAAA
+                        data_formatada = pd.to_datetime(row['data']).strftime("%d/%m/%Y")
+                        nova_data_str = st.text_input(f"Data prova {row['id']} (DD/MM/AAAA)", value=data_formatada, key=f"pr_data_{row['id']}")
                     with col3:
-                        def editar_prova_callback(row_id=row['id'], novo_nome=novo_nome, nova_data=nova_data):
-                            conn = db_connect()
-                            c = conn.cursor()
-                            c.execute('UPDATE provas SET nome=?, data=? WHERE id=?', (novo_nome, nova_data.isoformat(), row_id))
-                            conn.commit()
-                            conn.close()
-                            st.session_state[f'sucesso_pr_{row_id}'] = "Prova editada!"
-                        st.button("Editar prova", key=f"pr_edit{row['id']}", on_click=editar_prova_callback)
-                        if st.session_state.get(f'sucesso_pr_{row["id"]}'):
-                            st.success(st.session_state[f'sucesso_pr_{row["id"]}'])
-                            st.session_state[f'sucesso_pr_{row["id"]}'] = ""
+                        novo_status = st.selectbox(f"Status prova {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pr_status_{row['id']}")
                     with col4:
-                        def excluir_prova_callback(row_id=row['id']):
+                        if st.button("Editar prova", key=f"pr_edit_{row['id']}"):
+                            try:
+                                nova_data = datetime.strptime(nova_data_str, "%d/%m/%Y")
+                                conn = db_connect()
+                                c = conn.cursor()
+                                c.execute('UPDATE provas SET nome=?, data=?, status=? WHERE id=?', (novo_nome, nova_data.strftime("%Y-%m-%d"), novo_status, row['id']))
+                                conn.commit()
+                                conn.close()
+                                st.success("Prova editada!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except ValueError:
+                                st.error("Data inválida! Use o formato DD/MM/AAAA.")
+                    with col5:
+                        if st.button("Excluir prova", key=f"pr_del_{row['id']}"):
                             conn = db_connect()
                             c = conn.cursor()
-                            c.execute('DELETE FROM provas WHERE id=?', (row_id,))
+                            c.execute('DELETE FROM provas WHERE id=?', (row['id'],))
                             conn.commit()
                             conn.close()
-                            st.session_state[f'sucesso_pr_del_{row_id}'] = "Prova excluída!"
-                        st.button("Excluir prova", key=f"pr_del{row['id']}", on_click=excluir_prova_callback)
-                        if st.session_state.get(f'sucesso_pr_del_{row["id"]}'):
-                            st.success(st.session_state[f'sucesso_pr_del_{row["id"]}'])
-                            st.session_state[f'sucesso_pr_del_{row["id"]}'] = ""
+                            st.success("Prova excluída!")
+                            st.cache_data.clear()
+                            st.rerun()
+    else:
+        st.warning("Acesso restrito ao usuário master.")
 
 # --- GESTÃO DE APOSTAS (apenas master/admin) ---
 if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['token']:
@@ -1039,7 +1036,7 @@ import pandas as pd
 import io
 import os
 
-DB_PATH = 'bolao_f1Hom.db'  # Ajuste para o caminho do seu banco
+DB_PATH = 'bolao_f1Homol.db'  # Ajuste para o caminho do seu banco
 
 def exportar_tabelas_para_excel(db_path):
     conn = sqlite3.connect(db_path)
