@@ -570,88 +570,78 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
             st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
     else:
         st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
-    st.subheader("Minhas apostas")
+
+    # --- Exibição detalhada das apostas do participante ---
+    st.subheader("Minhas apostas detalhadas")
     apostas_df = get_apostas_df()
-    apostas = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
-    if not apostas.empty:
-        apostas_lista = []
-        auto_count = 0
-        resultados_df = get_resultados_df()
-        provas_df = get_provas_df()
-        import pandas as pd
-import ast
+    resultados_df = get_resultados_df()
+    provas_df = get_provas_df()
+    apostas_part = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
 
-# --- Painel do Participante: Detalhamento das apostas e resultados ---
-pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
-pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]  # Para Sprint
-bonus_11 = 25  # Ajuste se necessário
+    pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
+    bonus_11 = 25  # Ajuste se necessário
 
-if not apostas_part.empty:
-    for idx, aposta in apostas_part.iterrows():
-        prova_id = aposta['prova_id']
-        prova_nome = aposta['nome_prova']
-        fichas = list(map(int, aposta['fichas'].split(',')))
-        pilotos_apostados = aposta['pilotos'].split(',')
-        piloto_11_apostado = aposta['piloto_11']
-        automatica = aposta.get('automatica', 0)
+    if not apostas_part.empty:
+        for idx, aposta in apostas_part.iterrows():
+            prova_id = aposta['prova_id']
+            prova_nome = aposta['nome_prova']
+            fichas = list(map(int, aposta['fichas'].split(',')))
+            pilotos_apostados = aposta['pilotos'].split(',')
+            piloto_11_apostado = aposta['piloto_11']
+            automatica = aposta.get('automatica', 0)
 
-        # Busca tipo da prova
-        tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
+            tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
 
-        # Busca resultado oficial da prova
-        resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
-        if not resultado_row.empty:
-            try:
-                posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
-            except Exception:
+            resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
+            if not resultado_row.empty:
+                try:
+                    posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                except Exception:
+                    posicoes_dict = {}
+            else:
                 posicoes_dict = {}
-        else:
-            posicoes_dict = {}
 
-        dados = []
-        total_pontos = 0
+            dados = []
+            total_pontos = 0
 
-        # Para provas normais (F1) e Sprint
-        if tipo_prova == 'Sprint':
-            pontos_lista = pontos_sprint
-            n_pos = 8
-        else:
-            pontos_lista = pontos_f1
-            n_pos = 10
+            if tipo_prova == 'Sprint':
+                pontos_lista = pontos_sprint
+                n_pos = 8
+            else:
+                pontos_lista = pontos_f1
+                n_pos = 10
 
-        for i in range(n_pos):
-            aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
-            ficha = fichas[i] if i < len(fichas) else 0
-            piloto_real = posicoes_dict.get(i+1, "")
-            pontos = 0
-            if aposta_piloto == piloto_real and ficha > 0:
-                pontos = ficha * pontos_lista[i]
-            total_pontos += pontos
-            dados.append({
-                "Posição": f"{i+1}º",
-                "Piloto Apostado": aposta_piloto,
-                "Fichas": ficha,
-                "Piloto Real": piloto_real,
-                "Pontos": pontos
-            })
+            for i in range(n_pos):
+                aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
+                ficha = fichas[i] if i < len(fichas) else 0
+                piloto_real = posicoes_dict.get(i+1, "")
+                pontos = 0
+                if aposta_piloto == piloto_real and ficha > 0:
+                    pontos = ficha * pontos_lista[i]
+                total_pontos += pontos
+                dados.append({
+                    "Posição": f"{i+1}º",
+                    "Piloto Apostado": aposta_piloto,
+                    "Fichas": ficha,
+                    "Piloto Real": piloto_real,
+                    "Pontos": pontos
+                })
 
-        # 11º colocado (existe em ambos os tipos)
-        piloto_11_real = posicoes_dict.get(11, "")
-        pontos_11_col = bonus_11 if piloto_11_apostado == piloto_11_real else 0
-        total_pontos += pontos_11_col
+            piloto_11_real = posicoes_dict.get(11, "")
+            pontos_11_col = bonus_11 if piloto_11_apostado == piloto_11_real else 0
+            total_pontos += pontos_11_col
 
-        # Penalidade para aposta automática (se aplicável)
-        if automatica and int(automatica) >= 2:
-            total_pontos = int(total_pontos * 0.75)
+            if automatica and int(automatica) >= 2:
+                total_pontos = int(total_pontos * 0.75)
 
-        # Exibe tabela
-        st.markdown(f"### {prova_nome} ({tipo_prova})")
-        st.dataframe(pd.DataFrame(dados), hide_index=True)
-        st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
-        st.write(f"**Total de Pontos na Prova:** {total_pontos}")
-        st.markdown("---")
-else:
-    st.info("Nenhuma aposta registrada.")
+            st.markdown(f"### {prova_nome} ({tipo_prova})")
+            st.dataframe(pd.DataFrame(dados), hide_index=True)
+            st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
+            st.write(f"**Total de Pontos na Prova:** {total_pontos}")
+            st.markdown("---")
+    else:
+        st.info("Nenhuma aposta registrada.")
 
 # --- GESTÃO DE USUÁRIOS (apenas master) ---
 if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
