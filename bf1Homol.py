@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import ast
 import os
 import matplotlib.pyplot as plt
+import dash
 
 DB_PATH = 'bolao_f1Homol.db'
 JWT_SECRET = st.secrets["JWT_SECRET"]
@@ -352,6 +353,7 @@ def menu_master():
         "Atualização de resultados",
         "Log de Apostas",
         "Classificação",
+        "Dash F1",
         "Exportar/Importar Excel",
         "Regulamento",
         "Logout"
@@ -363,6 +365,7 @@ def menu_admin():
         "Atualização de resultados",
         "Log de Apostas",
         "Classificação",
+        "Dash F1",
         "Regulamento",
         "Logout"
     ]
@@ -371,6 +374,7 @@ def menu_participante():
         "Painel do Participante",
         "Log de Apostas",
         "Classificação",
+        "Dash F1",
         "Regulamento",
         "Logout"
     ]
@@ -566,49 +570,84 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
             st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
     else:
         st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
-    st.subheader("Minhas apostas")
+
+    # --- Exibição detalhada das apostas do participante ---
+    st.subheader("Minhas apostas detalhadas")
     apostas_df = get_apostas_df()
-    apostas = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
-    if not apostas.empty:
-        apostas_lista = []
-        auto_count = 0
-        resultados_df = get_resultados_df()
-        provas_df = get_provas_df()
-        for idx, ap in enumerate(apostas.itertuples(), start=1):
-            pilotos_lst = ap.pilotos.split(",")
-            fichas_lst = list(map(int, ap.fichas.split(",")))
-            pontos = calcular_pontuacao_lote(pd.DataFrame([ap]), resultados_df, provas_df)[0]
-            cor = ""
-            if int(ap.automatica) == 1:
-                auto_count += 1
-                cor = "background-color: yellow"
-            elif int(ap.automatica) >= 2:
-                auto_count += 1
-                cor = "background-color: red"
-            apostas_lista.append({
-                "#": idx,
-                "Prova": ap.nome_prova,
-                "Data Envio": ap.data_envio,
-                "Pilotos": ap.pilotos,
-                "Fichas": ap.fichas,
-                "11º": ap.piloto_11,
-                "Pontuação": pontos if pontos is not None else "Aguardando resultado",
-                "Cor": cor
-            })
-        df_apostas = pd.DataFrame(apostas_lista)
-        def colorir_linha(row):
-            return [row["Cor"]] * len(row)
-        colunas_visiveis = ["#", "Prova", "Data Envio", "Pilotos", "Fichas", "11º", "Pontuação"]
+    resultados_df = get_resultados_df()
+    provas_df = get_provas_df()
+    apostas_part = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
+
+    pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
+    bonus_11 = 25  # Ajuste se necessário
         
-        def colorir_linha(row):
-            cor = row.get("Cor", "")
-            return [cor] * len(colunas_visiveis)
-        
-        st.dataframe(
-            df_apostas[colunas_visiveis].style.apply(colorir_linha, axis=1)
-        )
+    if not apostas_part.empty:
+        # Cria uma aba para cada aposta (nome da prova)
+        nomes_abas = [f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
+        abas = st.tabs(nomes_abas)
+        for aba, (_, aposta) in zip(abas, apostas_part.iterrows()):
+            with aba:
+                prova_id = aposta['prova_id']
+                prova_nome = aposta['nome_prova']
+                fichas = list(map(int, aposta['fichas'].split(',')))
+                pilotos_apostados = aposta['pilotos'].split(',')
+                piloto_11_apostado = aposta['piloto_11']
+                automatica = aposta.get('automatica', 0)
+    
+                tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
+    
+                resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
+                if not resultado_row.empty:
+                    try:
+                        posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                    except Exception:
+                        posicoes_dict = {}
+                else:
+                    posicoes_dict = {}
+    
+                dados = []
+                total_pontos = 0
+    
+                if tipo_prova == 'Sprint':
+                    pontos_lista = pontos_sprint
+                    n_pos = 8
+                else:
+                    pontos_lista = pontos_f1
+                    n_pos = 10
+    
+                piloto_para_pos = {v: int(k) for k, v in posicoes_dict.items()}
+    
+                for i in range(n_pos):
+                    aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
+                    ficha = fichas[i] if i < len(fichas) else 0
+                    pos_real = piloto_para_pos.get(aposta_piloto, None)
+                    pontos = 0
+                    if pos_real is not None and 1 <= pos_real <= n_pos:
+                        pontos = ficha * pontos_lista[pos_real - 1]
+                    total_pontos += pontos
+                    dados.append({
+                        "Piloto Apostado": aposta_piloto,
+                        "Fichas": ficha,
+                        "Posição Real": pos_real if pos_real is not None else "-",
+                        "Pontos": pontos
+                    })
+    
+                piloto_11_real = posicoes_dict.get(11, "")
+                pontos_11_col = bonus_11 if piloto_11_apostado == piloto_11_real else 0
+                total_pontos += pontos_11_col
+    
+                if automatica and int(automatica) >= 2:
+                    total_pontos = int(total_pontos * 0.75)
+    
+                st.markdown(f"#### {prova_nome} ({tipo_prova})")
+                st.dataframe(pd.DataFrame(dados), hide_index=True)
+                st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
+                st.write(f"**Total de Pontos na Prova:** {total_pontos}")
+                st.markdown("---")
     else:
         st.info("Nenhuma aposta registrada.")
+
 
 # --- GESTÃO DE USUÁRIOS (apenas master) ---
 if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
@@ -1205,6 +1244,10 @@ if (
     and get_payload()['perfil'] == 'master'
 ):
     modulo_exportar_importar_excel()
+
+# --- Dash F1 ---
+if st.session_state['pagina'] == "Dash F1":
+    dash.main()
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
