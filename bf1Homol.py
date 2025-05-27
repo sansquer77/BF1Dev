@@ -104,58 +104,60 @@ def init_db():
     conn = db_connect()
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,
-    email TEXT UNIQUE,
-    senha_hash TEXT,
-    perfil TEXT,
-    status TEXT DEFAULT 'Ativo',
-    faltas INTEGER DEFAULT 0)''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,
+email TEXT UNIQUE,
+senha_hash TEXT,
+perfil TEXT,
+status TEXT DEFAULT 'Ativo',
+faltas INTEGER DEFAULT 0)''')
     usuario_master = st.secrets["usuario_master"]
     email_master = st.secrets["email_master"]
     senha_master = st.secrets["senha_master"]
     senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt())
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
-    VALUES (?, ?, ?, ?, ?, ?)''',
+VALUES (?, ?, ?, ?, ?, ?)''',
     (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
-    conn.commit()
-    conn.close()
+
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,
-    equipe TEXT,
-    status TEXT DEFAULT 'Ativo'
-    )''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,
+equipe TEXT,
+status TEXT DEFAULT 'Ativo'
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,    
-    data TEXT,
-    status TEXT DEFAULT 'Ativo',
-    tipo TEXT DEFAULT 'Normal'
-    )''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,    
+data TEXT,
+status TEXT DEFAULT 'Ativo',
+tipo TEXT DEFAULT 'Normal'
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario_id INTEGER,
-    prova_id INTEGER,
-    data_envio TEXT,
-    pilotos TEXT,
-    fichas TEXT,
-    piloto_11 TEXT,
-    nome_prova TEXT,
-    automatica INTEGER DEFAULT 0,
-    FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-    FOREIGN KEY(prova_id) REFERENCES provas(id))''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+usuario_id INTEGER,
+prova_id INTEGER,
+data_envio TEXT,
+pilotos TEXT,
+fichas TEXT,
+piloto_11 TEXT,
+nome_prova TEXT,
+automatica INTEGER DEFAULT 0,
+FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+FOREIGN KEY(prova_id) REFERENCES provas(id)
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
-    prova_id INTEGER PRIMARY KEY,
-    posicoes TEXT,
-    FOREIGN KEY(prova_id) REFERENCES provas(id))''')
+prova_id INTEGER PRIMARY KEY,
+posicoes TEXT,
+FOREIGN KEY(prova_id) REFERENCES provas(id)
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS log_apostas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    apostador TEXT,
-    data TEXT,
-    horario TEXT,
-    aposta TEXT,
-    nome_prova TEXT)''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+apostador TEXT,
+data TEXT,
+horario TEXT,
+aposta TEXT,
+nome_prova TEXT
+)''')
     conn.commit()
     conn.close()
 
