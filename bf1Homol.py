@@ -127,14 +127,16 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         equipe TEXT,
-        status TEXT DEFAULT 'Ativo')''')
+        status TEXT DEFAULT 'Ativo'
+    )''')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,    
         data TEXT,
         status TEXT DEFAULT 'Ativo',
         tipo TEXT DEFAULT 'Normal'
-        )''')
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id INTEGER,
