@@ -194,6 +194,8 @@ def get_resultados_df():
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 def check_password(password, hashed):
+    if isinstance(hashed, str):
+        hashed = hashed.encode()  # converte para bytes
     return bcrypt.checkpw(password.encode(), hashed)
 def generate_token(user_id, perfil, status):
     payload = {
