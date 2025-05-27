@@ -11,8 +11,6 @@ import matplotlib.pyplot as plt
 DB_PATH = 'bolao_f1Homol.db'
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
-usuario_master = "UGFzc3dvcmQ="  
-email_master = "bWFzdGVyQGJvbGFvLmNvbQ=="  
 
 REGULAMENTO = """
 REGULAMENTO BF1-2025
@@ -113,10 +111,18 @@ def init_db():
         perfil TEXT,
         status TEXT DEFAULT 'Ativo',
         faltas INTEGER DEFAULT 0)''')
-    senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
+
+    usuario_master = st.secrets["usuario_master"]
+    email_master = st.secrets["email_master"]
+    senha_master = st.secrets["senha_master"]
+
+    senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt())
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
-    VALUES (?, ?, ?, ?, ?, ?)''',
-    (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
+        VALUES (?, ?, ?, ?, ?, ?)''',
+        (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
+    conn.commit()
+    conn.close()
+    
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
