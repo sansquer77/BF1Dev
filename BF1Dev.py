@@ -105,52 +105,60 @@ def init_db():
     conn = db_connect()
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        email TEXT UNIQUE,
-        senha_hash TEXT,
-        perfil TEXT,
-        status TEXT DEFAULT 'Ativo',
-        faltas INTEGER DEFAULT 0)''')
-    senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,
+email TEXT UNIQUE,
+senha_hash TEXT,
+perfil TEXT,
+status TEXT DEFAULT 'Ativo',
+faltas INTEGER DEFAULT 0)''')
+    usuario_master = st.secrets["usuario_master"]
+    email_master = st.secrets["email_master"]
+    senha_master = st.secrets["senha_master"]
+    senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt())
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
-        VALUES (?, ?, ?, ?, ?, ?)''',
-        ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo', 0))
+VALUES (?, ?, ?, ?, ?, ?)''',
+    (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
+
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        equipe TEXT,
-        status TEXT DEFAULT 'Ativo')''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,
+equipe TEXT,
+status TEXT DEFAULT 'Ativo'
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,    
-        data TEXT,
-        status TEXT DEFAULT 'Ativo',
-        tipo TEXT DEFAULT 'Normal'
-        )''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,    
+data TEXT,
+status TEXT DEFAULT 'Ativo',
+tipo TEXT DEFAULT 'Normal'
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario_id INTEGER,
-    prova_id INTEGER,
-    data_envio TEXT,
-    pilotos TEXT,
-    fichas TEXT,
-    piloto_11 TEXT,
-    nome_prova TEXT,
-    automatica INTEGER DEFAULT 0,
-    FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-    FOREIGN KEY(prova_id) REFERENCES provas(id))''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+usuario_id INTEGER,
+prova_id INTEGER,
+data_envio TEXT,
+pilotos TEXT,
+fichas TEXT,
+piloto_11 TEXT,
+nome_prova TEXT,
+automatica INTEGER DEFAULT 0,
+FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+FOREIGN KEY(prova_id) REFERENCES provas(id)
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
-        prova_id INTEGER PRIMARY KEY,
-        posicoes TEXT,
-        FOREIGN KEY(prova_id) REFERENCES provas(id))''')
+prova_id INTEGER PRIMARY KEY,
+posicoes TEXT,
+FOREIGN KEY(prova_id) REFERENCES provas(id)
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS log_apostas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        apostador TEXT,
-        data TEXT,
-        horario TEXT,
-        aposta TEXT,
-        nome_prova TEXT)''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+apostador TEXT,
+data TEXT,
+horario TEXT,
+aposta TEXT,
+nome_prova TEXT
+)''')
     conn.commit()
     conn.close()
 
@@ -160,38 +168,35 @@ def get_usuarios_df():
     df = pd.read_sql('SELECT * FROM usuarios', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_pilotos_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM pilotos', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_provas_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM provas', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_apostas_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM apostas', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_resultados_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM resultados', conn)
     conn.close()
     return df
-
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 def check_password(password, hashed):
+    if isinstance(hashed, str):
+        hashed = hashed.encode()  # converte para bytes
     return bcrypt.checkpw(password.encode(), hashed)
 def generate_token(user_id, perfil, status):
     payload = {
@@ -212,7 +217,6 @@ def decode_token(token):
         return None
     except Exception:
         return None
-
 def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo'):
     conn = db_connect()
     c = conn.cursor()
@@ -226,7 +230,6 @@ def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo')
         return False
     finally:
         conn.close()
-
 def get_user_by_email(email):
     conn = db_connect()
     c = conn.cursor()
@@ -234,7 +237,6 @@ def get_user_by_email(email):
     user = c.fetchone()
     conn.close()
     return user
-
 def get_user_by_id(user_id):
     conn = db_connect()
     c = conn.cursor()
@@ -331,10 +333,6 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & (apostas_df['automatica'] >= 1)])
     salvar_aposta(usuario_id, prova_id, pilotos_ant, fichas_ant, piloto_11_ant, nome_prova, automatica=num_auto+1)
     return True, "Aposta automática gerada!"
-
-# --- INICIALIZAÇÃO E MENU ---
-st.set_page_config(page_title="Bolão F1 2025", layout="wide")
-init_db()
 
 if 'pagina' not in st.session_state:
     st.session_state['pagina'] = "Login"
