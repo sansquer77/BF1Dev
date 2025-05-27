@@ -582,6 +582,8 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
     bonus_11 = 25  # Ajuste se necessário
     
+    st.subheader("Minhas apostas detalhadas")
+    
     if not apostas_part.empty:
         # Cria uma aba para cada aposta (nome da prova)
         nomes_abas = [f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
@@ -647,6 +649,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                 st.markdown("---")
     else:
         st.info("Nenhuma aposta registrada.")
+
 
 # --- GESTÃO DE USUÁRIOS (apenas master) ---
 if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
