@@ -583,34 +583,34 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     bonus_11 = 25  # Ajuste se necessário
 
     if not apostas_part.empty:
-    for idx, aposta in apostas_part.iterrows():
-        prova_id = aposta['prova_id']
-        prova_nome = aposta['nome_prova']
-        fichas = list(map(int, aposta['fichas'].split(',')))
-        pilotos_apostados = aposta['pilotos'].split(',')
-        piloto_11_apostado = aposta['piloto_11']
-        automatica = aposta.get('automatica', 0)
-
-        tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
-
-        resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
-        if not resultado_row.empty:
-            try:
-                posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
-            except Exception:
+        for idx, aposta in apostas_part.iterrows():
+            prova_id = aposta['prova_id']
+            prova_nome = aposta['nome_prova']
+            fichas = list(map(int, aposta['fichas'].split(',')))
+            pilotos_apostados = aposta['pilotos'].split(',')
+            piloto_11_apostado = aposta['piloto_11']
+            automatica = aposta.get('automatica', 0)
+    
+            tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
+    
+            resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
+            if not resultado_row.empty:
+                try:
+                    posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                except Exception:
+                    posicoes_dict = {}
+            else:
                 posicoes_dict = {}
-        else:
-            posicoes_dict = {}
-
-        dados = []
-        total_pontos = 0
-
-        if tipo_prova == 'Sprint':
-            pontos_lista = pontos_sprint
-            n_pos = 8
-        else:
-            pontos_lista = pontos_f1
-            n_pos = 10
+    
+            dados = []
+            total_pontos = 0
+    
+            if tipo_prova == 'Sprint':
+                pontos_lista = pontos_sprint
+                n_pos = 8
+            else:
+                pontos_lista = pontos_f1
+                n_pos = 10
 
         # Inverte o dicionário de posições para buscar a posição real do piloto apostado
         piloto_para_pos = {v: int(k) for k, v in posicoes_dict.items()}
