@@ -9,8 +9,10 @@ import os
 import matplotlib.pyplot as plt
 
 DB_PATH = 'bolao_f1Homol.db'
-JWT_SECRET = 'sua_chave_secreta_supersegura'
+JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
+usuario_master = "UGFzc3dvcmQ="  
+email_master = "bWFzdGVyQGJvbGFvLmNvbQ=="  
 
 REGULAMENTO = """
 REGULAMENTO BF1-2025
@@ -113,8 +115,8 @@ def init_db():
         faltas INTEGER DEFAULT 0)''')
     senha_hash = bcrypt.hashpw('ADMIN'.encode(), bcrypt.gensalt())
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
-        VALUES (?, ?, ?, ?, ?, ?)''',
-        ('Password', 'master@bolao.com', senha_hash, 'master', 'Ativo', 0))
+    VALUES (?, ?, ?, ?, ?, ?)''',
+    (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
