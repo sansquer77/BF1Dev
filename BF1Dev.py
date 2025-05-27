@@ -7,9 +7,8 @@ from datetime import datetime, timedelta
 import ast
 import os
 import matplotlib.pyplot as plt
-import dash
 
-DB_PATH = 'bolao_f1Dev.db'
+DB_PATH = 'bolao_f1Homol.db'
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
 
@@ -333,6 +332,10 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & (apostas_df['automatica'] >= 1)])
     salvar_aposta(usuario_id, prova_id, pilotos_ant, fichas_ant, piloto_11_ant, nome_prova, automatica=num_auto+1)
     return True, "Aposta automática gerada!"
+
+# --- INICIALIZAÇÃO E MENU ---
+st.set_page_config(page_title="Bolão F1 2025", layout="wide")
+init_db()
 
 if 'pagina' not in st.session_state:
     st.session_state['pagina'] = "Login"
