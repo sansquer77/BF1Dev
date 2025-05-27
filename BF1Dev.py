@@ -581,9 +581,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
     pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
     bonus_11 = 25  # Ajuste se necessário
-    
-    st.subheader("Minhas apostas detalhadas")
-    
+        
     if not apostas_part.empty:
         # Cria uma aba para cada aposta (nome da prova)
         nomes_abas = [f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
