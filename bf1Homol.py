@@ -111,25 +111,21 @@ def init_db():
         perfil TEXT,
         status TEXT DEFAULT 'Ativo',
         faltas INTEGER DEFAULT 0)''')
-
     usuario_master = st.secrets["usuario_master"]
     email_master = st.secrets["email_master"]
     senha_master = st.secrets["senha_master"]
-
     senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt())
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
         VALUES (?, ?, ?, ?, ?, ?)''',
         (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
     conn.commit()
     conn.close()
-    
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT,
     equipe TEXT,
     status TEXT DEFAULT 'Ativo'
     )''')
-    
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT,    
@@ -137,7 +133,6 @@ def init_db():
     status TEXT DEFAULT 'Ativo',
     tipo TEXT DEFAULT 'Normal'
     )''')
-    
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id INTEGER,
@@ -163,42 +158,36 @@ def init_db():
         nome_prova TEXT)''')
     conn.commit()
     conn.close()
-
 @st.cache_data
 def get_usuarios_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM usuarios', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_pilotos_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM pilotos', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_provas_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM provas', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_apostas_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM apostas', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_resultados_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM resultados', conn)
     conn.close()
     return df
-
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 def check_password(password, hashed):
@@ -222,7 +211,6 @@ def decode_token(token):
         return None
     except Exception:
         return None
-
 def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo'):
     conn = db_connect()
     c = conn.cursor()
@@ -236,7 +224,6 @@ def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo')
         return False
     finally:
         conn.close()
-
 def get_user_by_email(email):
     conn = db_connect()
     c = conn.cursor()
@@ -244,7 +231,6 @@ def get_user_by_email(email):
     user = c.fetchone()
     conn.close()
     return user
-
 def get_user_by_id(user_id):
     conn = db_connect()
     c = conn.cursor()
