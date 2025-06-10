@@ -3,13 +3,13 @@ import sqlite3
 import bcrypt
 import jwt as pyjwt
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import ast
 import os
 import matplotlib.pyplot as plt
 import dash
 
-DB_PATH = 'bolao_f1Homol.db'
+DB_PATH = 'bolao_f1Dev.db'
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
 
@@ -115,7 +115,7 @@ faltas INTEGER DEFAULT 0)''')
     usuario_master = st.secrets["usuario_master"]
     email_master = st.secrets["email_master"]
     senha_master = st.secrets["senha_master"]
-    senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt())
+    senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt()).decode('utf-8')
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
 VALUES (?, ?, ?, ?, ?, ?)''',
     (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
@@ -193,7 +193,7 @@ def get_resultados_df():
     conn.close()
     return df
 def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode('utf-8')
 def check_password(password, hashed):
     if isinstance(hashed, str):
         hashed = hashed.encode()  # converte para bytes
@@ -203,7 +203,7 @@ def generate_token(user_id, perfil, status):
         'user_id': user_id,
         'perfil': perfil,
         'status': status,
-        'exp': datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
+        'exp': datetime.now(UTC) + timedelta(minutes=JWT_EXP_MINUTES)
     }
     token = pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
     if isinstance(token, bytes):
@@ -1172,7 +1172,7 @@ import pandas as pd
 import io
 import os
 
-DB_PATH = 'bolao_f1Homol.db'  # Ajuste para o caminho do seu banco
+DB_PATH = 'bolao_f1Dev.db'  # Ajuste para o caminho do seu banco
 
 def exportar_tabelas_para_excel(db_path):
     conn = sqlite3.connect(db_path)
@@ -1197,6 +1197,28 @@ def importar_excel_para_tabela(db_path, tabela, arquivo_excel_bytes):
     conn.commit()
     df.to_sql(tabela, conn, if_exists='append', index=False)
     conn.commit()
+
+    # Geração automática de logs se a tabela importada for 'apostas'
+    if tabela == 'apostas':
+        try:
+            c.execute("""
+                INSERT INTO log_apostas (apostador, data, horario, aposta, nome_prova)
+                SELECT u.nome, 
+                       substr(a.data_envio, 1, 10) AS data,
+                       substr(a.data_envio, 12, 8) AS horario,
+                       a.pilotos || ' | ' || a.fichas AS aposta,
+                       a.nome_prova
+                FROM apostas a
+                JOIN usuarios u ON a.usuario_id = u.id
+                LEFT JOIN log_apostas l ON l.apostador = u.nome 
+                    AND l.nome_prova = a.nome_prova
+                    AND l.data = substr(a.data_envio, 1, 10)
+                WHERE l.id IS NULL
+            """)
+            conn.commit()
+        except Exception as e:
+            st.error(f"Erro ao gerar logs de apostas importadas: {e}")
+            conn.rollback()
     conn.close()
     return f'Dados importados para a tabela {tabela} com sucesso.'
 
