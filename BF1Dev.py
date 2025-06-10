@@ -1197,6 +1197,28 @@ def importar_excel_para_tabela(db_path, tabela, arquivo_excel_bytes):
     conn.commit()
     df.to_sql(tabela, conn, if_exists='append', index=False)
     conn.commit()
+
+    # Geração automática de logs se a tabela importada for 'apostas'
+    if tabela == 'apostas':
+        try:
+            c.execute("""
+                INSERT INTO log_apostas (apostador, data, horario, aposta, nome_prova)
+                SELECT u.nome, 
+                       substr(a.data_envio, 1, 10) AS data,
+                       substr(a.data_envio, 12, 8) AS horario,
+                       a.pilotos || ' | ' || a.fichas AS aposta,
+                       a.nome_prova
+                FROM apostas a
+                JOIN usuarios u ON a.usuario_id = u.id
+                LEFT JOIN log_apostas l ON l.apostador = u.nome 
+                    AND l.nome_prova = a.nome_prova
+                    AND l.data = substr(a.data_envio, 1, 10)
+                WHERE l.id IS NULL
+            """)
+            conn.commit()
+        except Exception as e:
+            st.error(f"Erro ao gerar logs de apostas importadas: {e}")
+            conn.rollback()
     conn.close()
     return f'Dados importados para a tabela {tabela} com sucesso.'
 
