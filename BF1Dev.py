@@ -3,7 +3,7 @@ import sqlite3
 import bcrypt
 import jwt as pyjwt
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import ast
 import os
 import matplotlib.pyplot as plt
@@ -115,7 +115,7 @@ faltas INTEGER DEFAULT 0)''')
     usuario_master = st.secrets["usuario_master"]
     email_master = st.secrets["email_master"]
     senha_master = st.secrets["senha_master"]
-    senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt())
+    senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt()).decode('utf-8')
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
 VALUES (?, ?, ?, ?, ?, ?)''',
     (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
@@ -193,7 +193,7 @@ def get_resultados_df():
     conn.close()
     return df
 def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode('utf-8')
 def check_password(password, hashed):
     if isinstance(hashed, str):
         hashed = hashed.encode()  # converte para bytes
@@ -203,7 +203,7 @@ def generate_token(user_id, perfil, status):
         'user_id': user_id,
         'perfil': perfil,
         'status': status,
-        'exp': datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
+        'exp': datetime.now(UTC) + timedelta(minutes=JWT_EXP_MINUTES)
     }
     token = pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
     if isinstance(token, bytes):
