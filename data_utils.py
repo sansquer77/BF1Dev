@@ -175,15 +175,19 @@ def get_pit_stop_data():
 def get_distribuicao_fichas_participante(usuario_id):
     """Retorna a distribuição de fichas do participante logado"""
     conn = db_connect()
-    query = f'''
-        SELECT p.nome AS Piloto, SUM(a.fichas) AS Fichas
+    query = """
+        SELECT 
+            p.nome AS Piloto, 
+            SUM(a.fichas) AS Fichas
         FROM apostas a
-        JOIN pilotos p ON a.piloto = p.nome
-        WHERE a.usuario_id = {usuario_id}
+        JOIN pilotos p ON p.nome = a.pilotos
+        WHERE a.usuario_id = ?
         GROUP BY p.nome
         ORDER BY Fichas DESC
-    '''
-    return pd.read_sql(query, conn)
+    """
+    df = pd.read_sql(query, conn, params=(usuario_id,))
+    conn.close()
+    return df
 
 def get_distribuicao_fichas_consolidada():
     """Retorna a distribuição consolidada de todas as fichas"""
