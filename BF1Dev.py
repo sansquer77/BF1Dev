@@ -10,7 +10,6 @@ import os
 import matplotlib.pyplot as plt
 import dash
 
-DB_PATH = 'bolao_f1Dev.db'
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
 
