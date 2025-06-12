@@ -1,19 +1,19 @@
 import streamlit as st
 from db_utils import db_connect
-
-def main():
-    from data_utils import (
-        get_current_season,
-        get_current_driver_standings,
-        get_current_constructor_standings,
-        get_driver_points_by_race,
-        get_qualifying_vs_race_delta,
-        get_fastest_lap_times,
-        get_pit_stop_data,
-        get_distribuicao_fichas_participante,
-        get_distribuicao_fichas_consolidada,
-        get_apostas_11_colocado
+from data_utils import (
+    get_current_season,
+    get_current_driver_standings,
+    get_current_constructor_standings,
+    get_driver_points_by_race,
+    get_qualifying_vs_race_delta,
+    get_fastest_lap_times,
+    get_pit_stop_data,
+    get_distribuicao_fichas_participante,
+    get_distribuicao_fichas_consolidada,
+    get_apostas_11_colocado
     )
+def main():
+
         # Page Title with current season
         season = get_current_season()
         st.title(f"🏎️ Formula 1 {season} Dashboard")
