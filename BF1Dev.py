@@ -1182,8 +1182,6 @@ import pandas as pd
 import io
 import os
 
-DB_PATH = 'bolao_f1Dev.db'  # Ajuste para o caminho do seu banco
-
 def exportar_tabelas_para_excel(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
