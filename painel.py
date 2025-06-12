@@ -6,7 +6,7 @@ from data_utils import (
     get_driver_points_by_race,
     get_qualifying_vs_race_delta,
     get_fastest_lap_times,
-    get_pit_stop_data
+    get_pit_stop_data,
     get_distribuicao_fichas_participante,
     get_distribuicao_fichas_consolidada,
     get_apostas_11_colocado
