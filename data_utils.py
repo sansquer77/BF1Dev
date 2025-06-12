@@ -1,5 +1,6 @@
 import requests
 import pandas as pd
+from BF1Dev import db_connect
 
 BASE_URL = "https://api.jolpi.ca/ergast/f1"
 
