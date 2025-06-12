@@ -192,26 +192,35 @@ def get_distribuicao_fichas_participante(usuario_id):
 def get_distribuicao_fichas_consolidada():
     """Retorna a distribuição consolidada de todas as fichas"""
     conn = db_connect()
-    query = '''
-        SELECT p.nome AS Piloto, 
-               SUM(a.fichas) AS "Total Fichas",
-               SUM(a.fichas)*1.0/(SELECT SUM(fichas) FROM apostas) AS "% do Total"
+    query = """
+        SELECT 
+            p.nome AS Piloto, 
+            SUM(a.fichas) AS Total_Fichas
         FROM apostas a
-        JOIN pilotos p ON a.piloto = p.nome
+        JOIN pilotos p ON p.nome = a.pilotos
         GROUP BY p.nome
-        ORDER BY "Total Fichas" DESC
-    '''
-    return pd.read_sql(query, conn)
+        ORDER BY Total_Fichas DESC
+    """
+    df = pd.read_sql(query, conn)
+    # Calcula o percentual do total
+    total = df['Total_Fichas'].sum()
+    df['% do Total'] = df['Total_Fichas'] / total
+    conn.close()
+    return df
 
 def get_apostas_11_colocado():
     """Retorna a distribuição das apostas no 11º colocado"""
     conn = db_connect()
-    query = '''
-        SELECT piloto_11 AS Piloto, 
-               COUNT(*) AS "Total Apostas",
-               COUNT(*)*1.0/(SELECT COUNT(*) FROM apostas) AS "% das Apostas"
+    query = """
+        SELECT 
+            piloto_11 AS Piloto, 
+            COUNT(*) AS Total_Apostas
         FROM apostas
         GROUP BY piloto_11
-        ORDER BY "Total Apostas" DESC
-    '''
-    return pd.read_sql(query, conn)
+        ORDER BY Total_Apostas DESC
+    """
+    df = pd.read_sql(query, conn)
+    total = df['Total_Apostas'].sum()
+    df['% das Apostas'] = df['Total_Apostas'] / total
+    conn.close()
+    return df
