@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, UTC
 import ast
 import os
 import matplotlib.pyplot as plt
-import dashboard
+import paniel
 
 DB_PATH = 'bolao_f1Dev.db'
 JWT_SECRET = st.secrets["JWT_SECRET"]
