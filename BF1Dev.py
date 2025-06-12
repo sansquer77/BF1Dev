@@ -420,7 +420,14 @@ if st.session_state['pagina'] == "Login":
             if st.button("Criar usuário"):
                 st.session_state['criar_usuario'] = True
         with col4:
-            <a href="https://www.digitalocean.com/?refcode=7a57329868da&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge"><img src="https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg" alt="DigitalOcean Referral Badge" /></a>
+            st.markdown(
+                """
+                <a href="https://www.digitalocean.com/?refcode=7a57329868da&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge" target="_blank">
+                    <img src="https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg" alt="DigitalOcean Referral Badge" style="width:160px;" />
+                </a>
+                """,
+                unsafe_allow_html=True
+            )
             
     elif st.session_state['esqueceu_senha']:
         st.subheader("Redefinir senha")
