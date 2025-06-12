@@ -178,9 +178,7 @@ def main():
         """Retorna a distribuição de fichas do participante logado"""
         conn = db_connect()
         query = """
-            SELECT 
-                p.nome AS Piloto, 
-                SUM(a.fichas) AS Fichas
+            SELECT p.nome AS Piloto, SUM(a.fichas) AS Fichas
             FROM apostas a
             JOIN pilotos p ON p.nome = a.pilotos
             WHERE a.usuario_id = ?
