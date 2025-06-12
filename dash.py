@@ -14,7 +14,6 @@ def main():
         get_distribuicao_fichas_consolidada,
         get_apostas_11_colocado
     )
-    def main():    
         # Page Title with current season
         season = get_current_season()
         st.title(f"🏎️ Formula 1 {season} Dashboard")
