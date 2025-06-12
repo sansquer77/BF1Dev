@@ -5,7 +5,6 @@ from db_utils import db_connect
 BASE_URL = "https://api.jolpi.ca/ergast/f1"
 
 def main():
-    st.title("data_utils")
     # 1. Get current F1 season
     def get_current_season():
         url = f"{BASE_URL}/current.json"
