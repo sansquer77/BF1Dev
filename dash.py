@@ -1,4 +1,6 @@
 import streamlit as st
+from db_utils import db_connect
+
 def main():
     st.title("Dashboard")
     from data_utils import (
