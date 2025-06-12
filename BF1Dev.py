@@ -273,12 +273,13 @@ def registrar_log_aposta(apostador, aposta, nome_prova):
     conn.close()
 
 def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
+    import ast
     pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
-    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]  # Para Sprint
+    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
+    bonus_11 = 25  # ajuste se necessário
     resultados = {}
     for _, row in resultados_df.iterrows():
         resultados[row['prova_id']] = ast.literal_eval(row['posicoes'])
-    # Cria um dicionário de tipos das provas
     tipos_prova = dict(zip(provas_df['id'], provas_df['tipo'] if 'tipo' in provas_df.columns else ['Normal']*len(provas_df)))
     pontos = []
     for _, aposta in apostas_df.iterrows():
@@ -290,28 +291,28 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
         pilotos = aposta['pilotos'].split(",")
         fichas = list(map(int, aposta['fichas'].split(",")))
         piloto_11 = aposta['piloto_11']
-        automatica = int(aposta['automatica'])
+        automatica = int(aposta.get('automatica', 0))
         pt = 0
         tipo = tipos_prova.get(prova_id, 'Normal')
         if tipo == 'Sprint':
-            # Pontuam só os 8 primeiros (8 para 1º, 7 para 2º, ..., 1 para 8º)
-            for p, f in zip(pilotos, fichas):
-                for pos, nome in res.items():
-                    pos_int = int(pos)
-                    if pos_int <= 8 and nome == p:
-                        pt += f * pontos_sprint[pos_int-1]
-            # Bônus para 11º colocado na Sprint também
-            if '11' in res and res['11'] == piloto_11:
-                pt += 25
+            pontos_lista = pontos_sprint
+            n_pos = 8
         else:
-            # Prova normal
-            for p, f in zip(pilotos, fichas):
-                for pos, nome in res.items():
-                    pos_int = int(pos)
-                    if pos_int <= 10 and nome == p:
-                        pt += f * pontos_f1[pos_int-1]
-            if '11' in res and res['11'] == piloto_11:
-                pt += 25
+            pontos_lista = pontos_f1
+            n_pos = 10
+
+        # Inverte o dicionário para buscar a posição real do piloto apostado
+        piloto_para_pos = {v: int(k) for k, v in res.items()}
+        for i in range(len(pilotos)):
+            p = pilotos[i]
+            f = fichas[i] if i < len(fichas) else 0
+            pos_real = piloto_para_pos.get(p, None)
+            if pos_real is not None and 1 <= pos_real <= n_pos:
+                pt += f * pontos_lista[pos_real - 1]
+        # Bônus para 11º colocado
+        piloto_11_real = res.get(11, "")
+        if piloto_11 == piloto_11_real:
+            pt += bonus_11
         if automatica >= 2:
             pt = int(pt * 0.75)
         pontos.append(pt)
