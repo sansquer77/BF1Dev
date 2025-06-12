@@ -169,3 +169,44 @@ def get_pit_stop_data():
     } for s in stops]
 
     return pd.DataFrame(result)
+
+# 8. Análise das apostas
+def get_distribuicao_fichas_participante(usuario_id):
+    """Retorna a distribuição de fichas do participante logado"""
+    conn = db_connect()
+    query = f'''
+        SELECT p.nome AS Piloto, SUM(a.fichas) AS Fichas
+        FROM apostas a
+        JOIN pilotos p ON a.piloto = p.nome
+        WHERE a.usuario_id = {usuario_id}
+        GROUP BY p.nome
+        ORDER BY Fichas DESC
+    '''
+    return pd.read_sql(query, conn)
+
+def get_distribuicao_fichas_consolidada():
+    """Retorna a distribuição consolidada de todas as fichas"""
+    conn = db_connect()
+    query = '''
+        SELECT p.nome AS Piloto, 
+               SUM(a.fichas) AS "Total Fichas",
+               SUM(a.fichas)*1.0/(SELECT SUM(fichas) FROM apostas) AS "% do Total"
+        FROM apostas a
+        JOIN pilotos p ON a.piloto = p.nome
+        GROUP BY p.nome
+        ORDER BY "Total Fichas" DESC
+    '''
+    return pd.read_sql(query, conn)
+
+def get_apostas_11_colocado():
+    """Retorna a distribuição das apostas no 11º colocado"""
+    conn = db_connect()
+    query = '''
+        SELECT piloto_11 AS Piloto, 
+               COUNT(*) AS "Total Apostas",
+               COUNT(*)*1.0/(SELECT COUNT(*) FROM apostas) AS "% das Apostas"
+        FROM apostas
+        GROUP BY piloto_11
+        ORDER BY "Total Apostas" DESC
+    '''
+    return pd.read_sql(query, conn)
