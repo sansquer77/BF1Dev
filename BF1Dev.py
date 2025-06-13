@@ -9,8 +9,8 @@ import os
 import matplotlib.pyplot as plt
 import dash
 from db_utils import db_connect
-from championship_bets import main
-from championship_results import main
+from championship_bets import main as championship_bets_main
+from championship_results import main as championship_results_main
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
@@ -1324,11 +1324,11 @@ if st.session_state['pagina'] == "Dash F1":
 
 # --- Apostas Campeonato ---
 if st.session_state['pagina'] == "Apostas Campeonato":
-    championship_bets.main()
+    championship_bets_main()
 
 # --- Resultado Campeonato ---
 if st.session_state['pagina'] == "Resultado Campeonato":
-    championship_results.main()
+    championship_results_main()
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
