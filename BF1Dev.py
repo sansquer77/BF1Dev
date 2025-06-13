@@ -1278,7 +1278,7 @@ def bf1():
     
     # --- Dash F1 ---
     if st.session_state['pagina'] == "Dash F1":
-        dash.main()
+        dash.painel()
     
     # --- Logoff ---
     if st.session_state['pagina'] == "Logout" and st.session_state['token']:
