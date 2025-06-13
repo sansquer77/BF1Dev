@@ -1,5 +1,5 @@
 from db_utils import championship_db_connect
-from datetime import datetime
+from datetime import datetime, timedelta, UTC
 
 def init_championship_db():
     """Cria as tabelas necessárias para apostas e resultado do campeonato."""
@@ -38,7 +38,7 @@ def init_championship_db():
 def save_championship_bet(user_id, champion, vice, team):
     """Salva ou atualiza a aposta do usuário para o campeonato e registra no log."""
     init_championship_db()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     conn = championship_db_connect()
     cursor = conn.cursor()
     # Atualiza aposta válida (última)
