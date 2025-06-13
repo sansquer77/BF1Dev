@@ -1,3 +1,4 @@
+print("Início do dash.py")
 def main():
     import streamlit as st
     from data_utils import (
