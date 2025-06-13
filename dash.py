@@ -1,4 +1,4 @@
-def main():
+def painel():
     import streamlit as st
     st.title("Dashboard")
     from db_utils import db_connect
