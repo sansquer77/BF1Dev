@@ -1170,6 +1170,7 @@ if st.session_state['pagina'] == "Regulamento":
 
 # --- Backup ---
 import io
+DB_PATH = 'bolao_f1Dev.db'  # Ajuste para o caminho do seu banco
 
 def exportar_tabelas_para_excel(db_path):
     conn = sqlite3.connect(db_path)
