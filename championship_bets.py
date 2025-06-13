@@ -1,5 +1,5 @@
 import streamlit as st
-from championship_utils import save_championship_bet, get_championship_bet
+from championship_utils import save_championship_bet, get_championship_bet, get_championship_bet_log
 
 def main():
     st.title("Apostas no Campeonato")
@@ -31,3 +31,13 @@ def main():
         if st.form_submit_button("Salvar Aposta"):
             save_championship_bet(user_id, campeao, vice, equipe)
             st.success("Aposta registrada!")
+
+    # Log de apostas
+    st.subheader("Histórico de Apostas no Campeonato")
+    log = get_championship_bet_log(user_id)
+    if log:
+        df_log = pd.DataFrame(log, columns=["Campeão", "Vice", "Equipe", "Data/Hora"])
+        st.dataframe(df_log)
+    else:
+        st.info("Nenhuma aposta registrada ainda.")
+
