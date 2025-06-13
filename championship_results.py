@@ -7,8 +7,8 @@ def main():
         return
 
     st.title("Definir Resultado Oficial")
-    pilotos = ["Max Verstappen", "Lewis Hamilton", ...]  
-    equipes = ["Red Bull", "Mercedes", ...]  
+    pilotos = ["Max Verstappen", "Lewis Hamilton", "Leclerc"]  
+    equipes = ["Red Bull", "Mercedes", "Ferrari"]  
 
     with st.form("final_results_form"):
         campeao = st.selectbox("Campeão", pilotos)
