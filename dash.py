@@ -1,6 +1,5 @@
 def painel():
     import streamlit as st
-    from db_utils import db_connect
     from data_utils import (
         get_current_season,
         get_current_driver_standings,
