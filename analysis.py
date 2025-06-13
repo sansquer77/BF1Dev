@@ -11,7 +11,11 @@ def get_apostas_por_piloto():
     JOIN usuarios u ON a.usuario_id = u.id
     GROUP BY u.nome, a.piloto
     '''
-    return pd.read_sql(query, conn)
+    try:
+        df = pd.read_sql(query, conn)
+    except Exception:
+        df = pd.DataFrame()  # Retorna DataFrame vazio em caso de erro
+    return df
 
 def get_apostas_11_colocado():
     conn = db_connect()
@@ -22,14 +26,21 @@ def get_apostas_11_colocado():
     WHERE a.posicao = 11
     GROUP BY u.nome
     '''
-    return pd.read_sql(query, conn)
+    try:
+        df = pd.read_sql(query, conn)
+    except Exception:
+        df = pd.DataFrame()
+    return df
 
 def main():
     st.title("Análise Detalhada das Apostas")
     
-    # Dados
     apostas_pilotos = get_apostas_por_piloto()
     apostas_11 = get_apostas_11_colocado()
+    
+    if apostas_pilotos.empty and apostas_11.empty:
+        st.info("Sem apostas até o momento.")
+        return
     
     # Tabs para organização
     tab1, tab2, tab3, tab4 = st.tabs([
