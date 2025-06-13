@@ -9,6 +9,8 @@ import os
 import matplotlib.pyplot as plt
 import dash
 from db_utils import db_connect
+from championship_bets import main as championship_bets_main
+from championship_results import main as championship_results_main
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
@@ -349,6 +351,8 @@ def menu_master():
         "Gestão do campeonato",
         "Gestão de Apostas",
         "Atualização de resultados",
+        "Apostas Campeonato",
+        "Resultado Campeonato",
         "Log de Apostas",
         "Classificação",
         "Dash F1",
@@ -361,6 +365,7 @@ def menu_admin():
         "Painel do Participante",
         "Gestão de Apostas",
         "Atualização de resultados",
+        "Apostas Campeonato",
         "Log de Apostas",
         "Classificação",
         "Dash F1",
@@ -370,6 +375,7 @@ def menu_admin():
 def menu_participante():
     return [
         "Painel do Participante",
+        "Apostas Campeonato",
         "Log de Apostas",
         "Classificação",
         "Dash F1",
@@ -1315,6 +1321,14 @@ if (
 # --- Dash F1 ---
 if st.session_state['pagina'] == "Dash F1":
     dash.main()
+
+# --- Apostas Campeonato ---
+if st.session_state['pagina'] == "Apostas Campeonato":
+    championship_bets.main()
+
+# --- Resultado Campeonato ---
+if st.session_state['pagina'] == "Resultado Campeonato":
+    championship_results.main()
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
