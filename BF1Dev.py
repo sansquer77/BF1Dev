@@ -100,9 +100,6 @@ def bf1():
     """
     
     # --- BANCO E FUNÇÕES DE DADOS ---
-    def db_connect():
-        return sqlite3.connect(DB_PATH, check_same_thread=False)
-    
     def init_db():
         conn = db_connect()
         c = conn.cursor()
