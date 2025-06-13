@@ -413,6 +413,7 @@ if st.session_state['pagina'] == "Login":
                 if user:
                     token = generate_token(user[0], user[4], user[5])
                     st.session_state['token'] = token
+                    st.session_state['user_id'] = user[0]  # user[0] deve ser o ID do usuário
                     st.session_state['pagina'] = "Painel do Participante"
                     st.success(f"Bem-vindo, {user[1]}!")
                 else:
