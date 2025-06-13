@@ -1,6 +1,5 @@
 def painel():
     import streamlit as st
-    st.title("Dashboard")
     from db_utils import db_connect
     from data_utils import (
         get_current_season,
