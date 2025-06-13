@@ -8,8 +8,8 @@ import ast
 import os
 import matplotlib.pyplot as plt
 import dash
+from db_utils import db_connect
 
-DB_PATH = 'bolao_f1Dev.db'
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
 
@@ -98,9 +98,6 @@ A premiação será realizada em um Happy-Hour a ser agendado entre os participa
 """
 
 # --- BANCO E FUNÇÕES DE DADOS ---
-def db_connect():
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
-
 def init_db():
     conn = db_connect()
     c = conn.cursor()
@@ -732,9 +729,6 @@ if st.session_state['pagina'] == "Cadastro de novo participante" and st.session_
     else:
         st.warning("Acesso restrito ao usuário master.")
 
-import pandas as pd
-from datetime import datetime
-
 # --- GESTÃO DO CAMPEONATO (Pilotos e Provas) ---
 if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['token']:
     payload = get_payload()
@@ -1175,13 +1169,7 @@ if st.session_state['pagina'] == "Regulamento":
     st.markdown(REGULAMENTO.replace('\n', '  \n'))
 
 # --- Backup ---
-import streamlit as st
-import sqlite3
-import pandas as pd
 import io
-import os
-
-DB_PATH = 'bolao_f1Dev.db'  # Ajuste para o caminho do seu banco
 
 def exportar_tabelas_para_excel(db_path):
     conn = sqlite3.connect(db_path)
