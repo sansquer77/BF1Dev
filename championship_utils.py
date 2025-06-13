@@ -1,6 +1,5 @@
-# championship_utils.py
-
-from db_utils import championship_db_connect  # Certifique-se de que esta função está em db_utils.py
+from db_utils import championship_db_connect
+from datetime import datetime
 
 def init_championship_db():
     """Cria as tabelas necessárias para apostas e resultado do campeonato."""
@@ -11,7 +10,18 @@ def init_championship_db():
             user_id INTEGER PRIMARY KEY,
             champion TEXT NOT NULL,
             vice TEXT NOT NULL,
-            team TEXT NOT NULL
+            team TEXT NOT NULL,
+            bet_time TEXT NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS championship_bets_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            champion TEXT NOT NULL,
+            vice TEXT NOT NULL,
+            team TEXT NOT NULL,
+            bet_time TEXT NOT NULL
         )
     ''')
     cursor.execute('''
@@ -26,30 +36,52 @@ def init_championship_db():
     conn.close()
 
 def save_championship_bet(user_id, champion, vice, team):
-    """Salva ou atualiza a aposta do usuário para o campeonato."""
+    """Salva ou atualiza a aposta do usuário para o campeonato e registra no log."""
     init_championship_db()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = championship_db_connect()
     cursor = conn.cursor()
+    # Atualiza aposta válida (última)
     cursor.execute('''
-        INSERT OR REPLACE INTO championship_bets (user_id, champion, vice, team)
-        VALUES (?, ?, ?, ?)
-    ''', (user_id, champion, vice, team))
+        INSERT OR REPLACE INTO championship_bets (user_id, champion, vice, team, bet_time)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (user_id, champion, vice, team, now))
+    # Registra log de apostas
+    cursor.execute('''
+        INSERT INTO championship_bets_log (user_id, champion, vice, team, bet_time)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (user_id, champion, vice, team, now))
     conn.commit()
     conn.close()
 
 def get_championship_bet(user_id):
-    """Retorna a aposta do usuário no campeonato."""
+    """Retorna a última aposta válida do usuário no campeonato."""
     init_championship_db()
     conn = championship_db_connect()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT champion, vice, team FROM championship_bets WHERE user_id = ?
+        SELECT champion, vice, team, bet_time FROM championship_bets WHERE user_id = ?
     ''', (user_id,))
     result = cursor.fetchone()
     conn.close()
     if result:
-        return {"champion": result[0], "vice": result[1], "team": result[2]}
+        return {"champion": result[0], "vice": result[1], "team": result[2], "bet_time": result[3]}
     return None
+
+def get_championship_bet_log(user_id):
+    """Retorna o histórico de apostas do usuário no campeonato (mais recente primeiro)."""
+    init_championship_db()
+    conn = championship_db_connect()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT champion, vice, team, bet_time
+        FROM championship_bets_log
+        WHERE user_id = ?
+        ORDER BY bet_time DESC
+    ''', (user_id,))
+    result = cursor.fetchall()
+    conn.close()
+    return result
 
 def save_final_results(champion, vice, team, season=2025):
     """Salva ou atualiza o resultado oficial do campeonato."""
