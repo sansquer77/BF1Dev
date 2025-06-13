@@ -5,7 +5,7 @@ def dados():
     
     BASE_URL = "https://api.jolpi.ca/ergast/f1"
     
-        # 1. Get current F1 season
+    # 1. Get current F1 season
         def get_current_season():
             url = f"{BASE_URL}/current.json"
             response = requests.get(url)
@@ -14,7 +14,7 @@ def dados():
             season = data['MRData']['RaceTable']['season']
             return season
         
-        # 2. Get current driver standings
+    # 2. Get current driver standings
         def get_current_driver_standings():
             url = f"{BASE_URL}/current/driverStandings.json"
             response = requests.get(url)
