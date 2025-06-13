@@ -99,7 +99,8 @@ def bf1():
     
     A premiação será realizada em um Happy-Hour a ser agendado entre os participantes em data e local a serem definidos posteriormente ao final do campeonato.
     """
-    
+
+    st.write("App carregado2!")
     # --- BANCO E FUNÇÕES DE DADOS ---
     def init_db():
         conn = db_connect()
@@ -334,7 +335,8 @@ def bf1():
         num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & (apostas_df['automatica'] >= 1)])
         salvar_aposta(usuario_id, prova_id, pilotos_ant, fichas_ant, piloto_11_ant, nome_prova, automatica=num_auto+1)
         return True, "Aposta automática gerada!"
-    
+
+    st.write("App carregado3!")
     # --- INICIALIZAÇÃO E MENU ---
     st.set_page_config(page_title="Bolão F1 2025", layout="wide")
     init_db()
