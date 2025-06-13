@@ -33,11 +33,13 @@ def main():
             st.success("Aposta registrada!")
 
     # Log de apostas
-    st.subheader("Histórico de Apostas no Campeonato")
     log = get_championship_bet_log(user_id)
-    if log:
+
+    # Garante que log é uma lista e que cada entrada tem 4 elementos
+    if log and all(len(entry) == 4 for entry in log):
         df_log = pd.DataFrame(log, columns=["Campeão", "Vice", "Equipe", "Data/Hora"])
         st.dataframe(df_log)
+    elif log:
+        st.warning("Há apostas registradas, mas alguns registros estão inconsistentes.")
     else:
         st.info("Nenhuma aposta registrada ainda.")
-
