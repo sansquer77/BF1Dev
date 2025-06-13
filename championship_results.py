@@ -2,7 +2,7 @@ import streamlit as st
 from championship_utils import save_final_results
 
 def main():
-    if st.session_state.get("user_role") != "Master":
+    if st.session_state.get("user_role") != "master":
         st.error("Acesso restrito ao Master.")
         return
 
