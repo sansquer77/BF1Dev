@@ -9,7 +9,6 @@ import ast
 import os
 import matplotlib.pyplot as plt
 from db_utils import db_connect
-from dash import painel
 
 def bf1():
     JWT_SECRET = st.secrets["JWT_SECRET"]
