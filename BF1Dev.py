@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from db_utils import db_connect
 from dash import painel
 
+st.write("App carregado!")
 def bf1():
     JWT_SECRET = st.secrets["JWT_SECRET"]
     JWT_EXP_MINUTES = 120
