@@ -10,8 +10,8 @@ def main():
         return
 
     # Carregar pilotos e equipes (ajuste conforme seu sistema)
-    pilotos = ["Max Verstappen", "Lewis Hamilton", ...]  
-    equipes = ["Red Bull", "Mercedes", ...]  
+    pilotos = ["Max Verstappen", "Geroge Russell", "Leclerc"]  
+    equipes = ["Red Bull", "Mercedes", "Ferrari"]  
 
     # Carregar apostas existentes
     campeao_apostado, vice_apostado, equipe_apostada = get_championship_bet(user_id)
