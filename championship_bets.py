@@ -32,14 +32,19 @@ def main():
             save_championship_bet(user_id, campeao, vice, equipe)
             st.success("Aposta registrada!")
 
-    # Log de apostas
+   # Log de apostas
     log = get_championship_bet_log(user_id)
-
-    # Garante que log é uma lista e que cada entrada tem 4 elementos
-    if log and all(len(entry) == 4 for entry in log):
-        df_log = pd.DataFrame(log, columns=["Campeão", "Vice", "Equipe", "Data/Hora"])
-        st.dataframe(df_log)
-    elif log:
-        st.warning("Há apostas registradas, mas alguns registros estão inconsistentes.")
-    else:
-        st.info("Nenhuma aposta registrada ainda.")
+    
+    try:
+        # Verifica se há dados válidos
+        if log and all(len(entry) == 4 for entry in log):
+            df_log = pd.DataFrame(log, columns=["Campeão", "Vice", "Equipe", "Data/Hora"])
+            st.dataframe(df_log)
+        elif log:
+            st.warning("⚠️ Há apostas registradas, mas alguns registros estão inconsistentes.")
+        else:
+            st.info("ℹ️ Nenhuma aposta registrada ainda.")
+            
+    except Exception as e:
+        st.error(f"Erro ao carregar histórico: {str(e)}")
+        st.write("Conteúdo do log para depuração:", log)  # Apenas para debug
