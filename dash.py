@@ -1,4 +1,4 @@
-def painel():
+def main():
     import streamlit as st
     from data_utils import (
         get_current_season,
