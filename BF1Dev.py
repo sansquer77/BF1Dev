@@ -11,6 +11,7 @@ import dash
 from db_utils import db_connect
 from championship_bets import main as championship_bets_main
 from championship_results import main as championship_results_main
+from analysis import main as analysis_main
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
@@ -350,6 +351,7 @@ def menu_master():
         "Cadastro de novo participante",
         "Gestão do campeonato",
         "Gestão de Apostas",
+        "Análise de Apostas",
         "Atualização de resultados",
         "Apostas Campeonato",
         "Resultado Campeonato",
@@ -364,6 +366,7 @@ def menu_admin():
     return [
         "Painel do Participante",
         "Gestão de Apostas",
+        "Análise de Apostas",
         "Atualização de resultados",
         "Apostas Campeonato",
         "Log de Apostas",
@@ -376,6 +379,7 @@ def menu_participante():
     return [
         "Painel do Participante",
         "Apostas Campeonato",
+        "Análise de Apostas",
         "Log de Apostas",
         "Classificação",
         "Dash F1",
@@ -1332,6 +1336,10 @@ if st.session_state['pagina'] == "Apostas Campeonato":
 # --- Resultado Campeonato ---
 if st.session_state['pagina'] == "Resultado Campeonato":
     championship_results_main()
+
+# --- Analises de Apostas ---
+if st.session_state['pagina'] == "Análise de Apostas":
+    analysis_main()
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
