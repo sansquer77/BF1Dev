@@ -1,14 +1,24 @@
 import streamlit as st
 st.set_page_config(page_title="Bolão F1 2025", layout="wide")
+st.write("App carregado streamlit!")
 import sqlite3
+st.write("App carregado SQL!")
 import bcrypt
+st.write("App carregado BCrypt!")
 import jwt as pyjwt
+st.write("App carregado Pyjwt!")
 import pandas as pd
+st.write("App carregado Pandas!")
 from datetime import datetime, timedelta, UTC
+st.write("App carregado datetime!")
 import ast
+st.write("App carregado ast!")
 import os
+st.write("App carregado OS!")
 import matplotlib.pyplot as plt
+st.write("App carregado matplot!")
 from db_utils import db_connect
+st.write("App carregado db_utils!")
 # from dash import main
 
 st.write("App carregado!")
