@@ -14,7 +14,13 @@ def main():
     equipes = ["Red Bull", "Mercedes", "Ferrari"]  
 
     # Carregar apostas existentes
-    campeao_apostado, vice_apostado, equipe_apostada = get_championship_bet(user_id)
+    aposta = get_championship_bet(user_id)
+    if aposta:
+        campeao_apostado = aposta.get('champion')
+        vice_apostado = aposta.get('vice')
+        equipe_apostada = aposta.get('team')
+    else:
+        campeao_apostado = vice_apostado = equipe_apostada = None
 
     # Formulário de apostas
     with st.form("championship_bet_form"):
