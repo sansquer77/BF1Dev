@@ -9,7 +9,7 @@ import ast
 import os
 import matplotlib.pyplot as plt
 from db_utils import db_connect
-from dash import painel
+from dash import main
 
 st.write("App carregado!")
 def bf1():
