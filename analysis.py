@@ -42,9 +42,9 @@ def main():
     st.title("Análise Detalhada das Apostas")
     
     apostas_pilotos = get_apostas_por_piloto()
-    apostas_11 = get_apostas_11_colocado()
+    df_11 = get_distribuicao_piloto_11()  # Corrigido: usa a nova função
     
-    if apostas_pilotos.empty and apostas_11.empty:
+    if apostas_pilotos.empty and df_11.empty:
         st.info("Sem apostas até o momento.")
         return
     
@@ -65,21 +65,20 @@ def main():
                         title=f"Apostas de {participante}")
             st.plotly_chart(fig, use_container_width=True)
     
-    with tab2:
-    st.subheader("Distribuição de Pilotos Apostados no 11º Colocado - Individual")
-    df_11 = get_distribuicao_piloto_11()
-    if not df_11.empty:
-        participantes_11 = df_11['participante'].unique()
-        for participante in participantes_11:
-            df_part = df_11[df_11['participante'] == participante]
-            contagem = df_part['piloto_11'].value_counts().reset_index()
-            contagem.columns = ['Piloto', 'Total']
-            fig = px.pie(contagem, names='Piloto', values='Total',
-                         title=f"Pilotos apostados como 11º por {participante}")
-            st.plotly_chart(fig, use_container_width=True)
-            st.dataframe(contagem)
-    else:
-        st.info("Nenhuma aposta registrada para o 11º colocado.")
+    with tab2:  # CORREÇÃO DE INDENTAÇÃO
+        st.subheader("Distribuição de Pilotos Apostados no 11º Colocado - Individual")
+        if not df_11.empty:
+            participantes_11 = df_11['participante'].unique()
+            for participante in participantes_11:
+                df_part = df_11[df_11['participante'] == participante]
+                contagem = df_part['piloto_11'].value_counts().reset_index()
+                contagem.columns = ['Piloto', 'Total']
+                fig = px.pie(contagem, names='Piloto', values='Total',
+                            title=f"Pilotos apostados como 11º por {participante}")
+                st.plotly_chart(fig, use_container_width=True)
+                st.dataframe(contagem)
+        else:
+            st.info("Nenhuma aposta registrada para o 11º colocado.")
     
     with tab3:
         st.subheader("Consolidado de Apostas por Piloto")
@@ -89,16 +88,14 @@ def main():
         st.plotly_chart(fig, use_container_width=True)
         st.dataframe(consolidado_pilotos, use_container_width=True)
     
-    with tab4:
-    st.subheader("Consolidado de Pilotos Apostados no 11º Colocado")
-    df_11 = get_distribuicao_piloto_11()
-    if not df_11.empty:
-        consolidado_11 = df_11['piloto_11'].value_counts().reset_index()
-        consolidado_11.columns = ['Piloto', 'Total']
-        fig = px.pie(consolidado_11, names='Piloto', values='Total',
-                     title="Distribuição Geral de Pilotos apostados como 11º")
-        st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(consolidado_11)
-    else:
-        st.info("Nenhuma aposta registrada para o 11º colocado.")
-
+    with tab4:  # CORREÇÃO DE INDENTAÇÃO
+        st.subheader("Consolidado de Pilotos Apostados no 11º Colocado")
+        if not df_11.empty:
+            consolidado_11 = df_11['piloto_11'].value_counts().reset_index()
+            consolidado_11.columns = ['Piloto', 'Total']
+            fig = px.pie(consolidado_11, names='Piloto', values='Total',
+                        title="Distribuição Geral de Pilotos apostados como 11º")
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(consolidado_11)
+        else:
+            st.info("Nenhuma aposta registrada para o 11º colocado.")
