@@ -1230,7 +1230,58 @@ if st.session_state['pagina'] == "Regulamento":
 
 # --- Backup ---
 import io
-DB_PATH = 'bolao_f1Dev.db'  # Ajuste para o caminho do seu banco
+import sqlite3
+import pandas as pd
+import streamlit as st
+import os
+
+DB_PATH = 'bolao_f1Dev.db'
+CHAMPIONSHIP_DB_PATH = 'championship.db'
+
+def exportar_apostas_campeonato_excel():
+    # Conecta ao banco do campeonato e anexa o banco principal
+    conn = sqlite3.connect(CHAMPIONSHIP_DB_PATH)
+    conn.execute(f"ATTACH DATABASE '{DB_PATH}' AS main_db")
+    query = '''
+    SELECT 
+        u.nome AS participante,
+        c.champion AS campeao,
+        c.vice AS vice_campeao,
+        c.team AS equipe_campea,
+        c.bet_time AS data_aposta
+    FROM championship_bets c
+    JOIN main_db.usuarios u ON c.user_id = u.id
+    '''
+    df = pd.read_sql(query, conn)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Apostas_Campeonato')
+    conn.close()
+    return output.getvalue()
+
+def importar_apostas_campeonato_excel(arquivo_excel_bytes):
+    conn_championship = sqlite3.connect(CHAMPIONSHIP_DB_PATH)
+    conn_main = sqlite3.connect(DB_PATH)
+    df = pd.read_excel(io.BytesIO(arquivo_excel_bytes))
+    colunas_necessarias = ['participante', 'campeao', 'vice_campeao', 'equipe_campea']
+    if not all(col in df.columns for col in colunas_necessarias):
+        raise ValueError("Arquivo Excel não possui colunas obrigatórias!")
+    for _, row in df.iterrows():
+        cursor_main = conn_main.cursor()
+        cursor_main.execute('SELECT id FROM usuarios WHERE nome = ?', (row['participante'],))
+        user_id = cursor_main.fetchone()
+        if not user_id:
+            st.warning(f"Participante '{row['participante']}' não encontrado. Aposta ignorada.")
+            continue
+        cursor_championship = conn_championship.cursor()
+        cursor_championship.execute('''
+            INSERT OR REPLACE INTO championship_bets (user_id, champion, vice, team, bet_time)
+            VALUES (?, ?, ?, ?, COALESCE(?, datetime('now')))
+        ''', (user_id[0], row['campeao'], row['vice_campeao'], row['equipe_campea'], row.get('data_aposta')))
+    conn_championship.commit()
+    conn_championship.close()
+    conn_main.close()
+    return "Apostas do campeonato importadas com sucesso!"
 
 def exportar_tabelas_para_excel(db_path):
     conn = sqlite3.connect(db_path)
@@ -1255,7 +1306,6 @@ def importar_excel_para_tabela(db_path, tabela, arquivo_excel_bytes):
     conn.commit()
     df.to_sql(tabela, conn, if_exists='append', index=False)
     conn.commit()
-
     # Geração automática de logs se a tabela importada for 'apostas'
     if tabela == 'apostas':
         try:
@@ -1283,12 +1333,37 @@ def importar_excel_para_tabela(db_path, tabela, arquivo_excel_bytes):
 def modulo_exportar_importar_excel():
     st.title("Exportação e Importação Excel (Master)")
 
+    # Seção específica para apostas do campeonato
+    st.header("🎯 Apostas do Campeonato")
+    # Exportação
+    st.subheader("Exportar Apostas do Campeonato")
+    if st.button("Gerar Excel das Apostas"):
+        try:
+            excel_data = exportar_apostas_campeonato_excel()
+            st.download_button(
+                label="⬇️ Download Apostas Campeonato",
+                data=excel_data,
+                file_name="apostas_campeonato.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        except Exception as e:
+            st.error(f"Erro na exportação: {str(e)}")
+    # Importação 
+    st.subheader("Importar Apostas do Campeonato")
+    arquivo = st.file_uploader("Selecione o arquivo Excel", type=["xlsx"], key="campeonato_importer")
+    if arquivo:
+        if st.button("Importar Apostas", key="import_campeonato"):
+            try:
+                msg = importar_apostas_campeonato_excel(arquivo.read())
+                st.success(msg)
+            except Exception as e:
+                st.error(f"Erro na importação: {str(e)}")
+
+    # Exportação/Importação genérica do banco principal
+    st.header("Exportar tabelas para Excel (Banco Principal)")
     if not os.path.exists(DB_PATH):
         st.error("Banco de dados não encontrado.")
         return
-
-    # Exportação
-    st.header("Exportar tabelas para Excel")
     arquivos_excel = exportar_tabelas_para_excel(DB_PATH)
     if not arquivos_excel:
         st.info('Nenhuma tabela encontrada no banco para exportar.')
@@ -1300,9 +1375,7 @@ def modulo_exportar_importar_excel():
                 file_name=f'{tabela}.xlsx',
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-
-    # Importação
-    st.header("Importar dados de Excel para uma tabela")
+    st.header("Importar dados de Excel para uma tabela (Banco Principal)")
     tabelas = list(arquivos_excel.keys())
     if tabelas:
         tabela_escolhida = st.selectbox("Tabela para importar", tabelas)
@@ -1316,6 +1389,7 @@ def modulo_exportar_importar_excel():
                     st.error(f"Erro ao importar: {e}")
     else:
         st.info("Nenhuma tabela disponível para importação.")
+
 
 # --- INTEGRAÇÃO NO APP ---
 if (
