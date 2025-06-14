@@ -6,15 +6,21 @@ from db_utils import db_connect
 def get_apostas_por_piloto():
     conn = db_connect()
     query = '''
-    SELECT u.nome AS participante, a.piloto, COUNT(*) AS total_apostas 
+    SELECT u.nome AS participante, a.pilotos 
     FROM apostas a
     JOIN usuarios u ON a.usuario_id = u.id
-    GROUP BY u.nome, a.piloto
     '''
     try:
         df = pd.read_sql(query, conn)
-    except Exception:
-        df = pd.DataFrame()  # Retorna DataFrame vazio em caso de erro
+        if not df.empty and 'pilotos' in df.columns:
+            df['piloto'] = df['pilotos'].str.split(',')
+            df = df.explode('piloto')
+            df = df.groupby(['participante', 'piloto']).size().reset_index(name='total_apostas')
+        else:
+            df = pd.DataFrame()
+    except Exception as e:
+        st.error(f"Erro ao buscar apostas por piloto: {str(e)}")
+        df = pd.DataFrame()
     return df
 
 def get_apostas_11_colocado():
@@ -23,12 +29,13 @@ def get_apostas_11_colocado():
     SELECT u.nome AS participante, COUNT(*) AS total_apostas 
     FROM apostas a
     JOIN usuarios u ON a.usuario_id = u.id
-    WHERE a.posicao = 11
+    WHERE a.piloto_11 IS NOT NULL  -- Corrigido para piloto_11
     GROUP BY u.nome
     '''
     try:
         df = pd.read_sql(query, conn)
-    except Exception:
+    except Exception as e:
+        st.error(f"Erro ao buscar apostas no 11º: {str(e)}")
         df = pd.DataFrame()
     return df
 
@@ -85,3 +92,4 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Nenhuma aposta no 11º colocado registrada.")
+
