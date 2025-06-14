@@ -23,19 +23,18 @@ def get_apostas_por_piloto():
         df = pd.DataFrame()
     return df
 
-def get_apostas_11_colocado():
+def get_distribuicao_piloto_11():
     conn = db_connect()
     query = '''
-    SELECT u.nome AS participante, COUNT(*) AS total_apostas 
+    SELECT u.nome AS participante, a.piloto_11 AS piloto_11
     FROM apostas a
     JOIN usuarios u ON a.usuario_id = u.id
-    WHERE a.piloto_11 IS NOT NULL  -- Corrigido para piloto_11
-    GROUP BY u.nome
+    WHERE a.piloto_11 IS NOT NULL AND a.piloto_11 != ''
     '''
     try:
         df = pd.read_sql(query, conn)
     except Exception as e:
-        st.error(f"Erro ao buscar apostas no 11º: {str(e)}")
+        st.error(f"Erro ao buscar distribuição do 11º colocado: {str(e)}")
         df = pd.DataFrame()
     return df
 
@@ -67,13 +66,20 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
-        st.subheader("Apostas no 11º Colocado - Individual")
-        if not apostas_11.empty:
-            fig = px.pie(apostas_11, names='participante', values='total_apostas',
-                        title="Distribuição de Apostas no 11º Colocado")
+    st.subheader("Distribuição de Pilotos Apostados no 11º Colocado - Individual")
+    df_11 = get_distribuicao_piloto_11()
+    if not df_11.empty:
+        participantes_11 = df_11['participante'].unique()
+        for participante in participantes_11:
+            df_part = df_11[df_11['participante'] == participante]
+            contagem = df_part['piloto_11'].value_counts().reset_index()
+            contagem.columns = ['Piloto', 'Total']
+            fig = px.pie(contagem, names='Piloto', values='Total',
+                         title=f"Pilotos apostados como 11º por {participante}")
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Nenhuma aposta no 11º colocado registrada.")
+            st.dataframe(contagem)
+    else:
+        st.info("Nenhuma aposta registrada para o 11º colocado.")
     
     with tab3:
         st.subheader("Consolidado de Apostas por Piloto")
@@ -84,12 +90,15 @@ def main():
         st.dataframe(consolidado_pilotos, use_container_width=True)
     
     with tab4:
-        st.subheader("Consolidado de Apostas no 11º Colocado")
-        total_11 = apostas_11['total_apostas'].sum()
-        if total_11 > 0:
-            fig = px.pie(apostas_11, names='participante', values='total_apostas',
-                        title="Total de Apostas no 11º Colocado por Participante")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Nenhuma aposta no 11º colocado registrada.")
+    st.subheader("Consolidado de Pilotos Apostados no 11º Colocado")
+    df_11 = get_distribuicao_piloto_11()
+    if not df_11.empty:
+        consolidado_11 = df_11['piloto_11'].value_counts().reset_index()
+        consolidado_11.columns = ['Piloto', 'Total']
+        fig = px.pie(consolidado_11, names='Piloto', values='Total',
+                     title="Distribuição Geral de Pilotos apostados como 11º")
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(consolidado_11)
+    else:
+        st.info("Nenhuma aposta registrada para o 11º colocado.")
 
