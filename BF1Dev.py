@@ -1349,7 +1349,7 @@ def modulo_exportar_importar_excel():
         except Exception as e:
             st.error(f"Erro na exportação: {str(e)}")
     # Importação 
-    st.subheader("Importar Apostas do Campeonato")
+    st.subheader("⬆️ Importar Apostas do Campeonato")
     arquivo = st.file_uploader("Selecione o arquivo Excel", type=["xlsx"], key="campeonato_importer")
     if arquivo:
         if st.button("Importar Apostas", key="import_campeonato"):
@@ -1360,7 +1360,7 @@ def modulo_exportar_importar_excel():
                 st.error(f"Erro na importação: {str(e)}")
 
     # Exportação/Importação genérica do banco principal
-    st.header("Exportar tabelas para Excel (Banco Principal)")
+    st.header("💾 Backup das Bases (Apostas / Pilotos / Provas / Resultados / Log de Apostas")
     if not os.path.exists(DB_PATH):
         st.error("Banco de dados não encontrado.")
         return
@@ -1375,7 +1375,7 @@ def modulo_exportar_importar_excel():
                 file_name=f'{tabela}.xlsx',
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-    st.header("Importar dados de Excel para uma tabela (Banco Principal)")
+    st.header("⬆️ Importação das Bases (Apostas / Pilotos / Provas / Resultados / Log de Apostas")
     tabelas = list(arquivos_excel.keys())
     if tabelas:
         tabela_escolhida = st.selectbox("Tabela para importar", tabelas)
