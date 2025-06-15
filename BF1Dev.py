@@ -303,14 +303,16 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
     )
     conn.close()
 
-def registrar_log_aposta(apostador, aposta, nome_prova):
+def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, automatica):
     conn = db_connect()
     c = conn.cursor()
-    agora = datetime.now()
+    agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
     data = agora.strftime('%Y-%m-%d')
     horario = agora.strftime('%H:%M:%S')
-    c.execute('INSERT INTO log_apostas (apostador, data, horario, aposta, piloto_11, nome_prova, automatica) VALUES (?, ?, ?, ?, ?, ?, ?)',
-              (apostador, data, horario, aposta, piloto_11, nome_prova, automatica))
+    c.execute('''INSERT INTO log_apostas 
+                (apostador, data, horario, aposta, nome_prova, piloto_11, automatica) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)''',
+              (apostador, data, horario, aposta, nome_prova, piloto_11, automatica))
     conn.commit()
     conn.close()
 
