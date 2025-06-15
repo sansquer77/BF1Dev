@@ -258,57 +258,82 @@ def autenticar_usuario(email, senha):
 def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, automatica=0):
     conn = db_connect()
     c = conn.cursor()
-    data_envio = datetime.now().isoformat()
-    c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-    c.execute('INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-              (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova, automatica))
-    conn.commit()
+    data_envio = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
     
-    # ---- NOVO: Disparar e-mails após salvar ----
-    # Obter dados do usuário
-    usuario = get_user_by_id(usuario_id)
-    email_usuario = usuario[2]  # Supondo que o email está no índice 2
+    try:
+        # Salvar aposta no banco
+        c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+        c.execute('''INSERT INTO apostas 
+                    (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), 
+                piloto_11, nome_prova, automatica))
+        conn.commit()
+
+        # ---- Disparar e-mails ----
+        usuario = get_user_by_id(usuario_id)
+        if not usuario:
+            raise ValueError("Usuário não encontrado")
+
+        email_usuario = usuario[2]
+        EMAIL_REMETENTE = "sansquer@gmail.com"
+        SENHA_REMETENTE = st.secrets["SENHA_EMAIL"]
+        EMAIL_ADMIN = "cristiano_gaspar@outlook.com"
+
+        corpo_html = f"""
+        <h3>✅ Aposta registrada!</h3>
+        <p><strong>Prova:</strong> {nome_prova}</p>
+        <p><strong>Pilotos:</strong> {', '.join(pilotos)}</p>
+        <p><strong>Fichas:</strong> {', '.join(map(str, fichas))}</p>
+        <p><strong>11º Colocado:</strong> {piloto_11}</p>
+        <p>Data/Hora: {data_envio}</p>
+        """
+
+        def enviar_email(destinatario, assunto, corpo_html):
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+            import smtplib
+
+            msg = MIMEMultipart()
+            msg['From'] = EMAIL_REMETENTE
+            msg['To'] = destinatario
+            msg['Subject'] = assunto
+            msg.attach(MIMEText(corpo_html, 'html'))
+
+            try:
+                with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                    server.login(EMAIL_REMETENTE, SENHA_REMETENTE)
+                    server.sendmail(EMAIL_REMETENTE, destinatario, msg.as_string())
+                return True
+            except Exception as e:
+                st.error(f"Erro no envio: {str(e)}")
+                return False
+
+        # Enviar e-mails
+        if not enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html):
+            st.error("Falha no envio para o participante")
+
+        if not enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html):
+            st.error("Falha no envio para admin")
+
+        # ---- Registrar log ----
+        aposta_str = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
+        registrar_log_aposta(
+            usuario[1],  # apostador
+            aposta_str,  # aposta
+            nome_prova,  # nome_prova
+            piloto_11,   # piloto_11
+            automatica   # automatica
+        )
+
+    except Exception as e:
+        st.error(f"Erro geral ao salvar aposta: {str(e)}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
     
-    # Configurações de e-mail (use secrets para produção!)
-    EMAIL_REMETENTE = "sansquer@gmail.com"  # Ou use st.secrets["EMAIL_REMETENTE"]
-    SENHA_REMETENTE = st.secrets["SENHA_EMAIL"]  # Armazene em secrets na produção!
-    EMAIL_ADMIN = "cristiano_gaspar@outlook.com"
-    
-    # Corpo do e-mail em HTML
-    corpo_html = f"""
-    <h3>Sua aposta foi registrada com sucesso!</h3>
-    <p><strong>Prova:</strong> {nome_prova}</p>
-    <p><strong>Pilotos:</strong> {', '.join(pilotos)}</p>
-    <p><strong>Fichas:</strong> {', '.join(map(str, fichas))}</p>
-    <p><strong>11º Colocado:</strong> {piloto_11}</p>
-    <p>Data/Hora: {data_envio}</p>
-    """
-    
-    # Enviar para o participante
-    enviar_email(
-        email_usuario,
-        "Confirmação de Aposta - BF1Dev",
-        corpo_html,
-        EMAIL_REMETENTE,
-        SENHA_REMETENTE
-    )
-    
-    # Enviar cópia para o admin
-    enviar_email(
-        EMAIL_ADMIN,
-        f"Nova aposta registrada por {usuario[1]}",
-        corpo_html,
-        EMAIL_REMETENTE,
-        SENHA_REMETENTE
-    )
-    registrar_log_aposta(
-    apostador=usuario[1], 
-    aposta=aposta_str, 
-    nome_prova=nome_prova, 
-    piloto_11=piloto_11, 
-    automatica=0
-    )
-    conn.close()
+    return True
 
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, automatica):
     conn = db_connect()
