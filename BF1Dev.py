@@ -307,8 +307,8 @@ def registrar_log_aposta(apostador, aposta, nome_prova):
     agora = datetime.now()
     data = agora.strftime('%Y-%m-%d')
     horario = agora.strftime('%H:%M:%S')
-    c.execute('INSERT INTO log_apostas (apostador, data, horario, aposta, nome_prova) VALUES (?, ?, ?, ?, ?)',
-              (apostador, data, horario, aposta, nome_prova))
+    c.execute('INSERT INTO log_apostas (apostador, data, horario, aposta, piloto_11, nome_prova, automatica) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              (apostador, data, horario, aposta, piloto_11, nome_prova, automatica))
     conn.commit()
     conn.close()
 
