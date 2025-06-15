@@ -6,4 +6,3 @@ pyjwt
 openpyxl
 plotly
 seaborn
-backports.zoneinfo
