@@ -3,7 +3,6 @@ import sqlite3
 import bcrypt
 import jwt as pyjwt
 import pandas as pd
-from datetime import datetime, timedelta, UTC
 import ast
 import os
 import dash
@@ -14,6 +13,12 @@ from analysis import main as analysis_main
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from datetime import datetime, timedelta, UTC
+import sys
+if sys.version_info < (3, 9):
+    from backports.zoneinfo import ZoneInfo
+else:
+    from zoneinfo import ZoneInfo
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
