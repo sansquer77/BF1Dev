@@ -6,12 +6,14 @@ import pandas as pd
 from datetime import datetime, timedelta, UTC
 import ast
 import os
-import matplotlib.pyplot as plt
 import dash
 from db_utils import db_connect
 from championship_bets import main as championship_bets_main
 from championship_results import main as championship_results_main
 from analysis import main as analysis_main
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
@@ -259,6 +261,44 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
     c.execute('INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
               (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova, automatica))
     conn.commit()
+    
+    # ---- NOVO: Disparar e-mails após salvar ----
+    # Obter dados do usuário
+    usuario = get_user_by_id(usuario_id)
+    email_usuario = usuario[2]  # Supondo que o email está no índice 2
+    
+    # Configurações de e-mail (use secrets para produção!)
+    EMAIL_REMETENTE = "sansquer@gmail.com"  # Ou use st.secrets["EMAIL_REMETENTE"]
+    SENHA_REMETENTE = st.secrets["SENHA_EMAIL"]  # Armazene em secrets na produção!
+    EMAIL_ADMIN = "cristiano_gaspar@outlook.com"
+    
+    # Corpo do e-mail em HTML
+    corpo_html = f"""
+    <h3>Sua aposta foi registrada com sucesso!</h3>
+    <p><strong>Prova:</strong> {nome_prova}</p>
+    <p><strong>Pilotos:</strong> {', '.join(pilotos)}</p>
+    <p><strong>Fichas:</strong> {', '.join(map(str, fichas))}</p>
+    <p><strong>11º Colocado:</strong> {piloto_11}</p>
+    <p>Data/Hora: {data_envio}</p>
+    """
+    
+    # Enviar para o participante
+    enviar_email(
+        email_usuario,
+        "Confirmação de Aposta - BF1Dev",
+        corpo_html,
+        EMAIL_REMETENTE,
+        SENHA_REMETENTE
+    )
+    
+    # Enviar cópia para o admin
+    enviar_email(
+        EMAIL_ADMIN,
+        f"Nova aposta registrada por {usuario[1]}",
+        corpo_html,
+        EMAIL_REMETENTE,
+        SENHA_REMETENTE
+    )
     conn.close()
 
 def registrar_log_aposta(apostador, aposta, nome_prova):
@@ -334,6 +374,25 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & (apostas_df['automatica'] >= 1)])
     salvar_aposta(usuario_id, prova_id, pilotos_ant, fichas_ant, piloto_11_ant, nome_prova, automatica=num_auto+1)
     return True, "Aposta automática gerada!"
+
+def enviar_email(destinatario, assunto, corpo_html, remetente_email, remetente_senha):
+    try:
+        # Configurar mensagem
+        msg = MIMEMultipart()
+        msg['From'] = remetente_email
+        msg['To'] = destinatario
+        msg['Subject'] = assunto
+        msg.attach(MIMEText(corpo_html, 'html'))
+
+        # Configurar servidor SMTP (ex: Gmail)
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(remetente_email, remetente_senha)
+            server.send_message(msg)
+        
+        return True
+    except Exception as e:
+        st.error(f"Erro ao enviar e-mail: {str(e)}")
+        return False
 
 # --- INICIALIZAÇÃO E MENU ---
 st.set_page_config(page_title="Bolão F1 2025", layout="wide")
