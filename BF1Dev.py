@@ -159,7 +159,9 @@ apostador TEXT,
 data TEXT,
 horario TEXT,
 aposta TEXT,
-nome_prova TEXT
+piloto_11 TEXT,
+nome_prova TEXT,
+automatica INTEGER DEFAULT 0
 )''')
     conn.commit()
     conn.close()
