@@ -301,6 +301,13 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
         EMAIL_REMETENTE,
         SENHA_REMETENTE
     )
+    registrar_log_aposta(
+    apostador=usuario[1], 
+    aposta=aposta_str, 
+    nome_prova=nome_prova, 
+    piloto_11=piloto_11, 
+    automatica=0
+    )
     conn.close()
 
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, automatica):
