@@ -340,7 +340,7 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
     
     return True
 
-def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, automatica):
+def registrar_log_aposta(user[1], aposta_str, nome_prova, piloto_11, automatica):
     conn = db_connect()
     c = conn.cursor()
     agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
