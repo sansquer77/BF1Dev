@@ -322,8 +322,8 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
             st.error("Falha no envio para admin")
 
         # ---- Registrar log ----
-        aposta_str = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
-        registrar_log_aposta(user[1], aposta_str, nome_prova, piloto_11, automatica)
+        # aposta_str = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
+        # registrar_log_aposta(user[1], aposta_str, nome_prova, piloto_11, automatica)
 
     except Exception as e:
         st.error(f"Erro geral ao salvar aposta: {str(e)}")
