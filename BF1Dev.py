@@ -675,7 +675,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                         piloto_11, nome_prova, automatica=0
                     )
                     aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos_validos}, Fichas: {fichas_validas}, 11º: {piloto_11}"
-                    registrar_log_aposta(user[1], aposta_str, nome_prova, piloto_11, automatica)
+                    registrar_log_aposta(user[1], aposta_str, nome_prova, piloto_11, 0)
                     st.success("Aposta registrada/atualizada!")
                     st.cache_data.clear()
                     st.rerun()
