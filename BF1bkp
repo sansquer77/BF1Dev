@@ -19,8 +19,8 @@ from email.mime.text import MIMEText
 
 st.set_page_config(
     page_title="BF1",
-    page_icon="Logo.png",  # ou "favicon.ico"
-    layout="wide"  # ou "centered"
+    page_icon="Logo.png",
+    layout="wide"
 )
 
 JWT_SECRET = os.environ.get("JWT_SECRET")
@@ -168,7 +168,9 @@ apostador TEXT,
 data TEXT,
 horario TEXT,
 aposta TEXT,
-nome_prova TEXT
+piloto_11 TEXT,
+nome_prova TEXT,
+automatica INTEGER DEFAULT 0
 )''')
     conn.commit()
     conn.close()
@@ -333,14 +335,16 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
     
     return True
 
-def registrar_log_aposta(apostador, aposta, nome_prova):
+def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, automatica):
     conn = db_connect()
     c = conn.cursor()
     agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
     data = agora.strftime('%Y-%m-%d')
     horario = agora.strftime('%H:%M:%S')
-    c.execute('INSERT INTO log_apostas (apostador, data, horario, aposta, nome_prova) VALUES (?, ?, ?, ?, ?)',
-              (apostador, data, horario, aposta, nome_prova))
+    c.execute('''INSERT INTO log_apostas 
+                (apostador, data, horario, aposta, nome_prova, piloto_11, automatica) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)''',
+              (apostador, data, horario, aposta, nome_prova, piloto_11, automatica))
     conn.commit()
     conn.close()
 
@@ -652,7 +656,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                         piloto_11, nome_prova, automatica=0
                     )
                     aposta_str = f"Prova: {nome_prova}, Pilotos: {pilotos_validos}, Fichas: {fichas_validas}, 11º: {piloto_11}"
-                    registrar_log_aposta(user[1], aposta_str, nome_prova)
+                    registrar_log_aposta(user[1], aposta_str, nome_prova, piloto_11, 0)
                     st.success("Aposta registrada/atualizada!")
                     st.cache_data.clear()
                     st.rerun()
@@ -997,7 +1001,13 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 if not resultado.empty:
                                     nova_aposta = resultado.iloc[0]
                                     aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
-                                    registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
+                                    registrar_log_aposta(  
+                                        part.nome, 
+                                        aposta_str, 
+                                        f"{prova['nome']}*", 
+                                        nova_aposta['piloto_11'],
+                                        1  # ✅ automatica=1 (aposta automática)
+                                    )
                                 else:
                                     st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
                                 st.success(msg)
@@ -1047,7 +1057,13 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 if not resultado.empty:
                                     nova_aposta = resultado.iloc[0]
                                     aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
-                                    registrar_log_aposta(part.nome, aposta_str, f"{prova['nome']}*")
+                                    registrar_log_aposta(  
+                                        part.nome, 
+                                        aposta_str, 
+                                        f"{prova['nome']}*", 
+                                        nova_aposta['piloto_11'],
+                                        1  # ✅ automatica=1 (aposta automática)
+                                    )
                                 else:
                                     st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
                                 st.success(f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}")
