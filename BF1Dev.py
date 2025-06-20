@@ -171,6 +171,7 @@ horario TEXT,
 aposta TEXT,
 piloto_11 TEXT,
 nome_prova TEXT,
+tipo_aposta INTEGER DEFAULT 0,  -- 0: normal, 1: fora do horário, 2: automática
 automatica INTEGER DEFAULT 0
 )''')
     conn.commit()
@@ -283,7 +284,10 @@ def get_horario_prova(prova_id):
         return None, None, None
     return prova[0], prova[1], prova[2]
 
-def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, automatica=0):
+def salvar_aposta(
+    usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
+    automatica=0, horario_forcado=None
+):
     from datetime import datetime
     from zoneinfo import ZoneInfo
     import streamlit as st
@@ -302,12 +306,21 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
     horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S')
     horario_limite = horario_limite.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
 
-    # Horário atual normalizado para SP
+    # Horário atual normalizado para SP (ou horário forçado para aposta automática)
     agora_sp = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    if automatica and horario_forcado:
+        agora_sp = horario_forcado
 
-    if agora_sp > horario_limite:
+    # Determinar tipo de aposta
+    if automatica:
+        tipo_aposta = 2  # Aposta automática
+    elif agora_sp > horario_limite:
         st.error("Apostas para esta prova já estão encerradas!")
+        tipo_aposta = 1  # Aposta fora do horário
+        # Mesmo para fora do horário, não salva aposta manual
         return False
+    else:
+        tipo_aposta = 0  # Aposta normal
 
     conn = None
     try:
@@ -315,17 +328,18 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
         conn = db_connect()
         c = conn.cursor()
         data_envio = agora_sp.isoformat()
-        
+
         # Remove aposta existente
         c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-        
+
         # Insere nova aposta
         c.execute('''INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova_bd, automatica))
-        
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)),
+                   piloto_11, nome_prova_bd, automatica))
+
         conn.commit()
-        
+
         # ---- Disparar e-mails ----
         usuario = get_user_by_id(usuario_id)
         if not usuario:
@@ -345,7 +359,6 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
         <p>Data/Hora: {data_envio}</p>
         """
 
-        # Função de envio (isolada para reutilização)
         def enviar_email(destinatario, assunto, corpo_html):
             msg = MIMEMultipart()
             msg['From'] = EMAIL_REMETENTE
@@ -361,9 +374,17 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
                 st.error(f"Erro no envio para {destinatario}: {str(e)}")
                 return False
 
-        # Enviar e-mails
         enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html)
         enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html)
+
+        # Registrar log da aposta com tipo correto
+        registrar_log_aposta(
+            apostador=usuario[1],
+            aposta=','.join(pilotos),
+            nome_prova=nome_prova_bd,
+            piloto_11=piloto_11,
+            tipo_aposta=tipo_aposta
+        )
 
         return True
 
@@ -376,16 +397,28 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
         if conn:
             conn.close()
 
-def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, automatica):
+def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta):
+    """
+    Registra uma entrada no log de apostas com o tipo de aposta.
+    
+    Parâmetros:
+    apostador (str): Nome do apostador
+    aposta (str): Lista de pilotos apostados (separados por vírgula)
+    nome_prova (str): Nome da prova
+    piloto_11 (str): Nome do piloto apostado para 11º lugar
+    tipo_aposta (int): 0 = normal, 1 = fora do horário, 2 = automática
+    """
     conn = db_connect()
     c = conn.cursor()
     agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
     data = agora.strftime('%Y-%m-%d')
     horario = agora.strftime('%H:%M:%S')
+    
     c.execute('''INSERT INTO log_apostas 
-                (apostador, data, horario, aposta, nome_prova, piloto_11, automatica) 
+                (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta) 
                 VALUES (?, ?, ?, ?, ?, ?, ?)''',
-              (apostador, data, horario, aposta, nome_prova, piloto_11, automatica))
+              (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta))
+    
     conn.commit()
     conn.close()
 
@@ -436,21 +469,53 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     return pontos
 
 def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas_df):
+    # Buscar informações da prova atual
+    prova_atual = provas_df[provas_df['id'] == prova_id]
+    if prova_atual.empty:
+        return False, "Prova não encontrada."
+    
+    # Obter data e horário da prova
+    data_prova = prova_atual['data'].iloc[0]
+    horario_prova = prova_atual['horario_prova'].iloc[0]
+    
+    # Criar datetime da prova (fuso SP)
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S')
+    horario_limite = horario_limite.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+    
     provas_df = provas_df.sort_values('data')
     idx_prova = provas_df[provas_df['id'] == prova_id].index[0]
+    
     if idx_prova == 0:
         return False, "Não há prova anterior para copiar a aposta."
+    
     prova_ant_id = provas_df.iloc[idx_prova-1]['id']
-    ap_ant = apostas_df[(apostas_df['usuario_id'] == usuario_id) & (apostas_df['prova_id'] == prova_ant_id)]
+    ap_ant = apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
+                        (apostas_df['prova_id'] == prova_ant_id)]
+    
     if ap_ant.empty:
         return False, "Participante não tem aposta anterior para copiar."
+    
     ap_ant = ap_ant.iloc[0]
     pilotos_ant = ap_ant['pilotos'].split(",")
     fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
     piloto_11_ant = ap_ant['piloto_11']
-    num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & (apostas_df['automatica'] >= 1)])
-    salvar_aposta(usuario_id, prova_id, pilotos_ant, fichas_ant, piloto_11_ant, nome_prova, automatica=num_auto+1)
-    return True, "Aposta automática gerada!"
+    num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
+                              (apostas_df['automatica'] >= 1)])
+    
+    # Forçar salvamento com horário da prova
+    salvar_aposta(
+        usuario_id, 
+        prova_id, 
+        pilotos_ant, 
+        fichas_ant, 
+        piloto_11_ant, 
+        nome_prova, 
+        automatica=num_auto+1,
+        horario_forcado=horario_limite  # Novo parâmetro
+    )
+    return True, "Aposta automática gerada com sucesso!"
 
 # --- INICIALIZAÇÃO E MENU ---
 init_db()
