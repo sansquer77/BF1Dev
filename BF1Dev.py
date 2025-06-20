@@ -141,7 +141,7 @@ status TEXT DEFAULT 'Ativo'
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 nome TEXT,    
 data TEXT,
-horario_prova TEXT,  -- Formato: 'YYYY-MM-DD HH:MM:SS'
+horario_prova TEXT,
 status TEXT DEFAULT 'Ativo',
 tipo TEXT DEFAULT 'Normal'
 )''')
@@ -273,6 +273,16 @@ def normalizar_para_sp(horario_original):
         horario_original = horario_original.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
     return horario_original.astimezone(ZoneInfo("America/Sao_Paulo"))
 
+def get_horario_prova(prova_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT nome, data, horario_prova FROM provas WHERE id=?', (prova_id,))
+    prova = c.fetchone()
+    conn.close()
+    if not prova:
+        return None, None, None
+    return prova[0], prova[1], prova[2]
+
 def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, automatica=0):
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -365,7 +375,6 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
     finally:
         if conn:
             conn.close()
-
 
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, automatica):
     conn = db_connect()
