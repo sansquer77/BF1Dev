@@ -266,6 +266,16 @@ def autenticar_usuario(email, senha):
         return user
     return None
 
+def get_horario_prova(prova_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT nome, data, horario_prova FROM provas WHERE id=?', (prova_id,))
+    prova = c.fetchone()
+    conn.close()
+    if not prova:
+        return None, None, None
+    return prova[0], prova[1], prova[2]
+    
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, horario=None):
     """
     Registra uma entrada no log de apostas com o tipo de aposta e horário específico.
