@@ -177,6 +177,95 @@ automatica INTEGER DEFAULT 0
     conn.commit()
     conn.close()
 
+@st.cache_data
+def get_usuarios_df():
+    conn = db_connect()
+    df = pd.read_sql('SELECT * FROM usuarios', conn)
+    conn.close()
+    return df
+@st.cache_data
+def get_pilotos_df():
+    conn = db_connect()
+    df = pd.read_sql('SELECT * FROM pilotos', conn)
+    conn.close()
+    return df
+@st.cache_data
+def get_provas_df():
+    conn = db_connect()
+    df = pd.read_sql('SELECT * FROM provas', conn)
+    conn.close()
+    return df
+@st.cache_data
+def get_apostas_df():
+    conn = db_connect()
+    df = pd.read_sql('SELECT * FROM apostas', conn)
+    conn.close()
+    return df
+@st.cache_data
+def get_resultados_df():
+    conn = db_connect()
+    df = pd.read_sql('SELECT * FROM resultados', conn)
+    conn.close()
+    return df
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode('utf-8')
+def check_password(password, hashed):
+    if isinstance(hashed, str):
+        hashed = hashed.encode()  # converte para bytes
+    return bcrypt.checkpw(password.encode(), hashed)
+def generate_token(user_id, perfil, status):
+    payload = {
+        'user_id': user_id,
+        'perfil': perfil,
+        'status': status,
+        'exp': datetime.now(ZoneInfo("UTC")) + timedelta(minutes=JWT_EXP_MINUTES)
+    }
+    token = pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    if isinstance(token, bytes):
+        token = token.decode('utf-8')
+    return token
+def decode_token(token):
+    try:
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return payload
+    except pyjwt.ExpiredSignatureError:
+        return None
+    except Exception:
+        return None
+def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo'):
+    conn = db_connect()
+    c = conn.cursor()
+    try:
+        senha_hash = hash_password(senha)
+        c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, ?, ?, ?)', 
+                  (nome, email, senha_hash, perfil, status, 0))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+def get_user_by_email(email):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT id, nome, email, senha_hash, perfil, status, faltas FROM usuarios WHERE email=?', (email,))
+    user = c.fetchone()
+    conn.close()
+    return user
+def get_user_by_id(user_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT id, nome, email, perfil, status, faltas FROM usuarios WHERE id=?', (user_id,))
+    user = c.fetchone()
+    conn.close()
+    return user
+
+def autenticar_usuario(email, senha):
+    user = get_user_by_email(email)
+    if user and check_password(senha, user[3]):
+        return user
+    return None
+
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, horario=None):
     """
     Registra uma entrada no log de apostas com o tipo de aposta e horário específico.
@@ -392,6 +481,52 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     else:
         return False, "Falha ao salvar aposta automática."
 
+def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
+    import ast
+    pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
+    bonus_11 = 25  # ajuste se necessário
+    resultados = {}
+    for _, row in resultados_df.iterrows():
+        resultados[row['prova_id']] = ast.literal_eval(row['posicoes'])
+    tipos_prova = dict(zip(provas_df['id'], provas_df['tipo'] if 'tipo' in provas_df.columns else ['Normal']*len(provas_df)))
+    pontos = []
+    for _, aposta in apostas_df.iterrows():
+        prova_id = aposta['prova_id']
+        if prova_id not in resultados:
+            pontos.append(None)
+            continue
+        res = resultados[prova_id]
+        pilotos = aposta['pilotos'].split(",")
+        fichas = list(map(int, aposta['fichas'].split(",")))
+        piloto_11 = aposta['piloto_11']
+        automatica = int(aposta.get('automatica', 0))
+        pt = 0
+        tipo = tipos_prova.get(prova_id, 'Normal')
+        if tipo == 'Sprint':
+            pontos_lista = pontos_sprint
+            n_pos = 8
+        else:
+            pontos_lista = pontos_f1
+            n_pos = 10
+
+        # Inverte o dicionário para buscar a posição real do piloto apostado
+        piloto_para_pos = {v: int(k) for k, v in res.items()}
+        for i in range(len(pilotos)):
+            p = pilotos[i]
+            f = fichas[i] if i < len(fichas) else 0
+            pos_real = piloto_para_pos.get(p, None)
+            if pos_real is not None and 1 <= pos_real <= n_pos:
+                pt += f * pontos_lista[pos_real - 1]
+        # Bônus para 11º colocado
+        piloto_11_real = res.get(11, "")
+        if piloto_11 == piloto_11_real:
+            pt += bonus_11
+        if automatica >= 2:
+            pt = int(pt * 0.75)
+        pontos.append(pt)
+    return pontos
+    
 # --- INICIALIZAÇÃO E MENU ---
 init_db()
 
