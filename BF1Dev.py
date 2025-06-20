@@ -3,7 +3,7 @@ import sqlite3
 import bcrypt
 import jwt as pyjwt
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 import ast
 import os
@@ -141,6 +141,7 @@ status TEXT DEFAULT 'Ativo'
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 nome TEXT,    
 data TEXT,
+horario_prova TEXT,  -- Formato: 'YYYY-MM-DD HH:MM:SS'
 status TEXT DEFAULT 'Ativo',
 tipo TEXT DEFAULT 'Normal'
 )''')
@@ -264,76 +265,107 @@ def autenticar_usuario(email, senha):
         return user
     return None
 
-def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, automatica=0):
-    conn = db_connect()
-    c = conn.cursor()
-    data_envio = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
-    
-    try:
-        # Salvar aposta no banco
-        c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-        c.execute('''INSERT INTO apostas 
-                    (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), 
-                piloto_11, nome_prova, automatica))
-        conn.commit()
+def normalizar_para_sp(horario_original):
+    # horario_original pode ser uma string ou datetime
+    if isinstance(horario_original, str):
+        horario_original = datetime.strptime(horario_original, '%Y-%m-%d %H:%M:%S')
+    if not horario_original.tzinfo:
+        horario_original = horario_original.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+    return horario_original.astimezone(ZoneInfo("America/Sao_Paulo"))
 
+def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, automatica=0):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    import streamlit as st
+    import os
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    # Busca horário da prova
+    nome_prova_bd, data_prova, horario_prova = get_horario_prova(prova_id)
+    if not horario_prova:
+        st.error("Prova não encontrada ou horário não cadastrado.")
+        return False
+
+    # Normaliza o horário da prova para SP
+    horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S')
+    horario_limite = horario_limite.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+
+    # Horário atual normalizado para SP
+    agora_sp = datetime.now(ZoneInfo("America/Sao_Paulo"))
+
+    if agora_sp > horario_limite:
+        st.error("Apostas para esta prova já estão encerradas!")
+        return False
+
+    conn = None
+    try:
+        # Operações de banco de dados
+        conn = db_connect()
+        c = conn.cursor()
+        data_envio = agora_sp.isoformat()
+        
+        # Remove aposta existente
+        c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+        
+        # Insere nova aposta
+        c.execute('''INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova_bd, automatica))
+        
+        conn.commit()
+        
         # ---- Disparar e-mails ----
         usuario = get_user_by_id(usuario_id)
         if not usuario:
             raise ValueError("Usuário não encontrado")
 
         email_usuario = usuario[2]
-        EMAIL_REMETENTE = "sansquer@gmail.com"  # Substitua por variável de ambiente
-        SENHA_REMETENTE = os.environ.get("SENHA_EMAIL")  # Garanta que está configurada
+        EMAIL_REMETENTE = "sansquer@gmail.com"
+        SENHA_REMETENTE = os.environ.get("SENHA_EMAIL")  # Usando variável de ambiente
         EMAIL_ADMIN = "cristiano_gaspar@outlook.com"
 
         corpo_html = f"""
         <h3>✅ Aposta registrada!</h3>
-        <p><strong>Prova:</strong> {nome_prova}</p>
+        <p><strong>Prova:</strong> {nome_prova_bd}</p>
         <p><strong>Pilotos:</strong> {', '.join(pilotos)}</p>
         <p><strong>Fichas:</strong> {', '.join(map(str, fichas))}</p>
         <p><strong>11º Colocado:</strong> {piloto_11}</p>
         <p>Data/Hora: {data_envio}</p>
         """
 
-        # Função de envio corrigida
+        # Função de envio (isolada para reutilização)
         def enviar_email(destinatario, assunto, corpo_html):
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-            import smtplib
-
             msg = MIMEMultipart()
             msg['From'] = EMAIL_REMETENTE
             msg['To'] = destinatario
             msg['Subject'] = assunto
             msg.attach(MIMEText(corpo_html, 'html'))
-
             try:
                 with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
                     server.login(EMAIL_REMETENTE, SENHA_REMETENTE)
-                    server.sendmail(EMAIL_REMETENTE, destinatario, msg.as_string())
+                    server.send_message(msg)
                 return True
             except Exception as e:
-                st.error(f"Erro no envio: {str(e)}")
+                st.error(f"Erro no envio para {destinatario}: {str(e)}")
                 return False
 
-        # Enviar e-mails com tratamento de erro
-        if not enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html):
-            st.error("Falha no envio para o participante")
+        # Enviar e-mails
+        enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html)
+        enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html)
 
-        if not enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html):
-            st.error("Falha no envio para admin")
+        return True
 
     except Exception as e:
-        st.error(f"Erro geral ao salvar aposta: {str(e)}")
-        conn.rollback()
+        st.error(f"Erro ao salvar aposta: {str(e)}")
+        if conn:
+            conn.rollback()
         return False
     finally:
-        conn.close()
-    
-    return True
+        if conn:
+            conn.close()
+
 
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, automatica):
     conn = db_connect()
@@ -882,73 +914,86 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
 
         # --- PROVAS ---
         with tab2:
-            st.subheader("Adicionar nova prova")
-            nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
-            data_prova_str = st.text_input("Data da nova prova (DD/MM/AAAA)", key="data_nova_prova")
-            status_prova = st.selectbox("Status da prova", ["Ativo", "Inativo"], key="status_nova_prova")
-            tipo_prova = st.selectbox("Tipo da prova", ["Normal", "Sprint"], key="tipo_nova_prova")
-            if st.button("Adicionar prova", key="btn_add_prova_form"):
-                if not nome_prova.strip():
-                    st.error("Informe o nome da prova.")
-                else:
+    st.subheader("Adicionar nova prova")
+    nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
+    data_prova = st.date_input("Data da nova prova", key="data_nova_prova")
+    horario_prova = st.time_input("Horário da nova prova", value=time(15,0), key="hora_nova_prova")  # valor padrão: 15:00
+    status_prova = st.selectbox("Status da prova", ["Ativo", "Inativo"], key="status_nova_prova")
+    tipo_prova = st.selectbox("Tipo da prova", ["Normal", "Sprint"], key="tipo_nova_prova")
+
+    if st.button("Adicionar prova", key="btn_add_prova_form"):
+        if not nome_prova.strip():
+            st.error("Informe o nome da prova.")
+        else:
+            try:
+                data_str = data_prova.strftime("%Y-%m-%d")
+                hora_str = horario_prova.strftime("%H:%M:%S")
+                conn = db_connect()
+                c = conn.cursor()
+                c.execute('INSERT INTO provas (nome, data, horario_prova, status, tipo) VALUES (?, ?, ?, ?, ?)',
+                          (nome_prova.strip(), data_str, hora_str, status_prova, tipo_prova))
+                conn.commit()
+                conn.close()
+                st.success("Prova adicionada!")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao adicionar prova: {e}")
+
+    st.markdown("---")
+    st.subheader("Provas cadastradas")
+    provas = get_provas_df()
+    if len(provas) == 0:
+        st.info("Nenhuma prova cadastrada.")
+    else:
+        for idx, row in provas.iterrows():
+            col1, col2, col3, col4, col5, col6 = st.columns([3,2,2,2,2,2])
+            with col1:
+                novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome_{row['id']}")
+            with col2:
+                # Data
+                try:
+                    data_val = pd.to_datetime(row['data']).date() if pd.notnull(row['data']) else datetime.today().date()
+                except Exception:
+                    data_val = datetime.today().date()
+                nova_data = st.date_input(f"Data prova {row['id']}", value=data_val, key=f"pr_data_{row['id']}")
+            with col3:
+                # Horário
+                try:
+                    hora_val = pd.to_datetime(row['horario_prova']).time() if pd.notnull(row['horario_prova']) else time(15,0)
+                except Exception:
+                    hora_val = time(15,0)
+                novo_horario = st.time_input(f"Horário prova {row['id']}", value=hora_val, key=f"pr_hora_{row['id']}")
+            with col4:
+                novo_status = st.selectbox(f"Status prova {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pr_status_{row['id']}")
+            with col5:
+                novo_tipo = st.selectbox(f"Tipo prova {row['id']}", ["Normal", "Sprint"], index=0 if row.get('tipo', 'Normal') == "Normal" else 1, key=f"pr_tipo_{row['id']}")
+            with col6:
+                if st.button("Editar prova", key=f"pr_edit_{row['id']}"):
                     try:
-                        data_prova = datetime.strptime(data_prova_str, "%d/%m/%Y")
+                        data_str = nova_data.strftime("%Y-%m-%d")
+                        hora_str = novo_horario.strftime("%H:%M:%S")
                         conn = db_connect()
                         c = conn.cursor()
-                        c.execute('INSERT INTO provas (nome, data, status, tipo) VALUES (?, ?, ?, ?)', (nome_prova.strip(), data_prova.strftime("%Y-%m-%d"), status_prova, tipo_prova))
+                        c.execute('UPDATE provas SET nome=?, data=?, horario_prova=?, status=?, tipo=? WHERE id=?',
+                                  (novo_nome, data_str, hora_str, novo_status, novo_tipo, row['id']))
                         conn.commit()
                         conn.close()
-                        st.success("Prova adicionada!")
+                        st.success("Prova editada!")
                         st.cache_data.clear()
                         st.rerun()
-                    except ValueError:
-                        st.error("Data inválida! Use o formato DD/MM/AAAA.")
-
-            st.markdown("---")
-            st.subheader("Provas cadastradas")
-            provas = get_provas_df()
-            if len(provas) == 0:
-                st.info("Nenhuma prova cadastrada.")
-            else:
-                for idx, row in provas.iterrows():
-                    col1, col2, col3, col4, col5 = st.columns([3,3,2,2,2])
-                    with col1:
-                        novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome_{row['id']}")
-                    with col2:
-                        if pd.notnull(row['data']) and str(row['data']).strip() != "":
-                            try:
-                                data_formatada = pd.to_datetime(row['data']).strftime("%d/%m/%Y")
-                            except Exception:
-                                data_formatada = "Data inválida"
-                        else:
-                            data_formatada = "Data não informada"
-                        nova_data_str = st.text_input(f"Data prova {row['id']} (DD/MM/AAAA)", value=data_formatada, key=f"pr_data_{row['id']}")
-                    with col3:
-                        novo_status = st.selectbox(f"Status prova {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pr_status_{row['id']}")
-                    with col4:
-                        if st.button("Editar prova", key=f"pr_edit_{row['id']}"):
-                            try:
-                                nova_data = datetime.strptime(nova_data_str, "%d/%m/%Y")
-                                conn = db_connect()
-                                c = conn.cursor()
-                                c.execute('UPDATE provas SET nome=?, data=?, status=? WHERE id=?', (novo_nome, nova_data.strftime("%Y-%m-%d"), novo_status, row['id']))
-                                conn.commit()
-                                conn.close()
-                                st.success("Prova editada!")
-                                st.cache_data.clear()
-                                st.rerun()
-                            except ValueError:
-                                st.error("Data inválida! Use o formato DD/MM/AAAA.")
-                    with col5:
-                        if st.button("Excluir prova", key=f"pr_del_{row['id']}"):
-                            conn = db_connect()
-                            c = conn.cursor()
-                            c.execute('DELETE FROM provas WHERE id=?', (row['id'],))
-                            conn.commit()
-                            conn.close()
-                            st.success("Prova excluída!")
-                            st.cache_data.clear()
-                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao editar prova: {e}")
+            with col6:
+                if st.button("Excluir prova", key=f"pr_del_{row['id']}"):
+                    conn = db_connect()
+                    c = conn.cursor()
+                    c.execute('DELETE FROM provas WHERE id=?', (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.success("Prova excluída!")
+                    st.cache_data.clear()
+                    st.rerun()
     else:
         st.warning("Acesso restrito ao usuário master.")
 
