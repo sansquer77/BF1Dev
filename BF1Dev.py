@@ -914,86 +914,86 @@ if st.session_state['pagina'] == "Gestão do campeonato" and st.session_state['t
 
         # --- PROVAS ---
         with tab2:
-        st.subheader("Adicionar nova prova")
-        nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
-        data_prova = st.date_input("Data da nova prova", key="data_nova_prova")
-        horario_prova = st.time_input("Horário da nova prova", value=time(15,0), key="hora_nova_prova")  # valor padrão: 15:00
-        status_prova = st.selectbox("Status da prova", ["Ativo", "Inativo"], key="status_nova_prova")
-        tipo_prova = st.selectbox("Tipo da prova", ["Normal", "Sprint"], key="tipo_nova_prova")
-    
-        if st.button("Adicionar prova", key="btn_add_prova_form"):
-            if not nome_prova.strip():
-                st.error("Informe o nome da prova.")
-            else:
-                try:
-                    data_str = data_prova.strftime("%Y-%m-%d")
-                    hora_str = horario_prova.strftime("%H:%M:%S")
-                    conn = db_connect()
-                    c = conn.cursor()
-                    c.execute('INSERT INTO provas (nome, data, horario_prova, status, tipo) VALUES (?, ?, ?, ?, ?)',
-                              (nome_prova.strip(), data_str, hora_str, status_prova, tipo_prova))
-                    conn.commit()
-                    conn.close()
-                    st.success("Prova adicionada!")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao adicionar prova: {e}")
-    
-        st.markdown("---")
-        st.subheader("Provas cadastradas")
-        provas = get_provas_df()
-        if len(provas) == 0:
-            st.info("Nenhuma prova cadastrada.")
-        else:
-            for idx, row in provas.iterrows():
-                col1, col2, col3, col4, col5, col6 = st.columns([3,2,2,2,2,2])
-                with col1:
-                    novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome_{row['id']}")
-                with col2:
-                    # Data
+            st.subheader("Adicionar nova prova")
+            nome_prova = st.text_input("Nome da nova prova", key="nome_nova_prova")
+            data_prova = st.date_input("Data da nova prova", key="data_nova_prova")
+            horario_prova = st.time_input("Horário da nova prova", value=time(15,0), key="hora_nova_prova")  # valor padrão: 15:00
+            status_prova = st.selectbox("Status da prova", ["Ativo", "Inativo"], key="status_nova_prova")
+            tipo_prova = st.selectbox("Tipo da prova", ["Normal", "Sprint"], key="tipo_nova_prova")
+        
+            if st.button("Adicionar prova", key="btn_add_prova_form"):
+                if not nome_prova.strip():
+                    st.error("Informe o nome da prova.")
+                else:
                     try:
-                        data_val = pd.to_datetime(row['data']).date() if pd.notnull(row['data']) else datetime.today().date()
-                    except Exception:
-                        data_val = datetime.today().date()
-                    nova_data = st.date_input(f"Data prova {row['id']}", value=data_val, key=f"pr_data_{row['id']}")
-                with col3:
-                    # Horário
-                    try:
-                        hora_val = pd.to_datetime(row['horario_prova']).time() if pd.notnull(row['horario_prova']) else time(15,0)
-                    except Exception:
-                        hora_val = time(15,0)
-                    novo_horario = st.time_input(f"Horário prova {row['id']}", value=hora_val, key=f"pr_hora_{row['id']}")
-                with col4:
-                    novo_status = st.selectbox(f"Status prova {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pr_status_{row['id']}")
-                with col5:
-                    novo_tipo = st.selectbox(f"Tipo prova {row['id']}", ["Normal", "Sprint"], index=0 if row.get('tipo', 'Normal') == "Normal" else 1, key=f"pr_tipo_{row['id']}")
-                with col6:
-                    if st.button("Editar prova", key=f"pr_edit_{row['id']}"):
-                        try:
-                            data_str = nova_data.strftime("%Y-%m-%d")
-                            hora_str = novo_horario.strftime("%H:%M:%S")
-                            conn = db_connect()
-                            c = conn.cursor()
-                            c.execute('UPDATE provas SET nome=?, data=?, horario_prova=?, status=?, tipo=? WHERE id=?',
-                                      (novo_nome, data_str, hora_str, novo_status, novo_tipo, row['id']))
-                            conn.commit()
-                            conn.close()
-                            st.success("Prova editada!")
-                            st.cache_data.clear()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao editar prova: {e}")
-                with col6:
-                    if st.button("Excluir prova", key=f"pr_del_{row['id']}"):
+                        data_str = data_prova.strftime("%Y-%m-%d")
+                        hora_str = horario_prova.strftime("%H:%M:%S")
                         conn = db_connect()
                         c = conn.cursor()
-                        c.execute('DELETE FROM provas WHERE id=?', (row['id'],))
+                        c.execute('INSERT INTO provas (nome, data, horario_prova, status, tipo) VALUES (?, ?, ?, ?, ?)',
+                                  (nome_prova.strip(), data_str, hora_str, status_prova, tipo_prova))
                         conn.commit()
                         conn.close()
-                        st.success("Prova excluída!")
+                        st.success("Prova adicionada!")
                         st.cache_data.clear()
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao adicionar prova: {e}")
+        
+            st.markdown("---")
+            st.subheader("Provas cadastradas")
+            provas = get_provas_df()
+            if len(provas) == 0:
+                st.info("Nenhuma prova cadastrada.")
+            else:
+                for idx, row in provas.iterrows():
+                    col1, col2, col3, col4, col5, col6 = st.columns([3,2,2,2,2,2])
+                    with col1:
+                        novo_nome = st.text_input(f"Nome prova {row['id']}", value=row['nome'], key=f"pr_nome_{row['id']}")
+                    with col2:
+                        # Data
+                        try:
+                            data_val = pd.to_datetime(row['data']).date() if pd.notnull(row['data']) else datetime.today().date()
+                        except Exception:
+                            data_val = datetime.today().date()
+                        nova_data = st.date_input(f"Data prova {row['id']}", value=data_val, key=f"pr_data_{row['id']}")
+                    with col3:
+                        # Horário
+                        try:
+                            hora_val = pd.to_datetime(row['horario_prova']).time() if pd.notnull(row['horario_prova']) else time(15,0)
+                        except Exception:
+                            hora_val = time(15,0)
+                        novo_horario = st.time_input(f"Horário prova {row['id']}", value=hora_val, key=f"pr_hora_{row['id']}")
+                    with col4:
+                        novo_status = st.selectbox(f"Status prova {row['id']}", ["Ativo", "Inativo"], index=0 if row.get('status', 'Ativo') == "Ativo" else 1, key=f"pr_status_{row['id']}")
+                    with col5:
+                        novo_tipo = st.selectbox(f"Tipo prova {row['id']}", ["Normal", "Sprint"], index=0 if row.get('tipo', 'Normal') == "Normal" else 1, key=f"pr_tipo_{row['id']}")
+                    with col6:
+                        if st.button("Editar prova", key=f"pr_edit_{row['id']}"):
+                            try:
+                                data_str = nova_data.strftime("%Y-%m-%d")
+                                hora_str = novo_horario.strftime("%H:%M:%S")
+                                conn = db_connect()
+                                c = conn.cursor()
+                                c.execute('UPDATE provas SET nome=?, data=?, horario_prova=?, status=?, tipo=? WHERE id=?',
+                                          (novo_nome, data_str, hora_str, novo_status, novo_tipo, row['id']))
+                                conn.commit()
+                                conn.close()
+                                st.success("Prova editada!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao editar prova: {e}")
+                    with col6:
+                        if st.button("Excluir prova", key=f"pr_del_{row['id']}"):
+                            conn = db_connect()
+                            c = conn.cursor()
+                            c.execute('DELETE FROM provas WHERE id=?', (row['id'],))
+                            conn.commit()
+                            conn.close()
+                            st.success("Prova excluída!")
+                            st.cache_data.clear()
+                            st.rerun()
     else:
         st.warning("Acesso restrito ao usuário master.")
 
