@@ -3,9 +3,12 @@ import sqlite3
 import bcrypt
 import jwt as pyjwt
 import pandas as pd
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import ast
 import os
-import dash
+import matplotlib.pyplot as plt
+import dashboard
 from db_utils import db_connect
 from championship_bets import main as championship_bets_main
 from championship_results import main as championship_results_main
@@ -13,15 +16,16 @@ from analysis import main as analysis_main
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from datetime import datetime, timedelta, UTC
-import sys
-if sys.version_info < (3, 9):
-    from backports.zoneinfo import ZoneInfo
-else:
-    from zoneinfo import ZoneInfo
 
-JWT_SECRET = st.secrets["JWT_SECRET"]
+st.set_page_config(
+    page_title="BF1",
+    page_icon="Logo.png",
+    layout="wide"
+)
+
+JWT_SECRET = os.environ.get("JWT_SECRET")
 JWT_EXP_MINUTES = 120
+data_envio = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
 
 REGULAMENTO = """
 REGULAMENTO BF1-2025
@@ -119,9 +123,9 @@ senha_hash TEXT,
 perfil TEXT,
 status TEXT DEFAULT 'Ativo',
 faltas INTEGER DEFAULT 0)''')
-    usuario_master = st.secrets["usuario_master"]
-    email_master = st.secrets["email_master"]
-    senha_master = st.secrets["senha_master"]
+    usuario_master = os.environ.get("usuario_master")
+    email_master = os.environ.get("email_master")
+    senha_master = os.environ.get("senha_master")
     senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt()).decode('utf-8')
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
 VALUES (?, ?, ?, ?, ?, ?)''',
@@ -212,7 +216,7 @@ def generate_token(user_id, perfil, status):
         'user_id': user_id,
         'perfil': perfil,
         'status': status,
-        'exp': datetime.now(UTC) + timedelta(minutes=JWT_EXP_MINUTES)
+        'exp': datetime.now(ZoneInfo("UTC")) + timedelta(minutes=JWT_EXP_MINUTES)
     }
     token = pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
     if isinstance(token, bytes):
@@ -281,8 +285,8 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
             raise ValueError("Usuário não encontrado")
 
         email_usuario = usuario[2]
-        EMAIL_REMETENTE = "sansquer@gmail.com"
-        SENHA_REMETENTE = st.secrets["SENHA_EMAIL"]
+        EMAIL_REMETENTE = "sansquer@gmail.com"  # Substitua por variável de ambiente
+        SENHA_REMETENTE = os.environ.get("SENHA_EMAIL")  # Garanta que está configurada
         EMAIL_ADMIN = "cristiano_gaspar@outlook.com"
 
         corpo_html = f"""
@@ -294,6 +298,7 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
         <p>Data/Hora: {data_envio}</p>
         """
 
+        # Função de envio corrigida
         def enviar_email(destinatario, assunto, corpo_html):
             from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
@@ -314,16 +319,12 @@ def salvar_aposta(usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova, 
                 st.error(f"Erro no envio: {str(e)}")
                 return False
 
-        # Enviar e-mails
+        # Enviar e-mails com tratamento de erro
         if not enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html):
             st.error("Falha no envio para o participante")
 
         if not enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html):
             st.error("Falha no envio para admin")
-
-        # ---- Registrar log ----
-        # aposta_str = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
-        # registrar_log_aposta(user[1], aposta_str, nome_prova, piloto_11, automatica)
 
     except Exception as e:
         st.error(f"Erro geral ao salvar aposta: {str(e)}")
@@ -410,27 +411,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     salvar_aposta(usuario_id, prova_id, pilotos_ant, fichas_ant, piloto_11_ant, nome_prova, automatica=num_auto+1)
     return True, "Aposta automática gerada!"
 
-def enviar_email(destinatario, assunto, corpo_html, remetente_email, remetente_senha):
-    try:
-        # Configurar mensagem
-        msg = MIMEMultipart()
-        msg['From'] = remetente_email
-        msg['To'] = destinatario
-        msg['Subject'] = assunto
-        msg.attach(MIMEText(corpo_html, 'html'))
-
-        # Configurar servidor SMTP (ex: Gmail)
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(remetente_email, remetente_senha)
-            server.send_message(msg)
-        
-        return True
-    except Exception as e:
-        st.error(f"Erro ao enviar e-mail: {str(e)}")
-        return False
-
 # --- INICIALIZAÇÃO E MENU ---
-st.set_page_config(page_title="Bolão F1 2025", layout="wide")
 init_db()
 
 if 'pagina' not in st.session_state:
@@ -451,7 +432,7 @@ def menu_master():
         "Resultado Campeonato",
         "Log de Apostas",
         "Classificação",
-        "Dash F1",
+        "Dashboard F1",
         "Exportar/Importar Excel",
         "Regulamento",
         "Logout"
@@ -465,7 +446,7 @@ def menu_admin():
         "Apostas Campeonato",
         "Log de Apostas",
         "Classificação",
-        "Dash F1",
+        "Dashboard F1",
         "Regulamento",
         "Logout"
     ]
@@ -476,7 +457,7 @@ def menu_participante():
         "Análise de Apostas",
         "Log de Apostas",
         "Classificação",
-        "Dash F1",
+        "Dashboard F1",
         "Regulamento",
         "Logout"
     ]
@@ -611,7 +592,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                 fichas_ant = []
                 piloto_11_ant = ""
             st.write("Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
-            max_linhas = 5
+            max_linhas = 10
             pilotos_aposta = []
             fichas_aposta = []
             for i in range(max_linhas):
@@ -1076,12 +1057,12 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 if not resultado.empty:
                                     nova_aposta = resultado.iloc[0]
                                     aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
-                                    registrar_log_aposta(
+                                    registrar_log_aposta(  
                                         part.nome, 
                                         aposta_str, 
                                         f"{prova['nome']}*", 
-                                        nova_aposta['piloto_11'],  # piloto_11
-                                        1  # automatica=1 (aposta automática)
+                                        nova_aposta['piloto_11'],
+                                        1  # ✅ automatica=1 (aposta automática)
                                     )
                                 else:
                                     st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
@@ -1167,26 +1148,52 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
 
     # --------- 3. Pontuação por Prova (detalhe) ----------
     st.subheader("Pontuação por Prova")
+    
+    # 1. Ordenar provas pelo ID correto (coluna 'id' na tabela provas)
+    provas_df = provas_df.sort_values('id')
     provas_nomes = provas_df['nome'].tolist()
-    participantes_nomes = [p['Participante'] for p in tabela_detalhada]
-    dados_cruzados = {}
-    for idx, prova in enumerate(provas_nomes):
-        linha = {}
-        for part in tabela_detalhada:
-            linha[part['Participante']] = part['Pontos por Prova'][idx] if idx < len(part['Pontos por Prova']) and part['Pontos por Prova'][idx] is not None else 0
-        dados_cruzados[prova] = linha
+    provas_ids_ordenados = provas_df['id'].tolist()  # Usar 'id' em vez de 'prova_id'
+    
+    # 2. Mapear pontos por prova_id (usando o id da prova)
+    dados_cruzados = {prova_nome: {} for prova_nome in provas_nomes}
+    
+    for part in tabela_detalhada:
+        participante = part['Participante']
+        pontos_por_prova = {}
+        
+        # Obter ID do participante
+        usuario_id = participantes[participantes['nome'] == participante].iloc[0]['id']
+        
+        # Filtrar apostas do participante
+        apostas_part = apostas_df[apostas_df['usuario_id'] == usuario_id]
+        
+        for _, aposta in apostas_part.iterrows():
+            pontos = calcular_pontuacao_lote(pd.DataFrame([aposta]), resultados_df, provas_df)
+            if pontos:
+                # Usar prova_id da aposta (foreign key para provas.id)
+                pontos_por_prova[aposta['prova_id']] = pontos[0]
+        
+        # Preencher pontos para todas as provas
+        for prova_id, prova_nome in zip(provas_ids_ordenados, provas_nomes):
+            pontos = pontos_por_prova.get(prova_id, 0)
+            dados_cruzados[prova_nome][participante] = pontos if pontos is not None else 0
+    
+    # 3. Criar DataFrame cruzado
     df_cruzada = pd.DataFrame(dados_cruzados).T
-    df_cruzada = df_cruzada.reindex(columns=participantes_nomes, fill_value=0)
+    df_cruzada = df_cruzada.reindex(columns=[p['nome'] for _, p in participantes.iterrows()], fill_value=0)
+    
     st.dataframe(df_cruzada)
 
-    # --------- 4. Gráfico de evolução ----------
+   # --------- 4. Gráfico de evolução ----------
     st.subheader("Evolução da Pontuação Acumulada")
+    
     if not df_cruzada.empty:
         fig = go.Figure()
-        for participante in participantes_nomes:
+        # Usar nomes das colunas diretamente do DataFrame
+        for participante in df_cruzada.columns:
             pontos_acumulados = df_cruzada[participante].cumsum()
             fig.add_trace(go.Scatter(
-                x=provas_nomes,
+                x=df_cruzada.index.tolist(),  # Nomes das provas como eixo X
                 y=pontos_acumulados,
                 mode='lines+markers',
                 name=participante
@@ -1196,11 +1203,8 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
             xaxis_title="Prova",
             yaxis_title="Pontuação Acumulada",
             xaxis_tickangle=-45,
-            xaxis=dict(tickfont=dict(size=11)),
-            yaxis=dict(tickfont=dict(size=11)),
             margin=dict(l=40, r=20, t=60, b=80),
-            plot_bgcolor='rgba(240,240,255,0.9)',
-            hovermode='x unified'
+            plot_bgcolor='rgba(240,240,255,0.9)'
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -1334,6 +1338,7 @@ if st.session_state['pagina'] == "Regulamento":
     st.title("Regulamento BF1-2025")
     st.markdown(REGULAMENTO.replace('\n', '  \n'))
 
+# --- Backup ---
 # --- Backup ---
 import io
 import sqlite3
@@ -1506,8 +1511,8 @@ if (
     modulo_exportar_importar_excel()
 
 # --- Dash F1 ---
-if st.session_state['pagina'] == "Dash F1":
-    dash.main()
+if st.session_state['pagina'] == "Dashboard F1":
+    dashboard.main()
 
 # --- Apostas Campeonato ---
 if st.session_state['pagina'] == "Apostas Campeonato":
