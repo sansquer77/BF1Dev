@@ -298,6 +298,15 @@ def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, 
     conn.commit()
     conn.close()
 
+def log_aposta_existe(apostador, nome_prova, tipo_aposta):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('''SELECT COUNT(*) FROM log_apostas WHERE apostador=? AND nome_prova=? AND tipo_aposta=?''',
+              (apostador, nome_prova, tipo_aposta))
+    count = c.fetchone()[0]
+    conn.close()
+    return count > 0
+    
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
     automatica=0, horario_forcado=None
@@ -331,19 +340,21 @@ def salvar_aposta(
     elif agora_sp > horario_limite:
         st.error("Apostas para esta prova já estão encerradas!")
         tipo_aposta = 1  # Aposta fora do horário
-
-        # Registra log SEM salvar aposta
+    
         usuario = get_user_by_id(usuario_id)
         if not usuario:
             return False
-        registrar_log_aposta(
-            apostador=usuario[1],
-            aposta=','.join(pilotos),
-            nome_prova=nome_prova_bd,
-            piloto_11=piloto_11,
-            tipo_aposta=tipo_aposta,
-            horario=agora_sp
-        )
+    
+        # Verifica se já existe log para esse apostador/prova/tipo
+        if not log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta):
+            registrar_log_aposta(
+                apostador=usuario[1],
+                aposta=','.join(pilotos),
+                nome_prova=nome_prova_bd,
+                piloto_11=piloto_11,
+                tipo_aposta=tipo_aposta,
+                horario=agora_sp
+            )
         return False
     else:
         tipo_aposta = 0  # Aposta normal
