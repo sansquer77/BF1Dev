@@ -426,7 +426,15 @@ def gerar_aposta_aleatoria(pilotos_df):
     
     # Seleciona 3 pilotos de equipes diferentes
     equipes_unicas = pilotos_df['equipe'].unique().tolist()
-    equipes_selecionadas = random.sample(equipes_unicas, min(3, len(equipes_unicas)))
+    
+    # Garante pelo menos 3 equipes
+    if len(equipes_unicas) < 3:
+        # Usa todas as equipes disponíveis e completa com pilotos aleatórios
+        equipes_selecionadas = equipes_unicas.copy()
+        while len(equipes_selecionadas) < 3:
+            equipes_selecionadas.append(random.choice(equipes_unicas))
+    else:
+        equipes_selecionadas = random.sample(equipes_unicas, 3)
     
     pilotos_selecionados = []
     for equipe in equipes_selecionadas:
@@ -438,30 +446,23 @@ def gerar_aposta_aleatoria(pilotos_df):
     fichas = []
     total_fichas = 15
     
-    # Garante que há fichas suficientes para mínimo
+    # Distribuição robusta de fichas
     if total_fichas < n_pilotos:
-        raise ValueError("Fichas insuficientes para distribuição mínima")
+        # Modo de emergência: 1 ficha por piloto + excedente no primeiro
+        fichas = [1] * n_pilotos
+        fichas[0] += total_fichas - n_pilotos
+    else:
+        for i in range(n_pilotos):
+            if i == n_pilotos - 1:
+                fichas.append(total_fichas)
+            else:
+                reserva_restante = n_pilotos - i - 1
+                max_ficha = min(10, total_fichas - reserva_restante)
+                ficha = random.randint(1, max_ficha)
+                fichas.append(ficha)
+                total_fichas -= ficha
     
-    # Distribui fichas garantindo mínimo 1 para cada
-    for i in range(n_pilotos):
-        if i == n_pilotos - 1:
-            ficha = total_fichas
-        else:
-            # Reserva 1 ficha para cada piloto restante
-            reserva_restante = n_pilotos - i - 1
-            max_ficha = min(10, total_fichas - reserva_restante)
-            ficha = random.randint(1, max_ficha)
-            total_fichas -= ficha
-        fichas.append(ficha)
-    
-    # Seleciona piloto para 11º lugar (diferente dos escolhidos)
-    todos_pilotos = pilotos_df['nome'].tolist()
-    candidatos_11 = [p for p in todos_pilotos if p not in pilotos_selecionados]
-    piloto_11 = random.choice(candidatos_11) if candidatos_11 else random.choice(todos_pilotos)
-    
-    return pilotos_selecionados, fichas, piloto_11
-    
-    # Seleciona piloto para 11º lugar (diferente dos escolhidos)
+    # Seleção do 11º colocado
     todos_pilotos = pilotos_df['nome'].tolist()
     candidatos_11 = [p for p in todos_pilotos if p not in pilotos_selecionados]
     piloto_11 = random.choice(candidatos_11) if candidatos_11 else random.choice(todos_pilotos)
