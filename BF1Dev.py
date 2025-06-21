@@ -410,17 +410,6 @@ def salvar_aposta(
     finally:
         if conn:
             conn.close()
-
-    # Registrar log para TODOS OS TIPOS (0, 1, 2) - APENAS UMA VEZ
-    registrar_log_aposta(
-        apostador=usuario[1],
-        aposta=dados_aposta,
-        nome_prova=nome_prova_bd,
-        piloto_11=piloto_11,
-        tipo_aposta=tipo_aposta,
-        horario=agora_sp
-    )
-
     return True
 
 def gerar_aposta_aleatoria(pilotos_df):
