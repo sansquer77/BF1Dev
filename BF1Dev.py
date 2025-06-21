@@ -1190,13 +1190,13 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 if not resultado.empty:
                                     nova_aposta = resultado.iloc[0]
                                     aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
-                                    registrar_log_aposta(  
+                                    registrar_log_aposta(
                                         apostador=part.nome,
                                         aposta=aposta_str,
                                         nome_prova=f"{prova['nome']}*",
                                         piloto_11=nova_aposta['piloto_11'],
-                                        tipo_aposta=0,  # Ou 1 dependendo do horário
-                                        automatica=1     # ✅ Marcando como aposta automática
+                                        tipo_aposta=0,  # ou 1, conforme o caso
+                                        automatica=1    # 1 para automática
                                     )
                                 else:
                                     st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
