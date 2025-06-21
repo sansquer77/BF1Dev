@@ -351,33 +351,25 @@ def salvar_aposta(
     if log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, dados_aposta):
         return True  # Log já existe, não processa novamente
 
-    # Processamento para apostas válidas (tipos 0 e 2)
     conn = None
-    if tipo_aposta in [0, 2]:  # Apostas normais ou automáticas
-        try:
-            conn = db_connect()
-            c = conn.cursor()
-            
-            # Verifica se já existe aposta
-            c.execute('SELECT id FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-            aposta_existente = c.fetchone()
-            if aposta_existente:
-                return True
-                
+    try:
+        conn = db_connect()
+        c = conn.cursor()
+        
+        # SEMPRE remove aposta existente antes de inserir nova
+        c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+        
+        # Para tipos 0 e 2, insere nova aposta
+        if tipo_aposta in [0, 2]:
             data_envio = agora_sp.isoformat()
-
-            # Remove aposta existente
-            c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-
-            # Insere nova aposta
             c.execute('''INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                       (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)),
                        piloto_11, nome_prova_bd, automatica))
-
             conn.commit()
 
-            # Disparar e-mails apenas para tipos 0 e 2
+        # Disparar e-mails apenas para tipos 0 e 2
+        if tipo_aposta in [0, 2]:
             email_usuario = usuario[2]
             EMAIL_REMETENTE = "sansquer@gmail.com"
             SENHA_REMETENTE = os.environ.get("SENHA_EMAIL")
@@ -410,26 +402,65 @@ def salvar_aposta(
             enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html)
             enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html)
 
-        except Exception as e:
-            st.error(f"Erro ao salvar aposta: {str(e)}")
-            if conn:
-                conn.rollback()
-            return False
-        finally:
-            if conn:
-                conn.close()
+    except Exception as e:
+        st.error(f"Erro ao salvar aposta: {str(e)}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
 
-    # Registrar log para TODOS OS TIPOS (0, 1, 2)
-    # registrar_log_aposta(
-        # apostador=usuario[1],
-        # aposta=dados_aposta,  # Dados completos
-        # nome_prova=nome_prova_bd,
-        # piloto_11=piloto_11,
-        # tipo_aposta=tipo_aposta,
-        # horario=agora_sp
-    # )
+    # Registrar log para TODOS OS TIPOS (0, 1, 2) - APENAS UMA VEZ
+    registrar_log_aposta(
+        apostador=usuario[1],
+        aposta=dados_aposta,
+        nome_prova=nome_prova_bd,
+        piloto_11=piloto_11,
+        tipo_aposta=tipo_aposta,
+        horario=agora_sp
+    )
 
     return True
+
+def gerar_aposta_aleatoria(pilotos_df):
+    """Gera uma aposta aleatória respeitando as regras"""
+    import random
+    
+    # Seleciona 3 pilotos de equipes diferentes
+    equipes_unicas = pilotos_df['equipe'].unique()
+    equipes_selecionadas = random.sample(list(equipes_unicas), min(3, len(equipes_unicas)))
+    
+    pilotos_selecionados = []
+    for equipe in equipes_selecionadas:
+        pilotos_equipe = pilotos_df[pilotos_df['equipe'] == equipe]['nome'].tolist()
+        if pilotos_equipe:
+            pilotos_selecionados.append(random.choice(pilotos_equipe))
+    
+    # Se não conseguiu 3, completa com pilotos aleatórios
+    while len(pilotos_selecionados) < 3:
+        piloto_extra = random.choice(pilotos_df['nome'].tolist())
+        if piloto_extra not in pilotos_selecionados:
+            pilotos_selecionados.append(piloto_extra)
+    
+    # Distribui fichas (total máximo 15)
+    fichas = []
+    total_fichas = 15
+    for i in range(len(pilotos_selecionados)):
+        if i == len(pilotos_selecionados) - 1:
+            fichas.append(total_fichas)
+        else:
+            max_ficha = min(10, total_fichas - (len(pilotos_selecionados) - i - 1))
+            ficha = random.randint(1, max_ficha)
+            fichas.append(ficha)
+            total_fichas -= ficha
+    
+    # Seleciona piloto para 11º lugar (diferente dos escolhidos)
+    todos_pilotos = pilotos_df['nome'].tolist()
+    candidatos_11 = [p for p in todos_pilotos if p not in pilotos_selecionados]
+    piloto_11 = random.choice(candidatos_11) if candidatos_11 else random.choice(todos_pilotos)
+    
+    return pilotos_selecionados, fichas, piloto_11
 
 def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas_df):
     # Buscar informações da prova atual
@@ -458,12 +489,16 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
                         (apostas_df['prova_id'] == prova_ant_id)]
     
     if ap_ant.empty:
-        return False, "Participante não tem aposta anterior para copiar."
+        # Gera aposta aleatória quando não há anterior
+        pilotos_df = get_pilotos_df()  # Função que retorna DataFrame de pilotos
+        pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
+        st.warning("Não havia aposta anterior. Gerada aposta aleatória.")
+    else:
+        ap_ant = ap_ant.iloc[0]
+        pilotos_ant = ap_ant['pilotos'].split(",")
+        fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
+        piloto_11_ant = ap_ant['piloto_11']
     
-    ap_ant = ap_ant.iloc[0]
-    pilotos_ant = ap_ant['pilotos'].split(",")
-    fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
-    piloto_11_ant = ap_ant['piloto_11']
     num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
                               (apostas_df['automatica'] >= 1)])
     
@@ -498,6 +533,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         return True, "Aposta automática gerada com sucesso!"
     else:
         return False, "Falha ao salvar aposta automática."
+
 
 
 def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
