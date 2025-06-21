@@ -942,6 +942,16 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
             novo_email = st.text_input("Email", value=usuario['email'], key="edit_email")
             novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if usuario['status'] == "Ativo" else 1, key="edit_status")
             novo_perfil = st.selectbox("Perfil", ["participante", "admin"], index=0 if usuario['perfil'] == "participante" else 1, key="edit_perfil")
+            
+            # NOVO CAMPO: Atualização manual de faltas
+            st.subheader("Controle de Faltas")
+            novo_faltas = st.number_input(
+                "Faltas", 
+                min_value=0, 
+                value=int(usuario['faltas']) if usuario['faltas'] is not None else 0,
+                key="edit_faltas"
+            )
+            
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Atualizar usuário"):
@@ -950,8 +960,12 @@ if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['to
                     else:
                         conn = db_connect()
                         c = conn.cursor()
-                        c.execute('UPDATE usuarios SET nome=?, email=?, status=?, perfil=? WHERE id=?',
-                                  (novo_nome, novo_email, novo_status, novo_perfil, usuario_id))
+                        # Atualiza todos os campos, incluindo faltas
+                        c.execute('''
+                            UPDATE usuarios 
+                            SET nome=?, email=?, status=?, perfil=?, faltas=? 
+                            WHERE id=?
+                        ''', (novo_nome, novo_email, novo_status, novo_perfil, novo_faltas, usuario_id))
                         conn.commit()
                         conn.close()
                         st.success("Usuário atualizado!")
