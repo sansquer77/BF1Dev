@@ -275,28 +275,20 @@ def get_horario_prova(prova_id):
     if not prova:
         return None, None, None
     return prova[0], prova[1], prova[2]
-    
+
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, horario=None):
     """
     Registra uma entrada no log de apostas com o tipo de aposta e horário específico.
-    
-    Parâmetros:
-    apostador (str): Nome do apostador
-    aposta (str): Lista de pilotos apostados (separados por vírgula)
-    nome_prova (str): Nome da prova
-    piloto_11 (str): Nome do piloto apostado para 11º lugar
-    tipo_aposta (int): 0 = normal, 1 = fora do horário, 2 = automática
-    horario (datetime): Horário específico para registro (opcional)
+    tipo_aposta: 0 = normal, 1 = fora do horário, 2 = automática
     """
     from datetime import datetime
     from zoneinfo import ZoneInfo
-    
+
     if horario is None:
         horario = datetime.now(ZoneInfo("America/Sao_Paulo"))
-    
     data = horario.strftime('%Y-%m-%d')
     hora = horario.strftime('%H:%M:%S')
-    
+
     conn = db_connect()
     c = conn.cursor()
     c.execute('''INSERT INTO log_apostas 
@@ -339,7 +331,7 @@ def salvar_aposta(
     elif agora_sp > horario_limite:
         st.error("Apostas para esta prova já estão encerradas!")
         tipo_aposta = 1  # Aposta fora do horário
-        
+
         # Registra log SEM salvar aposta
         usuario = get_user_by_id(usuario_id)
         if not usuario:
@@ -358,12 +350,18 @@ def salvar_aposta(
 
     conn = None
     try:
-        # Operações de banco de dados
         conn = db_connect()
         c = conn.cursor()
+
+        # Verifica se já existe aposta para evitar duplicação
+        c.execute('SELECT id FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+        aposta_existente = c.fetchone()
+        if aposta_existente:
+            return True  # Já existe, não executa novamente
+
         data_envio = agora_sp.isoformat()
 
-        # Remove aposta existente
+        # Remove aposta existente (por segurança)
         c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
 
         # Insere nova aposta
@@ -411,7 +409,7 @@ def salvar_aposta(
         enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html)
         enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html)
 
-        # Registrar log da aposta com tipo correto
+        # Registrar log da aposta com tipo correto (APENAS SE FOR NOVA)
         registrar_log_aposta(
             apostador=usuario[1],
             aposta=','.join(pilotos),
@@ -468,6 +466,15 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
                               (apostas_df['automatica'] >= 1)])
     
+    # Verifica se já existe aposta para esta prova
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT id FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+    aposta_existente = c.fetchone()
+    conn.close()
+    if aposta_existente:
+        return False, "O usuário já possui aposta para esta prova."
+    
     # Forçar salvamento com horário da prova
     success = salvar_aposta(
         usuario_id, 
@@ -490,6 +497,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         return True, "Aposta automática gerada com sucesso!"
     else:
         return False, "Falha ao salvar aposta automática."
+
 
 def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     import ast
