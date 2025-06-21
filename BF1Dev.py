@@ -434,17 +434,32 @@ def gerar_aposta_aleatoria(pilotos_df):
         if pilotos_equipe:
             pilotos_selecionados.append(random.choice(pilotos_equipe))
     
-    # Distribui fichas (total máximo 15)
+    n_pilotos = len(pilotos_selecionados)
     fichas = []
     total_fichas = 15
-    for i in range(len(pilotos_selecionados)):
-        if i == len(pilotos_selecionados) - 1:
+    
+    # Garante que há fichas suficientes para mínimo
+    if total_fichas < n_pilotos:
+        raise ValueError("Fichas insuficientes para distribuição mínima")
+    
+    # Distribui fichas garantindo mínimo 1 para cada
+    for i in range(n_pilotos):
+        if i == n_pilotos - 1:
             ficha = total_fichas
         else:
-            max_ficha = min(10, total_fichas)
+            # Reserva 1 ficha para cada piloto restante
+            reserva_restante = n_pilotos - i - 1
+            max_ficha = min(10, total_fichas - reserva_restante)
             ficha = random.randint(1, max_ficha)
             total_fichas -= ficha
         fichas.append(ficha)
+    
+    # Seleciona piloto para 11º lugar (diferente dos escolhidos)
+    todos_pilotos = pilotos_df['nome'].tolist()
+    candidatos_11 = [p for p in todos_pilotos if p not in pilotos_selecionados]
+    piloto_11 = random.choice(candidatos_11) if candidatos_11 else random.choice(todos_pilotos)
+    
+    return pilotos_selecionados, fichas, piloto_11
     
     # Seleciona piloto para 11º lugar (diferente dos escolhidos)
     todos_pilotos = pilotos_df['nome'].tolist()
