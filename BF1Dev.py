@@ -276,7 +276,7 @@ def get_horario_prova(prova_id):
         return None, None, None
     return prova[0], prova[1], prova[2]
 
-def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, horario=None):
+def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario=None):
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
@@ -288,18 +288,18 @@ def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, 
     conn = db_connect()
     c = conn.cursor()
     c.execute('''INSERT INTO log_apostas 
-                (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)''',
-              (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta))
+                (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta, automatica) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+              (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica))
     conn.commit()
     conn.close()
 
-def log_aposta_existe(apostador, nome_prova, tipo_aposta, dados_aposta):
+def log_aposta_existe(apostador, nome_prova, tipo_aposta, automatica, dados_aposta):
     conn = db_connect()
     c = conn.cursor()
     c.execute('''SELECT COUNT(*) FROM log_apostas 
-                 WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND aposta=?''',
-              (apostador, nome_prova, tipo_aposta, dados_aposta))
+                 WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND automatica=? AND aposta=?''',
+              (apostador, nome_prova, tipo_aposta, automatica, dados_aposta))
     count = c.fetchone()[0]
     conn.close()
     return count > 0
@@ -328,39 +328,36 @@ def salvar_aposta(
 
     # Horário atual normalizado para SP (ou horário forçado para aposta automática)
     agora_sp = datetime.now(ZoneInfo("America/Sao_Paulo"))
-    if automatica and horario_forcado:
+    if horario_forcado:
         agora_sp = horario_forcado
 
-    # Formatar dados completos da aposta (PARA TODOS OS TIPOS)
+    # Formatar dados completos da aposta
     dados_aposta = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
 
-    # Determinar tipo de aposta
-    if automatica:
-        tipo_aposta = 2  # Aposta automática
-    elif agora_sp > horario_limite:
+    # Determinar tipo de aposta (0 = dentro do prazo, 1 = fora do prazo)
+    tipo_aposta = 0
+    if agora_sp > horario_limite:
+        tipo_aposta = 1
         st.error("Apostas para esta prova já estão encerradas!")
-        tipo_aposta = 1  # Aposta fora do horário
-    else:
-        tipo_aposta = 0  # Aposta normal
 
-    # Verificação de duplicidade para TODOS OS TIPOS
+    # Verificação de duplicidade
     usuario = get_user_by_id(usuario_id)
     if not usuario:
         return False
 
-    if log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, dados_aposta):
-        return True  # Log já existe, não processa novamente
+    if log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, automatica, dados_aposta):
+        return True  # Log já existe
 
     conn = None
     try:
         conn = db_connect()
         c = conn.cursor()
         
-        # SEMPRE remove aposta existente antes de inserir nova
+        # Atualiza aposta existente ou insere nova
         c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
         
-        # Para tipos 0 e 2, insere nova aposta
-        if tipo_aposta in [0, 2]:
+        # Só salva na tabela de apostas se for dentro do prazo (tipo 0)
+        if tipo_aposta == 0:
             data_envio = agora_sp.isoformat()
             c.execute('''INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -368,8 +365,7 @@ def salvar_aposta(
                        piloto_11, nome_prova_bd, automatica))
             conn.commit()
 
-        # Disparar e-mails apenas para tipos 0 e 2
-        if tipo_aposta in [0, 2]:
+            # Envia e-mail apenas para apostas dentro do prazo
             email_usuario = usuario[2]
             EMAIL_REMETENTE = "sansquer@gmail.com"
             SENHA_REMETENTE = os.environ.get("SENHA_EMAIL")
@@ -410,6 +406,18 @@ def salvar_aposta(
     finally:
         if conn:
             conn.close()
+
+    # Registrar log para todos os casos
+    registrar_log_aposta(
+        apostador=usuario[1],
+        aposta=dados_aposta,
+        nome_prova=nome_prova_bd,
+        piloto_11=piloto_11,
+        tipo_aposta=tipo_aposta,
+        automatica=automatica,
+        horario=agora_sp
+    )
+
     return True
 
 def gerar_aposta_aleatoria(pilotos_df):
@@ -417,8 +425,8 @@ def gerar_aposta_aleatoria(pilotos_df):
     import random
     
     # Seleciona 3 pilotos de equipes diferentes
-    equipes_unicas = pilotos_df['equipe'].unique()
-    equipes_selecionadas = random.sample(list(equipes_unicas), min(3, len(equipes_unicas)))
+    equipes_unicas = pilotos_df['equipe'].unique().tolist()
+    equipes_selecionadas = random.sample(equipes_unicas, min(3, len(equipes_unicas)))
     
     pilotos_selecionados = []
     for equipe in equipes_selecionadas:
@@ -426,23 +434,17 @@ def gerar_aposta_aleatoria(pilotos_df):
         if pilotos_equipe:
             pilotos_selecionados.append(random.choice(pilotos_equipe))
     
-    # Se não conseguiu 3, completa com pilotos aleatórios
-    while len(pilotos_selecionados) < 3:
-        piloto_extra = random.choice(pilotos_df['nome'].tolist())
-        if piloto_extra not in pilotos_selecionados:
-            pilotos_selecionados.append(piloto_extra)
-    
     # Distribui fichas (total máximo 15)
     fichas = []
     total_fichas = 15
     for i in range(len(pilotos_selecionados)):
         if i == len(pilotos_selecionados) - 1:
-            fichas.append(total_fichas)
+            ficha = total_fichas
         else:
-            max_ficha = min(10, total_fichas - (len(pilotos_selecionados) - i - 1))
+            max_ficha = min(10, total_fichas)
             ficha = random.randint(1, max_ficha)
-            fichas.append(ficha)
             total_fichas -= ficha
+        fichas.append(ficha)
     
     # Seleciona piloto para 11º lugar (diferente dos escolhidos)
     todos_pilotos = pilotos_df['nome'].tolist()
@@ -467,29 +469,37 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S')
     horario_limite = horario_limite.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
     
+    # Buscar dados de pilotos
+    pilotos_df = get_pilotos_df()
+    
+    # Verificar se é primeira prova
     provas_df = provas_df.sort_values('data')
-    idx_prova = provas_df[provas_df['id'] == prova_id].index[0]
+    try:
+        idx_prova = provas_df[provas_df['id'] == prova_id].index[0]
+    except IndexError:
+        return False, "Prova não encontrada no calendário."
     
+    # Gera aposta aleatória se for primeira prova ou não houver aposta anterior
     if idx_prova == 0:
-        return False, "Não há prova anterior para copiar a aposta."
-    
-    prova_ant_id = provas_df.iloc[idx_prova-1]['id']
-    ap_ant = apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
-                        (apostas_df['prova_id'] == prova_ant_id)]
-    
-    if ap_ant.empty:
-        # Gera aposta aleatória quando não há anterior
-        pilotos_df = get_pilotos_df()  # Função que retorna DataFrame de pilotos
         pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
-        st.warning("Não havia aposta anterior. Gerada aposta aleatória.")
+        st.warning("Primeira prova. Gerada aposta aleatória.")
     else:
-        ap_ant = ap_ant.iloc[0]
-        pilotos_ant = ap_ant['pilotos'].split(",")
-        fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
-        piloto_11_ant = ap_ant['piloto_11']
+        prova_ant_id = provas_df.iloc[idx_prova-1]['id']
+        ap_ant = apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
+                            (apostas_df['prova_id'] == prova_ant_id)]
+        
+        if ap_ant.empty:
+            pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
+            st.warning("Não havia aposta anterior. Gerada aposta aleatória.")
+        else:
+            ap_ant = ap_ant.iloc[0]
+            pilotos_ant = ap_ant['pilotos'].split(",")
+            fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
+            piloto_11_ant = ap_ant['piloto_11']
     
+    # Conta quantas apostas automáticas já fez
     num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
-                              (apostas_df['automatica'] >= 1)])
+                              (apostas_df['automatica'] == 1)])
     
     # Verifica se já existe aposta para esta prova
     conn = db_connect()
@@ -497,10 +507,11 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     c.execute('SELECT id FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
     aposta_existente = c.fetchone()
     conn.close()
+    
     if aposta_existente:
         return False, "O usuário já possui aposta para esta prova."
     
-    # Forçar salvamento com horário da prova
+    # Forçar salvamento com horário da prova (marca como automática)
     success = salvar_aposta(
         usuario_id, 
         prova_id, 
@@ -508,7 +519,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         fichas_ant, 
         piloto_11_ant, 
         nome_prova, 
-        automatica=num_auto+1,
+        automatica=1,  # Marca como aposta automática
         horario_forcado=horario_limite
     )
     
@@ -522,8 +533,6 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         return True, "Aposta automática gerada com sucesso!"
     else:
         return False, "Falha ao salvar aposta automática."
-
-
 
 def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     import ast
