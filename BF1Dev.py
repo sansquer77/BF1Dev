@@ -332,7 +332,7 @@ def salvar_aposta(
         agora_sp = horario_forcado
 
     # Formatar dados completos da aposta (PARA TODOS OS TIPOS)
-    dados_aposta = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))} | 11º: {piloto_11}"
+    dados_aposta = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
 
     # Determinar tipo de aposta
     if automatica:
@@ -420,14 +420,14 @@ def salvar_aposta(
                 conn.close()
 
     # Registrar log para TODOS OS TIPOS (0, 1, 2)
-    registrar_log_aposta(
-        apostador=usuario[1],
-        aposta=dados_aposta,  # Dados completos
-        nome_prova=nome_prova_bd,
-        piloto_11=piloto_11,
-        tipo_aposta=tipo_aposta,
-        horario=agora_sp
-    )
+    # registrar_log_aposta(
+        # apostador=usuario[1],
+        # aposta=dados_aposta,  # Dados completos
+        # nome_prova=nome_prova_bd,
+        # piloto_11=piloto_11,
+        # tipo_aposta=tipo_aposta,
+        # horario=agora_sp
+    # )
 
     return True
 
