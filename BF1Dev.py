@@ -414,7 +414,7 @@ def salvar_aposta(
         nome_prova=nome_prova_bd,
         piloto_11=piloto_11,
         tipo_aposta=tipo_aposta,
-        automatica=automatica,
+        automatica=0,
         horario=agora_sp
     )
 
