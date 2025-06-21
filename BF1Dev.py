@@ -277,10 +277,6 @@ def get_horario_prova(prova_id):
     return prova[0], prova[1], prova[2]
 
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, horario=None):
-    """
-    Registra uma entrada no log de apostas com o tipo de aposta e horário específico.
-    tipo_aposta: 0 = normal, 1 = fora do horário, 2 = automática
-    """
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
@@ -298,15 +294,16 @@ def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, 
     conn.commit()
     conn.close()
 
-def log_aposta_existe(apostador, nome_prova, tipo_aposta):
+def log_aposta_existe(apostador, nome_prova, tipo_aposta, dados_aposta):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('''SELECT COUNT(*) FROM log_apostas WHERE apostador=? AND nome_prova=? AND tipo_aposta=?''',
-              (apostador, nome_prova, tipo_aposta))
+    c.execute('''SELECT COUNT(*) FROM log_apostas 
+                 WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND aposta=?''',
+              (apostador, nome_prova, tipo_aposta, dados_aposta))
     count = c.fetchone()[0]
     conn.close()
     return count > 0
-    
+
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
     automatica=0, horario_forcado=None
@@ -334,112 +331,105 @@ def salvar_aposta(
     if automatica and horario_forcado:
         agora_sp = horario_forcado
 
+    # Formatar dados completos da aposta (PARA TODOS OS TIPOS)
+    dados_aposta = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))} | 11º: {piloto_11}"
+
     # Determinar tipo de aposta
     if automatica:
         tipo_aposta = 2  # Aposta automática
     elif agora_sp > horario_limite:
         st.error("Apostas para esta prova já estão encerradas!")
         tipo_aposta = 1  # Aposta fora do horário
-    
-        usuario = get_user_by_id(usuario_id)
-        if not usuario:
-            return False
-    
-        # Verifica se já existe log para esse apostador/prova/tipo
-        if not log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta):
-            registrar_log_aposta(
-                apostador=usuario[1],
-                aposta=','.join(pilotos),
-                nome_prova=nome_prova_bd,
-                piloto_11=piloto_11,
-                tipo_aposta=tipo_aposta,
-                horario=agora_sp
-            )
-        return False
     else:
         tipo_aposta = 0  # Aposta normal
 
-    conn = None
-    try:
-        conn = db_connect()
-        c = conn.cursor()
-
-        # Verifica se já existe aposta para evitar duplicação
-        c.execute('SELECT id FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-        aposta_existente = c.fetchone()
-        if aposta_existente:
-            return True  # Já existe, não executa novamente
-
-        data_envio = agora_sp.isoformat()
-
-        # Remove aposta existente (por segurança)
-        c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-
-        # Insere nova aposta
-        c.execute('''INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                  (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)),
-                   piloto_11, nome_prova_bd, automatica))
-
-        conn.commit()
-
-        # ---- Disparar e-mails ----
-        usuario = get_user_by_id(usuario_id)
-        if not usuario:
-            raise ValueError("Usuário não encontrado")
-
-        email_usuario = usuario[2]
-        EMAIL_REMETENTE = "sansquer@gmail.com"
-        SENHA_REMETENTE = os.environ.get("SENHA_EMAIL")
-        EMAIL_ADMIN = "cristiano_gaspar@outlook.com"
-
-        corpo_html = f"""
-        <h3>✅ Aposta registrada!</h3>
-        <p><strong>Prova:</strong> {nome_prova_bd}</p>
-        <p><strong>Pilotos:</strong> {', '.join(pilotos)}</p>
-        <p><strong>Fichas:</strong> {', '.join(map(str, fichas))}</p>
-        <p><strong>11º Colocado:</strong> {piloto_11}</p>
-        <p>Data/Hora: {data_envio}</p>
-        """
-
-        def enviar_email(destinatario, assunto, corpo_html):
-            msg = MIMEMultipart()
-            msg['From'] = EMAIL_REMETENTE
-            msg['To'] = destinatario
-            msg['Subject'] = assunto
-            msg.attach(MIMEText(corpo_html, 'html'))
-            try:
-                with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-                    server.login(EMAIL_REMETENTE, SENHA_REMETENTE)
-                    server.send_message(msg)
-                return True
-            except Exception as e:
-                st.error(f"Erro no envio para {destinatario}: {str(e)}")
-                return False
-
-        enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html)
-        enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html)
-
-        # Registrar log da aposta com tipo correto (APENAS SE FOR NOVA)
-        registrar_log_aposta(
-            apostador=usuario[1],
-            aposta=','.join(pilotos),
-            nome_prova=nome_prova_bd,
-            piloto_11=piloto_11,
-            tipo_aposta=tipo_aposta,
-            horario=agora_sp
-        )
-
-        return True
-
-    except Exception as e:
-        st.error(f"Erro ao salvar aposta: {str(e)}")
-        if conn:
-            conn.rollback()
+    # Verificação de duplicidade para TODOS OS TIPOS
+    usuario = get_user_by_id(usuario_id)
+    if not usuario:
         return False
-    finally:
-        if conn:
-            conn.close()
+
+    if log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, dados_aposta):
+        return True  # Log já existe, não processa novamente
+
+    # Processamento para apostas válidas (tipos 0 e 2)
+    conn = None
+    if tipo_aposta in [0, 2]:  # Apostas normais ou automáticas
+        try:
+            conn = db_connect()
+            c = conn.cursor()
+            
+            # Verifica se já existe aposta
+            c.execute('SELECT id FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+            aposta_existente = c.fetchone()
+            if aposta_existente:
+                return True
+                
+            data_envio = agora_sp.isoformat()
+
+            # Remove aposta existente
+            c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+
+            # Insere nova aposta
+            c.execute('''INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)),
+                       piloto_11, nome_prova_bd, automatica))
+
+            conn.commit()
+
+            # Disparar e-mails apenas para tipos 0 e 2
+            email_usuario = usuario[2]
+            EMAIL_REMETENTE = "sansquer@gmail.com"
+            SENHA_REMETENTE = os.environ.get("SENHA_EMAIL")
+            EMAIL_ADMIN = "cristiano_gaspar@outlook.com"
+
+            corpo_html = f"""
+            <h3>✅ Aposta registrada!</h3>
+            <p><strong>Prova:</strong> {nome_prova_bd}</p>
+            <p><strong>Pilotos:</strong> {', '.join(pilotos)}</p>
+            <p><strong>Fichas:</strong> {', '.join(map(str, fichas))}</p>
+            <p><strong>11º Colocado:</strong> {piloto_11}</p>
+            <p>Data/Hora: {data_envio}</p>
+            """
+
+            def enviar_email(destinatario, assunto, corpo_html):
+                msg = MIMEMultipart()
+                msg['From'] = EMAIL_REMETENTE
+                msg['To'] = destinatario
+                msg['Subject'] = assunto
+                msg.attach(MIMEText(corpo_html, 'html'))
+                try:
+                    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                        server.login(EMAIL_REMETENTE, SENHA_REMETENTE)
+                        server.send_message(msg)
+                    return True
+                except Exception as e:
+                    st.error(f"Erro no envio para {destinatario}: {str(e)}")
+                    return False
+
+            enviar_email(email_usuario, "Confirmação de Aposta - BF1Dev", corpo_html)
+            enviar_email(EMAIL_ADMIN, f"Nova aposta de {usuario[1]}", corpo_html)
+
+        except Exception as e:
+            st.error(f"Erro ao salvar aposta: {str(e)}")
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    # Registrar log para TODOS OS TIPOS (0, 1, 2)
+    registrar_log_aposta(
+        apostador=usuario[1],
+        aposta=dados_aposta,  # Dados completos
+        nome_prova=nome_prova_bd,
+        piloto_11=piloto_11,
+        tipo_aposta=tipo_aposta,
+        horario=agora_sp
+    )
+
+    return True
 
 def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas_df):
     # Buscar informações da prova atual
