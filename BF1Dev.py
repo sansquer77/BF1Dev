@@ -470,6 +470,7 @@ def gerar_aposta_aleatoria(pilotos_df):
     return pilotos_selecionados, fichas, piloto_11
 
 def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas_df):
+    """Gera apostas automáticas com tratamento robusto de erros"""
     # Buscar informações da prova atual
     prova_atual = provas_df[provas_df['id'] == prova_id]
     if prova_atual.empty:
@@ -488,36 +489,36 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     # Buscar dados de pilotos
     pilotos_df = get_pilotos_df()
     
-    # Verificar se é primeira prova
+    # Verificar posição da prova no calendário
     provas_df = provas_df.sort_values('data')
     try:
         idx_prova = provas_df[provas_df['id'] == prova_id].index[0]
     except IndexError:
         return False, "Prova não encontrada no calendário."
     
-    # Gera aposta aleatória se for primeira prova ou não houver aposta anterior
+    # Determinar aposta anterior ou gerar aleatória
     if idx_prova == 0:
+        # Primeira prova: gera aleatória
         pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
         st.warning("Primeira prova. Gerada aposta aleatória.")
     else:
+        # Busca prova anterior
         prova_ant_id = provas_df.iloc[idx_prova-1]['id']
         ap_ant = apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
                             (apostas_df['prova_id'] == prova_ant_id)]
         
         if ap_ant.empty:
+            # Sem aposta anterior: gera aleatória
             pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
             st.warning("Não havia aposta anterior. Gerada aposta aleatória.")
         else:
+            # Usa aposta anterior
             ap_ant = ap_ant.iloc[0]
             pilotos_ant = ap_ant['pilotos'].split(",")
             fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
             piloto_11_ant = ap_ant['piloto_11']
     
-    # Conta quantas apostas automáticas já fez
-    num_auto = len(apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
-                              (apostas_df['automatica'] == 1)])
-    
-    # Verifica se já existe aposta para esta prova
+    # Verificar se já existe aposta para esta prova
     conn = db_connect()
     c = conn.cursor()
     c.execute('SELECT id FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
@@ -527,7 +528,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     if aposta_existente:
         return False, "O usuário já possui aposta para esta prova."
     
-    # Forçar salvamento com horário da prova (marca como automática)
+    # Forçar salvamento com horário da prova
     success = salvar_aposta(
         usuario_id, 
         prova_id, 
@@ -539,16 +540,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         horario_forcado=horario_limite
     )
     
-    if success:
-        # Incrementar faltas do usuário
-        conn = db_connect()
-        c = conn.cursor()
-        c.execute('UPDATE usuarios SET faltas = faltas + 1 WHERE id = ?', (usuario_id,))
-        conn.commit()
-        conn.close()
-        return True, "Aposta automática gerada com sucesso!"
-    else:
-        return False, "Falha ao salvar aposta automática."
+    return success, "Aposta automática gerada com sucesso!" if success else "Falha ao salvar aposta automática."
 
 def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     import ast
