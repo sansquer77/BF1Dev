@@ -9,6 +9,7 @@ def init_championship_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS championship_bets (
             user_id INTEGER PRIMARY KEY,
+            nome TEXT NOT NULL,
             champion TEXT NOT NULL,
             vice TEXT NOT NULL,
             team TEXT NOT NULL,
@@ -36,7 +37,7 @@ def init_championship_db():
     conn.commit()
     conn.close()
 
-def save_championship_bet(user_id, champion, vice, team):
+def save_championship_bet(user_id, nome, champion, vice, team):
     """Salva ou atualiza a aposta do usuário para o campeonato e registra no log."""
     init_championship_db()
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
@@ -44,14 +45,14 @@ def save_championship_bet(user_id, champion, vice, team):
     cursor = conn.cursor()
     # Atualiza aposta válida (última)
     cursor.execute('''
-        INSERT OR REPLACE INTO championship_bets (user_id, champion, vice, team, bet_time)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (user_id, champion, vice, team, now))
+        INSERT OR REPLACE INTO championship_bets (user_id, nome, champion, vice, team, bet_time)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (user_id, nome, champion, vice, team, now))
     # Registra log de apostas
     cursor.execute('''
-        INSERT INTO championship_bets_log (user_id, champion, vice, team, bet_time)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (user_id, champion, vice, team, now))
+        INSERT INTO championship_bets_log (user_id, nome, champion, vice, team, bet_time)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (user_id, nome, champion, vice, team, now))
     conn.commit()
     conn.close()
 
