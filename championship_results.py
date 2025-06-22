@@ -41,8 +41,8 @@ def main():
     else:
         st.info("Nenhum resultado registrado ainda.")
 
-    # --- TABELA COM TODAS AS APOSTAS ---
-   st.title("📊 Todas as Apostas dos Participantes")
+# --- TABELA COM TODAS AS APOSTAS ---
+st.title("📊 Todas as Apostas dos Participantes")
 
 try:
     apostas_df = get_apostas_df()
