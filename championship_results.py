@@ -1,6 +1,5 @@
 import streamlit as st
-from championship_utils import save_final_results, get_final_results
-from championship_utils import get_apostas_df, get_usuarios_df, get_provas_df
+from championship_utils import save_final_results, get_final_results, get_apostas_df, get_usuarios_df, get_provas_df
 
 def main():
     if st.session_state.get("user_role", "").strip().lower() != "master":
