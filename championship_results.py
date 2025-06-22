@@ -42,38 +42,66 @@ def main():
         st.info("Nenhum resultado registrado ainda.")
 
     # --- TABELA COM TODAS AS APOSTAS ---
-    st.title("📊 Todas as Apostas dos Participantes")
+   st.title("📊 Todas as Apostas dos Participantes")
 
+try:
     apostas_df = get_apostas_df()
     usuarios_df = get_usuarios_df()
     provas_df = get_provas_df()
+except Exception as e:
+    st.error(f"Erro ao carregar dados: {str(e)}")
+    return
 
-    if apostas_df.empty or usuarios_df.empty or provas_df.empty:
-        st.info("Nenhuma aposta registrada ou tabelas vazias.")
-        return
+# Verifica se os DataFrames têm colunas mínimas necessárias
+def is_valid_df(df, required_columns):
+    return not df.empty and all(col in df.columns for col in required_columns)
 
-    # Junta informações do usuário e da prova para facilitar a visualização
+# Lista de colunas obrigatórias para cada DataFrame
+apostas_required = ['usuario_id', 'prova_id', 'pilotos']
+usuarios_required = ['id', 'nome']
+provas_required = ['id', 'nome', 'data']
+
+if not all([
+    is_valid_df(apostas_df, apostas_required),
+    is_valid_df(usuarios_df, usuarios_required),
+    is_valid_df(provas_df, provas_required)
+]):
+    st.info("Dados incompletos ou tabelas vazias.")
+    return
+
+try:
+    # Junta informações do usuário e da prova
     apostas_completas = apostas_df.merge(
-        usuarios_df[['id', 'nome']], left_on='usuario_id', right_on='id', suffixes=('', '_usuario')
+        usuarios_df[['id', 'nome']], 
+        left_on='usuario_id', 
+        right_on='id', 
+        suffixes=('', '_usuario')
     ).merge(
-        provas_df[['id', 'nome', 'data']], left_on='prova_id', right_on='id', suffixes=('', '_prova')
+        provas_df[['id', 'nome', 'data']], 
+        left_on='prova_id', 
+        right_on='id', 
+        suffixes=('', '_prova')
     )
 
-    # Ajusta e renomeia as colunas para exibição
+    # Renomeia colunas
     apostas_completas = apostas_completas.rename(columns={
         'nome': 'Participante',
         'nome_prova': 'Prova',
         'data': 'Data'
     })
 
-    # Seleciona apenas as colunas relevantes
-    colunas = [
-        'Participante', 'Prova', 'Data', 'pilotos', 'fichas', 'piloto_11', 'data_envio', 'automatica'
-    ]
+    # Seleciona colunas relevantes
+    colunas = ['Participante', 'Prova', 'Data', 'pilotos', 'fichas', 'piloto_11', 'data_envio', 'automatica']
     apostas_completas = apostas_completas[colunas]
 
-    # Ordena e exibe a tabela
+    # Ordena e exibe
     st.dataframe(
         apostas_completas.sort_values(['Data', 'Prova', 'Participante']),
         use_container_width=True
     )
+
+except KeyError as e:
+    st.error(f"Coluna ausente nos dados: {str(e)}")
+except Exception as e:
+    st.error(f"Erro ao processar dados: {str(e)}")
+
