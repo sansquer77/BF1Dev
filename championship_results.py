@@ -4,7 +4,7 @@ import sqlite3
 from championship_utils import save_final_results, get_final_results
 
 def get_championship_bets():
-    """Retorna DataFrame com todas as apostas do campeonato"""
+    """Retorna DataFrame com todas as apostas do campeonato, incluindo o nome do participante."""
     try:
         conn = sqlite3.connect("championship.db")
         df = pd.read_sql_query("SELECT * FROM championship_bets", conn)
@@ -12,7 +12,7 @@ def get_championship_bets():
         return df
     except Exception as e:
         st.error(f"Erro ao buscar apostas do campeonato: {str(e)}")
-        return pd.DataFrame(columns=["usuario_id", "campeao", "vice", "equipe", "data_aposta"])
+        return pd.DataFrame(columns=["usuario_id", "user_nome", "campeao", "vice", "equipe", "data_aposta"])
 
 def main():
     if st.session_state.get("user_role", "").strip().lower() != "master":
