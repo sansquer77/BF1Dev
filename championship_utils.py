@@ -37,7 +37,7 @@ def init_championship_db():
     conn.commit()
     conn.close()
 
-def save_championship_bet(user_id, nome, champion, vice, team):
+def save_championship_bet(user_id, user_nome, champion, vice, team):
     """Salva ou atualiza a aposta do usuário para o campeonato e registra no log."""
     init_championship_db()
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
@@ -45,12 +45,12 @@ def save_championship_bet(user_id, nome, champion, vice, team):
     cursor = conn.cursor()
     # Atualiza aposta válida (última)
     cursor.execute('''
-        INSERT OR REPLACE INTO championship_bets (user_id, nome, champion, vice, team, bet_time)
+        INSERT OR REPLACE INTO championship_bets (user_id, user_nome, champion, vice, team, bet_time)
         VALUES (?, ?, ?, ?, ?, ?)
     ''', (user_id, nome, champion, vice, team, now))
     # Registra log de apostas
     cursor.execute('''
-        INSERT INTO championship_bets_log (user_id, nome, champion, vice, team, bet_time)
+        INSERT INTO championship_bets_log (user_id, user_nome, champion, vice, team, bet_time)
         VALUES (?, ?, ?, ?, ?, ?)
     ''', (user_id, nome, champion, vice, team, now))
     conn.commit()
