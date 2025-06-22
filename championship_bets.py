@@ -3,7 +3,8 @@ import pandas as pd
 from championship_utils import (
     save_championship_bet,
     get_championship_bet,
-    get_championship_bet_log
+    get_championship_bet_log,
+    get_user_name  # Nova função necessária
 )
 
 def main():
@@ -13,6 +14,9 @@ def main():
     if not user_id:
         st.error("Faça login para apostar.")
         return
+
+    # Obter nome do usuário
+    user_nome = get_user_name(user_id)  # Nova linha para obter o nome
 
     # Exemplo: substitua por sua lógica real de extração de pilotos/equipes
     pilotos = ["Max Verstappen", "Lewis Hamilton", "Charles Leclerc", "Sergio Perez"]
@@ -57,14 +61,15 @@ def main():
         if campeao == vice:
             st.error("O Vice deve ser diferente do Campeão.")
         else:
-            save_championship_bet(user_id, nome, campeao, vice, equipe)
+            # Inclui user_nome na chamada
+            save_championship_bet(user_id, user_nome, campeao, vice, equipe)
             st.success("Aposta registrada/atualizada!")
 
     # Log de apostas
     log = get_championship_bet_log(user_id)
 
-    if log and all(len(entry) == 4 for entry in log):
-        df_log = pd.DataFrame(log, columns=["Campeão", "Vice", "Equipe", "Data/Hora"])
+    if log and all(len(entry) == 5 for entry in log):  # Atualizado para 5 elementos
+        df_log = pd.DataFrame(log, columns=["ID Usuário", "Participante", "Campeão", "Vice", "Equipe", "Data/Hora"])
         st.subheader("Histórico de Apostas no Campeonato")
         st.dataframe(df_log)
     elif log:
