@@ -1,18 +1,18 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 from championship_utils import save_final_results, get_final_results
+from db_utils import championship_db_connect  # Importe a conexão correta
 
 def get_championship_bets():
     """Retorna DataFrame com todas as apostas do campeonato, incluindo o nome do participante."""
     try:
-        conn = sqlite3.connect("championship.db")
+        conn = championship_db_connect()  # Use a conexão centralizada
         df = pd.read_sql_query("SELECT * FROM championship_bets", conn)
         conn.close()
         return df
     except Exception as e:
         st.error(f"Erro ao buscar apostas do campeonato: {str(e)}")
-        return pd.DataFrame(columns=["usuario_id", "user_nome", "campeao", "vice", "equipe", "data_aposta"])
+        return pd.DataFrame(columns=["user_id", "user_nome", "champion", "vice", "team", "bet_time"])
 
 def main():
     if st.session_state.get("user_role", "").strip().lower() != "master":
@@ -59,12 +59,12 @@ def main():
     if bets_df.empty:
         st.info("Nenhuma aposta de campeonato registrada ainda.")
     else:
-        # Renomeia as colunas para exibição amigável
         bets_df = bets_df.rename(columns={
-            "usuario_id": "Usuário",
-            "campeao": "Campeão",
+            "user_id": "ID Usuário",
+            "user_nome": "Participante",
+            "champion": "Campeão",
             "vice": "Vice",
-            "equipe": "Equipe",
-            "data_aposta": "Data da Aposta"
+            "team": "Equipe",
+            "bet_time": "Data da Aposta"
         })
         st.dataframe(bets_df, use_container_width=True)
