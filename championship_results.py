@@ -1,13 +1,16 @@
 import streamlit as st
 from championship_utils import save_final_results, get_final_results
+from championship_utils import get_apostas_df, get_usuarios_df, get_provas_df
 
 def main():
+    # Verifica permissão (master)
     if st.session_state.get("user_role", "").strip().lower() != "master":
         st.error("Acesso restrito ao Master.")
         return
 
     st.title("🏆 Atualizar Resultado Final do Campeonato")
 
+    # --- FORMULÁRIO DE RESULTADO FINAL ---
     # Exemplo: substitua pelos seus dados reais
     pilotos = ["Max Verstappen", "Lewis Hamilton", "Charles Leclerc", "Sergio Perez"]
     equipes = ["Red Bull", "Mercedes", "Ferrari", "McLaren"]
@@ -35,3 +38,45 @@ def main():
     else:
         st.info("Nenhum resultado registrado ainda.")
 
+    # --- TABELA COM TODAS AS APOSTAS ---
+    st.title("📊 Todas as Apostas dos Participantes")
+
+    apostas_df = get_apostas_df()
+    usuarios_df = get_usuarios_df()
+    provas_df = get_provas_df()
+
+    if apostas_df.empty or usuarios_df.empty or provas_df.empty:
+        st.info("Nenhuma aposta registrada ou tabelas vazias.")
+        return
+
+    # Junta informações do usuário e da prova para facilitar a visualização
+    apostas_completas = apostas_df.merge(
+        usuarios_df[['id', 'nome']], left_on='usuario_id', right_on='id', suffixes=('', '_usuario')
+    ).merge(
+        provas_df[['id', 'nome', 'data']], left_on='prova_id', right_on='id', suffixes=('', '_prova')
+    )
+
+    # Ajusta e renomeia as colunas para exibição
+    apostas_completas = apostas_completas.rename(columns={
+        'nome': 'Participante',
+        'nome_prova': 'Prova',
+        'data': 'Data'
+    })
+
+    # Seleciona apenas as colunas relevantes
+    colunas = [
+        'Participante', 'Prova', 'Data', 'pilotos', 'fichas', 'piloto_11', 'data_envio', 'automatica'
+    ]
+    apostas_completas = apostas_completas[colunas]
+
+    # Ordena e exibe a tabela
+    st.dataframe(
+        apostas_completas.sort_values(['Data', 'Prova', 'Participante']),
+        use_container_width=True
+    )
+
+if __name__ == "__main__":
+    # Garante que a sessão tenha user_role
+    if "user_role" not in st.session_state:
+        st.session_state["user_role"] = ""
+    main()
