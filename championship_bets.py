@@ -77,8 +77,14 @@ def main():
     # Log de apostas
     log = get_championship_bet_log(user_id)
 
-    if log and all(len(entry) == 5 for entry in log):  # Atualizado para 5 elementos
-        df_log = pd.DataFrame(log, columns=["ID Usuário", "Participante", "Campeão", "Vice", "Equipe", "Data/Hora"])
+    if log and all(len(entry) == 5 for entry in log):
+        df_log = pd.DataFrame(log, columns=[
+            "Participante",    # user_nome
+            "Campeão",         # champion
+            "Vice",            # vice
+            "Equipe",          # team
+            "Data/Hora"        # bet_time
+        ])
         st.subheader("Histórico de Apostas no Campeonato")
         st.dataframe(df_log)
     elif log:
