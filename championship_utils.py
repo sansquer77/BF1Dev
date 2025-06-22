@@ -9,7 +9,7 @@ def init_championship_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS championship_bets (
             user_id INTEGER PRIMARY KEY,
-            nome TEXT NOT NULL,
+            user_nome TEXT NOT NULL,
             champion TEXT NOT NULL,
             vice TEXT NOT NULL,
             team TEXT NOT NULL,
