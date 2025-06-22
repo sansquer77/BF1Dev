@@ -1194,35 +1194,13 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                             c.execute('UPDATE usuarios SET faltas=? WHERE id=?', (faltas_novo, part.id))
                             conn.commit()
                             conn.close()
-                            # Tenta copiar aposta anterior
+                            
+                            # Tenta gerar aposta automática
                             ok, msg = gerar_aposta_automatica(part.id, prova['id'], prova['nome'], apostas_df, provas_df)
-                            if ok:
-                                st.cache_data.clear()  # Limpa o cache antes de buscar a aposta recém-criada!
-                                nova_aposta_df = get_apostas_df()
-                                filtro = (
-                                    (nova_aposta_df['usuario_id'] == part.id) &
-                                    (nova_aposta_df['prova_id'] == prova['id'])
-                                )
-                                resultado = nova_aposta_df[filtro]
-                                if not resultado.empty:
-                                    nova_aposta = resultado.iloc[0]
-                                    aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
-                                    registrar_log_aposta(
-                                        apostador=part.nome,
-                                        aposta=aposta_str,
-                                        nome_prova=f"{prova['nome']}*",
-                                        piloto_11=nova_aposta['piloto_11'],
-                                        tipo_aposta=0,  # ou 1, conforme o caso
-                                        automatica=1    # 1 para automática
-                                    )
-                                else:
-                                    st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
-                                st.success(msg)
-                                st.rerun()
-                            else:
+                            
+                            if not ok:
+                                # Fallback para aposta zerada
                                 resultado_row = resultados_df[resultados_df['prova_id'] == prova['id']]
-                                pilotos_nao_pontuaram = []
-                                piloto_11_nao = None
                                 if not resultado_row.empty:
                                     resultado = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
                                     pontuaram = set(resultado.get(str(pos), "") for pos in range(1, 11))
@@ -1234,7 +1212,10 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                 else:
                                     pilotos_nao_pontuaram = [pilotos_df['nome'].iloc[0]]
                                     piloto_11_nao = pilotos_df['nome'].iloc[0]
+                                
                                 piloto_aposta = pilotos_nao_pontuaram[0] if pilotos_nao_pontuaram else pilotos_df['nome'].iloc[0]
+                                
+                                # Salva aposta fallback
                                 salvar_aposta(
                                     part.id,
                                     prova['id'],
@@ -1244,39 +1225,16 @@ if st.session_state['pagina'] == "Gestão de Apostas" and st.session_state['toke
                                     prova['nome'],
                                     automatica=1
                                 )
-                                # Incrementa o campo faltas do usuário novamente (caso gere aposta "zerada")
-                                conn = db_connect()
-                                c = conn.cursor()
-                                c.execute('SELECT faltas FROM usuarios WHERE id=?', (part.id,))
-                                faltas_atual = c.fetchone()
-                                faltas_novo = (faltas_atual[0] if faltas_atual and faltas_atual[0] else 0) + 1
-                                c.execute('UPDATE usuarios SET faltas=? WHERE id=?', (faltas_novo, part.id))
-                                conn.commit()
-                                conn.close()
-                                st.cache_data.clear()
-                                # Registrar no log com "*"
-                                nova_aposta_df = get_apostas_df()
-                                filtro = (
-                                    (nova_aposta_df['usuario_id'] == part.id) &
-                                    (nova_aposta_df['prova_id'] == prova['id'])
-                                )
-                                resultado = nova_aposta_df[filtro]
-                                if not resultado.empty:
-                                    nova_aposta = resultado.iloc[0]
-                                    aposta_str = f"Prova: {prova['nome']}*, Pilotos: {nova_aposta['pilotos']}, Fichas: {nova_aposta['fichas']}, 11º: {nova_aposta['piloto_11']}"
-                                    registrar_log_aposta(  
-                                        part.nome, 
-                                        aposta_str, 
-                                        f"{prova['nome']}*", 
-                                        nova_aposta['piloto_11'],
-                                        1  # ✅ automatica=1 (aposta automática)
-                                    )
-                                else:
-                                    st.warning("Aposta automática gerada, mas não foi possível registrar no log (aposta não encontrada no banco).")
-                                st.success(f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}")
-                                st.rerun()
+                                
+                                # Mensagem de sucesso
+                                msg = f"Aposta automática gerada: 15 fichas em {piloto_aposta}, 11º colocado: {piloto_11_nao}"
+                            
+                            st.cache_data.clear()
+                            st.success(msg)
+                            st.rerun()
     else:
         st.warning("Acesso restrito ao administrador/master.")
+
 
 # --- CLASSIFICAÇÃO ---
 import streamlit as st
