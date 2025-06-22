@@ -37,6 +37,8 @@ def init_championship_db():
     conn.commit()
     conn.close()
 
+user_nome = get_user_name(user_id)  # Obtém o nome do usuário
+
 def save_championship_bet(user_id, user_nome, champion, vice, team):
     """Salva ou atualiza a aposta do usuário para o campeonato e registra no log."""
     init_championship_db()
