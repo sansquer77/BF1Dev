@@ -19,8 +19,17 @@ def main():
     user_nome = get_user_name(user_id)  # Nova linha para obter o nome
 
     # Exemplo: substitua por sua lógica real de extração de pilotos/equipes
-    pilotos = ["Max Verstappen", "Lewis Hamilton", "Charles Leclerc", "Sergio Perez"]
-    equipes = ["Red Bull", "Mercedes", "Ferrari", "McLaren"]
+    pilotos = [
+        "Pierre Gasly", "Jack Doohan", "Fernando Alonso", "Lance Stroll",
+        "Charles Leclerc", "Lewis Hamilton", "Esteban Ocon", "Oliver Bearman",
+        "Lando Norris", "Oscar Piastri", "Kimi Antonelli", "George Russell",
+        "Liam Lawson", "Isack Hadjar", "Max Verstappen", "Yuki Tsunoda",
+        "Nico Hulkenberg", "Gabriel Bortoleto", "Alex Albon", "Carlos Sainz"
+    ]
+    equipes = [
+        "Red Bull", "Mercedes", "Ferrari", "McLaren", "Alpine",
+        "Aston Martin", "Haas", "Racing Bulls", "Sauber", "Williams"
+    ]
 
     # Carregar aposta anterior (se houver)
     aposta = get_championship_bet(user_id) or {}
