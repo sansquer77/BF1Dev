@@ -408,15 +408,15 @@ def salvar_aposta(
             conn.close()
 
     # Registrar log para todos os casos
-    # registrar_log_aposta(
-        # apostador=usuario[1],
-        # aposta=dados_aposta,
-        # nome_prova=nome_prova_bd,
-        # piloto_11=piloto_11,
-        # tipo_aposta=tipo_aposta,
-        # automatica=automatica,
-        # horario=agora_sp
-    # )
+    registrar_log_aposta(
+        apostador=usuario[1],
+        aposta=dados_aposta,
+        nome_prova=nome_prova_bd,
+        piloto_11=piloto_11,
+        tipo_aposta=tipo_aposta,
+        automatica=automatica,
+        horario=agora_sp
+    )
 
     return True
 
