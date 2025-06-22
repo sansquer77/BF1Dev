@@ -1,16 +1,13 @@
 import streamlit as st
 from championship_utils import save_final_results, get_final_results
-from championship_utils import get_apostas_df, get_usuarios_df, get_provas_df
 
 def main():
-    # Verifica permissão (master)
     if st.session_state.get("user_role", "").strip().lower() != "master":
         st.error("Acesso restrito ao Master.")
         return
 
     st.title("🏆 Atualizar Resultado Final do Campeonato")
 
-    # --- FORMULÁRIO DE RESULTADO FINAL ---
     # Exemplo: substitua pelos seus dados reais
     pilotos = [
     "Pierre Gasly", "Jack Doohan", "Fernando Alonso", "Lance Stroll",
