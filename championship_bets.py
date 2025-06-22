@@ -57,7 +57,7 @@ def main():
         if campeao == vice:
             st.error("O Vice deve ser diferente do Campeão.")
         else:
-            save_championship_bet(user_id, campeao, vice, equipe)
+            save_championship_bet(user_id, nome, campeao, vice, equipe)
             st.success("Aposta registrada/atualizada!")
 
     # Log de apostas
