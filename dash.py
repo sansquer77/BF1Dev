@@ -8,7 +8,7 @@ from data_utils import (
     get_fastest_lap_times,
     get_pit_stop_data
 )
-def main():
+def main():    
     # Page Title with current season
     season = get_current_season()
     st.title(f"🏎️ Formula 1 {season} Dashboard")

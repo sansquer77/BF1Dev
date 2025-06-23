@@ -137,6 +137,3 @@ def calcular_pontuacao_campeonato(user_id, season=2025):
         if aposta["team"] == resultado["team"]:
             pontos += 80
     return pontos
-
-
-
