@@ -9,7 +9,7 @@ import ast
 import os
 import matplotlib.pyplot as plt
 import dashboard
-from backup import main as Backup_main
+from backup import main as backup_main
 from db_utils import db_connect
 from championship_bets import main as championship_bets_main
 from championship_results import main as championship_results_main
@@ -1737,7 +1737,7 @@ if st.session_state['pagina'] == "Análise de Apostas":
 
 # --- Backup dos Bancos de Dados ---
 if st.session_state['pagina'] == "Backup dos Bancos de Dados":
-    Backup_main()
+    backup_main()
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
