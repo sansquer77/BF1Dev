@@ -49,15 +49,3 @@ def main():
             with open(db_filename, "wb") as fp:
                 fp.write(uploaded_file.getbuffer())
             st.success(f"{db_label} atualizado com sucesso!")
-
-
-        # Upload
-        uploaded_file = st.file_uploader(
-            f"Faça upload do arquivo para {db_label}",
-            type=["db"],
-            key=f"upload_{db_filename}"
-        )
-        if uploaded_file is not None:
-            with open(db_filename, "wb") as fp:
-                fp.write(uploaded_file.getbuffer())
-            st.success(f"{db_label} atualizado com sucesso!")
