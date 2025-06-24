@@ -31,7 +31,7 @@ def main():
         if os.path.exists(db_filename):
             with open(db_filename, "rb") as fp:
                 st.download_button(
-                    label=f"Baixar {db1}",
+                    label=f"Baixar {db_files}",
                     data=fp,
                     file_name=db_filename,
                     mime="application/octet-stream"
