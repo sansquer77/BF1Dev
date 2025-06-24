@@ -9,7 +9,7 @@ import ast
 import os
 import matplotlib.pyplot as plt
 import dashboard
-import Backup.py
+import Backup
 from db_utils import db_connect
 from championship_bets import main as championship_bets_main
 from championship_results import main as championship_results_main
