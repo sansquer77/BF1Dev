@@ -10,7 +10,7 @@ def main():
     )
 
     # Título da página
-    st.title("Backup dos Bancos de Dados SQLite")
+    st.title("💾 Backup dos Bancos dos Dados SQLite do BF1")
 
     # Instruções para o usuário
     st.markdown("""
