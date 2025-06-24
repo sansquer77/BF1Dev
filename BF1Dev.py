@@ -628,7 +628,7 @@ def menu_master():
         "Classificação",
         "Dashboard F1",
         "Exportar/Importar Excel",
-        "Backup do Banco de Dados",
+        "Backup dos Bancos de Dados",
         "Regulamento",
         "Logout"
     ]
@@ -1735,7 +1735,7 @@ if st.session_state['pagina'] == "Resultado Campeonato":
 if st.session_state['pagina'] == "Análise de Apostas":
     analysis_main()
 
-# --- Analises de Apostas ---
+# --- Backup dos Bancos de Dados ---
 if st.session_state['pagina'] == "Backup dos Bancos de Dados":
     Backup_main()
 
