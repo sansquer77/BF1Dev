@@ -9,6 +9,7 @@ import ast
 import os
 import matplotlib.pyplot as plt
 import dashboard
+import Backup.py
 from db_utils import db_connect
 from championship_bets import main as championship_bets_main
 from championship_results import main as championship_results_main
@@ -627,6 +628,7 @@ def menu_master():
         "Classificação",
         "Dashboard F1",
         "Exportar/Importar Excel",
+        "Backup do Banco de Dados",
         "Regulamento",
         "Logout"
     ]
@@ -1732,6 +1734,10 @@ if st.session_state['pagina'] == "Resultado Campeonato":
 # --- Analises de Apostas ---
 if st.session_state['pagina'] == "Análise de Apostas":
     analysis_main()
+
+# --- Analises de Apostas ---
+if st.session_state['pagina'] == "Backup dos Bancos de Dados":
+    Backup_main()
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state['token']:
