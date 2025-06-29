@@ -477,7 +477,7 @@ def gerar_aposta_aleatoria(pilotos_df):
 
 def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas_df):
     """
-    Gera uma aposta automática para o usuário, copiando a aposta anterior se houver,
+    Gera uma aposta automática para o usuário, copiando a aposta da prova anterior se houver,
     ou gerando uma aleatória. O campo 'automatica' é incrementado a cada geração.
     """
     # Buscar informações da prova atual
@@ -498,25 +498,20 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     # Buscar dados de pilotos
     pilotos_df = get_pilotos_df()
     
-    # Verificar posição da prova no calendário
-    provas_df = provas_df.sort_values('data')
-    try:
-        idx_prova = provas_df.index[provas_df['id'] == prova_id].tolist()[0]
-    except IndexError:
-        return False, "Prova não encontrada no calendário."
-    
     # Determinar aposta anterior ou gerar aleatória
     pilotos_ant, fichas_ant, piloto_11_ant = None, None, None
     
-    if idx_prova > 0:  # Não é a primeira prova
-        # Busca prova anterior
-        prova_ant_id = provas_df.iloc[idx_prova-1]['id']
-        
-        # Buscar TODAS as apostas do usuário
-        apostas_usuario = apostas_df[apostas_df['usuario_id'] == usuario_id]
-        
-        # Filtrar aposta na prova anterior
-        ap_ant = apostas_usuario[apostas_usuario['prova_id'] == prova_ant_id]
+    # 1. Buscar prova anterior (ID imediatamente inferior)
+    prova_ant_id = prova_id - 1
+    
+    # 2. Verificar se existe prova com ID anterior
+    prova_ant = provas_df[provas_df['id'] == prova_ant_id]
+    if not prova_ant.empty:
+        # 3. Buscar aposta do usuário nessa prova anterior
+        ap_ant = apostas_df[
+            (apostas_df['usuario_id'] == usuario_id) & 
+            (apostas_df['prova_id'] == prova_ant_id)
+        ]
         
         if not ap_ant.empty:
             # Usa aposta anterior se existir
@@ -524,15 +519,12 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
             pilotos_ant = ap_ant['pilotos'].split(",")
             fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
             piloto_11_ant = ap_ant['piloto_11']
-            st.success(f"Copiando aposta anterior da prova {provas_df.iloc[idx_prova-1]['nome']}")
+            st.success(f"Copiando aposta anterior da prova {prova_ant['nome'].values[0]}")
     
-    # Se não encontrou aposta anterior (seja porque é primeira prova ou não havia)
+    # Se não encontrou aposta anterior
     if pilotos_ant is None:
         pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
-        if idx_prova == 0:
-            st.warning("Primeira prova. Gerada aposta aleatória.")
-        else:
-            st.warning("Não havia aposta anterior. Gerada aposta aleatória.")
+        st.warning("Não havia aposta anterior. Gerada aposta aleatória.")
     
     # Verificar se já existe aposta para esta prova
     conn = db_connect()
