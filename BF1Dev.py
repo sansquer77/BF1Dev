@@ -893,9 +893,9 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                 pilotos_apostados = aposta['pilotos'].split(',')
                 piloto_11_apostado = aposta['piloto_11']
                 automatica = aposta.get('automatica', 0)
-    
+
                 tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
-    
+
                 resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
                 if not resultado_row.empty:
                     try:
@@ -904,19 +904,19 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                         posicoes_dict = {}
                 else:
                     posicoes_dict = {}
-    
+
                 dados = []
                 total_pontos = 0
-    
+
                 if tipo_prova == 'Sprint':
                     pontos_lista = pontos_sprint
                     n_pos = 8
                 else:
                     pontos_lista = pontos_f1
                     n_pos = 10
-    
+
                 piloto_para_pos = {v: int(k) for k, v in posicoes_dict.items()}
-    
+
                 for i in range(n_pos):
                     aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
                     ficha = fichas[i] if i < len(fichas) else 0
@@ -929,20 +929,20 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                         "Piloto Apostado": aposta_piloto,
                         "Fichas": ficha,
                         "Posição Real": pos_real if pos_real is not None else "-",
-                        "Pontos": pontos
+                        "Pontos": f"{pontos:.2f}"  # <-- Duas casas decimais
                     })
-    
+
                 piloto_11_real = posicoes_dict.get(11, "")
                 pontos_11_col = bonus_11 if piloto_11_apostado == piloto_11_real else 0
                 total_pontos += pontos_11_col
-    
+
                 if automatica and int(automatica) >= 2:
                     total_pontos = round(total_pontos * 0.75, 2)
-    
+
                 st.markdown(f"#### {prova_nome} ({tipo_prova})")
                 st.dataframe(pd.DataFrame(dados), hide_index=True)
                 st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
-                st.write(f"**Total de Pontos na Prova:** {total_pontos}")
+                st.write(f"**Total de Pontos na Prova:** {total_pontos:.2f}")  # <-- Duas casas decimais
                 st.markdown("---")
     else:
         st.info("Nenhuma aposta registrada.")
@@ -1295,7 +1295,9 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
             "Pontos por Prova": pontos_part
         })
 
-    df_class = pd.DataFrame(tabela_classificacao).sort_values("Pontos Provas", ascending=False).reset_index(drop=True)
+    df_class = pd.DataFrame(tabela_classificacao)
+    df_class["Pontos Provas"] = df_class["Pontos Provas"].apply(lambda x: f"{x:.2f}")
+    df_class = df_class.sort_values("Pontos Provas", ascending=False).reset_index(drop=True)
     st.subheader("Classificação Geral - Apenas Provas")
     st.table(df_class)
 
@@ -1331,7 +1333,10 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
             "Acertos Campeonato": ", ".join(acertos) if acertos else "-"
         })
 
-    df_class_completo = pd.DataFrame(tabela_classificacao_completa).sort_values("Total Geral", ascending=False).reset_index(drop=True)
+    df_class_completo = pd.DataFrame(tabela_classificacao_completa)
+    for col in ["Pontos Provas", "Pontos Campeonato", "Total Geral"]:
+        df_class_completo[col] = df_class_completo[col].apply(lambda x: f"{x:.2f}")
+    df_class_completo = df_class_completo.sort_values("Total Geral", ascending=False).reset_index(drop=True)
     st.subheader("Classificação Final (Provas + Campeonato)")
     st.table(df_class_completo)
 
@@ -1370,7 +1375,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
     # 3. Criar DataFrame cruzado
     df_cruzada = pd.DataFrame(dados_cruzados).T
     df_cruzada = df_cruzada.reindex(columns=[p['nome'] for _, p in participantes.iterrows()], fill_value=0)
-    
+    df_cruzada = df_cruzada.applymap(lambda x: f"{x:.2f}")
     st.dataframe(df_cruzada)
 
    # --------- 4. Gráfico de evolução ----------
@@ -1422,7 +1427,6 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
             st.markdown("**Informe o piloto para cada posição:**")
             col1, col2 = st.columns(2)
             # Inicializa opções para cada posição
-            pilotos_usados = set()
             # 1º ao 5º
             for pos in range(1, 6):
                 with col1:
@@ -1571,7 +1575,9 @@ def importar_apostas_campeonato_excel(arquivo_excel_bytes):
     df = pd.read_excel(io.BytesIO(arquivo_excel_bytes))
     colunas_obrigatorias = ['ID Usuário', 'Participante', 'Campeão', 'Vice', 'Equipe']
     if not all(col in df.columns for col in colunas_obrigatorias):
+
         raise ValueError("Arquivo Excel não possui colunas obrigatórias!")
+
     
     # Processa cada linha
     for _, row in df.iterrows():
