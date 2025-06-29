@@ -117,109 +117,65 @@ def init_db():
     conn = db_connect()
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        email TEXT UNIQUE,
-        senha_hash TEXT,
-        perfil TEXT,
-        status TEXT DEFAULT 'Ativo',
-        faltas INTEGER DEFAULT 0)''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,
+email TEXT UNIQUE,
+senha_hash TEXT,
+perfil TEXT,
+status TEXT DEFAULT 'Ativo',
+faltas INTEGER DEFAULT 0)''')
     usuario_master = st.secrets["usuario_master"]
     email_master = st.secrets["email_master"]
     senha_master = st.secrets["senha_master"]
     senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt()).decode('utf-8')
     c.execute('''INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
-        VALUES (?, ?, ?, ?, ?, ?)''',
-        (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
+VALUES (?, ?, ?, ?, ?, ?)''',
+    (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
 
     c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        equipe TEXT,
-        status TEXT DEFAULT 'Ativo'
-    )''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,
+equipe TEXT,
+status TEXT DEFAULT 'Ativo'
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS provas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        data TEXT,
-        horario_prova TEXT,
-        status TEXT DEFAULT 'Ativo',
-        tipo TEXT DEFAULT 'Normal'
-    )''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+nome TEXT,    
+data TEXT,
+horario_prova TEXT,
+status TEXT DEFAULT 'Ativo',
+tipo TEXT DEFAULT 'Normal'
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS apostas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER,
-        prova_id INTEGER,
-        data_envio TEXT,
-        pilotos TEXT,
-        fichas TEXT,
-        piloto_11 TEXT,
-        nome_prova TEXT,
-        automatica INTEGER DEFAULT 0,
-        -- Novas colunas para armazenamento estruturado
-        aposta_piloto_1 TEXT, aposta_fichas_1 INTEGER,
-        aposta_piloto_2 TEXT, aposta_fichas_2 INTEGER,
-        aposta_piloto_3 TEXT, aposta_fichas_3 INTEGER,
-        aposta_piloto_4 TEXT, aposta_fichas_4 INTEGER,
-        aposta_piloto_5 TEXT, aposta_fichas_5 INTEGER,
-        aposta_piloto_6 TEXT, aposta_fichas_6 INTEGER,
-        aposta_piloto_7 TEXT, aposta_fichas_7 INTEGER,
-        aposta_piloto_8 TEXT, aposta_fichas_8 INTEGER,
-        aposta_piloto_9 TEXT, aposta_fichas_9 INTEGER,
-        aposta_piloto_10 TEXT, aposta_fichas_10 INTEGER,
-        aposta_piloto_11 TEXT, aposta_fichas_11 INTEGER,
-        FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-        FOREIGN KEY(prova_id) REFERENCES provas(id)
-    )''')
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+usuario_id INTEGER,
+prova_id INTEGER,
+data_envio TEXT,
+pilotos TEXT,
+fichas TEXT,
+piloto_11 TEXT,
+nome_prova TEXT,
+automatica INTEGER DEFAULT 0,
+FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+FOREIGN KEY(prova_id) REFERENCES provas(id)
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS resultados (
-        prova_id INTEGER PRIMARY KEY,
-        posicoes TEXT,
-        FOREIGN KEY(prova_id) REFERENCES provas(id)
-    )''')
+prova_id INTEGER PRIMARY KEY,
+posicoes TEXT,
+FOREIGN KEY(prova_id) REFERENCES provas(id)
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS log_apostas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        apostador TEXT,
-        data TEXT,
-        horario TEXT,
-        aposta TEXT,
-        piloto_11 TEXT,
-        nome_prova TEXT,
-        tipo_aposta INTEGER DEFAULT 0,  -- 0: normal, 1: fora do horário, 2: automática
-        automatica INTEGER DEFAULT 0
-    )''')
-
-    # Migração de dados existentes para as novas colunas (executa apenas uma vez)
-    try:
-        c.execute('SELECT id, pilotos, fichas FROM apostas WHERE aposta_piloto_1 IS NULL')
-        apostas_antigas = c.fetchall()
-        
-        for aposta in apostas_antigas:
-            id_aposta, pilotos_str, fichas_str = aposta
-            pilotos_list = pilotos_str.split(',') if pilotos_str else []
-            fichas_list = fichas_str.split(',') if fichas_str else []
-            
-            update_query = "UPDATE apostas SET "
-            params = []
-            for i in range(11):
-                if i < len(pilotos_list) and i < len(fichas_list):
-                    update_query += f"aposta_piloto_{i+1}=?, aposta_fichas_{i+1}=?, "
-                    params.extend([pilotos_list[i], int(fichas_list[i])])
-                else:
-                    update_query += f"aposta_piloto_{i+1}=NULL, aposta_fichas_{i+1}=NULL, "
-            
-            update_query = update_query.rstrip(', ') + " WHERE id=?"
-            params.append(id_aposta)
-            c.execute(update_query, tuple(params))
-            
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # Colunas já existem ou tabela vazia
-
-    # Cria índices para melhorar a performance
-    c.execute('CREATE INDEX IF NOT EXISTS idx_aposta_piloto_1 ON apostas(aposta_piloto_1)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_aposta_usuario ON apostas(usuario_id)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_aposta_prova ON apostas(prova_id)')
-    
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+apostador TEXT,
+data TEXT,
+horario TEXT,
+aposta TEXT,
+piloto_11 TEXT,
+nome_prova TEXT,
+tipo_aposta INTEGER DEFAULT 0,  -- 0: normal, 1: fora do horário, 2: automática
+automatica INTEGER DEFAULT 0
+)''')
+    conn.commit()
     conn.close()
 
 @st.cache_data
@@ -228,43 +184,36 @@ def get_usuarios_df():
     df = pd.read_sql('SELECT * FROM usuarios', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_pilotos_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM pilotos', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_provas_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM provas', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_apostas_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM apostas', conn)
     conn.close()
     return df
-
 @st.cache_data
 def get_resultados_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM resultados', conn)
     conn.close()
     return df
-
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode('utf-8')
-
 def check_password(password, hashed):
     if isinstance(hashed, str):
         hashed = hashed.encode()  # converte para bytes
     return bcrypt.checkpw(password.encode(), hashed)
-
 def generate_token(user_id, perfil, status):
     payload = {
         'user_id': user_id,
@@ -276,7 +225,6 @@ def generate_token(user_id, perfil, status):
     if isinstance(token, bytes):
         token = token.decode('utf-8')
     return token
-
 def decode_token(token):
     try:
         payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
@@ -285,21 +233,19 @@ def decode_token(token):
         return None
     except Exception:
         return None
-
 def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo'):
     conn = db_connect()
     c = conn.cursor()
     try:
         senha_hash = hash_password(senha)
         c.execute('INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, ?, ?, ?)', 
-                (nome, email, senha_hash, perfil, status, 0))
+                  (nome, email, senha_hash, perfil, status, 0))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
         return False
     finally:
         conn.close()
-
 def get_user_by_email(email):
     conn = db_connect()
     c = conn.cursor()
@@ -307,7 +253,6 @@ def get_user_by_email(email):
     user = c.fetchone()
     conn.close()
     return user
-
 def get_user_by_id(user_id):
     conn = db_connect()
     c = conn.cursor()
@@ -333,6 +278,9 @@ def get_horario_prova(prova_id):
     return prova[0], prova[1], prova[2]
 
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario=None):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
     if horario is None:
         horario = datetime.now(ZoneInfo("America/Sao_Paulo"))
     data = horario.strftime('%Y-%m-%d')
@@ -343,7 +291,7 @@ def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, 
     c.execute('''INSERT INTO log_apostas 
                 (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta, automatica) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-            (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica))
+              (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica))
     conn.commit()
     conn.close()
 
@@ -351,8 +299,8 @@ def log_aposta_existe(apostador, nome_prova, tipo_aposta, automatica, dados_apos
     conn = db_connect()
     c = conn.cursor()
     c.execute('''SELECT COUNT(*) FROM log_apostas 
-                WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND automatica=? AND aposta=?''',
-            (apostador, nome_prova, tipo_aposta, automatica, dados_aposta))
+                 WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND automatica=? AND aposta=?''',
+              (apostador, nome_prova, tipo_aposta, automatica, dados_aposta))
     count = c.fetchone()[0]
     conn.close()
     return count > 0
@@ -412,36 +360,10 @@ def salvar_aposta(
         # Só salva na tabela de apostas se for dentro do prazo (tipo 0)
         if tipo_aposta == 0:
             data_envio = agora_sp.isoformat()
-            
-            # Prepara dados para novas colunas
-            dados_aposta_colunas = []
-            for i in range(11):
-                if i < len(pilotos) and i < len(fichas):
-                    dados_aposta_colunas.extend([pilotos[i], fichas[i]])
-                else:
-                    dados_aposta_colunas.extend([None, None])
-            
-            # Query atualizada com novas colunas
-            c.execute('''INSERT INTO apostas (
-                usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica,
-                aposta_piloto_1, aposta_fichas_1,
-                aposta_piloto_2, aposta_fichas_2,
-                aposta_piloto_3, aposta_fichas_3,
-                aposta_piloto_4, aposta_fichas_4,
-                aposta_piloto_5, aposta_fichas_5,
-                aposta_piloto_6, aposta_fichas_6,
-                aposta_piloto_7, aposta_fichas_7,
-                aposta_piloto_8, aposta_fichas_8,
-                aposta_piloto_9, aposta_fichas_9,
-                aposta_piloto_10, aposta_fichas_10,
-                aposta_piloto_11, aposta_fichas_11
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (
-                usuario_id, prova_id, data_envio,
-                ','.join(pilotos), ','.join(map(str, fichas)),
-                piloto_11, nome_prova_bd, automatica,
-                *dados_aposta_colunas
-            ))
+            c.execute('''INSERT INTO apostas (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)),
+                       piloto_11, nome_prova_bd, automatica))
             conn.commit()
 
             # Envia e-mail apenas para apostas dentro do prazo
@@ -498,29 +420,6 @@ def salvar_aposta(
     )
 
     return True
-
-# Função para consulta otimizada das apostas estruturadas
-def get_apostas_estruturadas():
-    conn = db_connect()
-    query = """
-    SELECT usuario_id, prova_id, nome_prova,
-        aposta_piloto_1, aposta_fichas_1,
-        aposta_piloto_2, aposta_fichas_2,
-        aposta_piloto_3, aposta_fichas_3,
-        aposta_piloto_4, aposta_fichas_4,
-        aposta_piloto_5, aposta_fichas_5,
-        aposta_piloto_6, aposta_fichas_6,
-        aposta_piloto_7, aposta_fichas_7,
-        aposta_piloto_8, aposta_fichas_8,
-        aposta_piloto_9, aposta_fichas_9,
-        aposta_piloto_10, aposta_fichas_10,
-        aposta_piloto_11, aposta_fichas_11,
-        piloto_11, automatica
-    FROM apostas
-    """
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
 
 def gerar_aposta_aleatoria(pilotos_df):
     """Gera uma aposta aleatória respeitando as regras"""
