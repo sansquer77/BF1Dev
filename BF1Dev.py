@@ -1296,8 +1296,8 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
         })
 
     df_class = pd.DataFrame(tabela_classificacao)
-    df_class["Pontos Provas"] = df_class["Pontos Provas"].apply(lambda x: f"{x:.2f}")
     df_class = df_class.sort_values("Pontos Provas", ascending=False).reset_index(drop=True)
+    df_class["Pontos Provas"] = df_class["Pontos Provas"].apply(lambda x: f"{x:.2f}")
     st.subheader("Classificação Geral - Apenas Provas")
     st.table(df_class)
 
@@ -1334,9 +1334,9 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
         })
 
     df_class_completo = pd.DataFrame(tabela_classificacao_completa)
+    df_class_completo = df_class_completo.sort_values("Total Geral", ascending=False).reset_index(drop=True)
     for col in ["Pontos Provas", "Pontos Campeonato", "Total Geral"]:
         df_class_completo[col] = df_class_completo[col].apply(lambda x: f"{x:.2f}")
-    df_class_completo = df_class_completo.sort_values("Total Geral", ascending=False).reset_index(drop=True)
     st.subheader("Classificação Final (Provas + Campeonato)")
     st.table(df_class_completo)
 
@@ -1385,7 +1385,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
         fig = go.Figure()
         # Usar nomes das colunas diretamente do DataFrame
         for participante in df_cruzada.columns:
-            pontos_acumulados = df_cruzada[participante].cumsum()
+            pontos_acumulados = df_cruzada[participante].astype(float).cumsum()
             fig.add_trace(go.Scatter(
                 x=df_cruzada.index.tolist(),  # Nomes das provas como eixo X
                 y=pontos_acumulados,
@@ -1398,7 +1398,11 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
             yaxis_title="Pontuação Acumulada",
             xaxis_tickangle=-45,
             margin=dict(l=40, r=20, t=60, b=80),
-            plot_bgcolor='rgba(240,240,255,0.9)'
+            plot_bgcolor='rgba(240,240,255,0.9)',
+            yaxis=dict(
+                tickformat=',.0f',   # <-- Sem casas decimais
+                range=[100, 7000]    # <-- Limite do eixo Y
+            )
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -1444,10 +1448,6 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
             for pos in range(6, 11):
                 with col2:
                     opcoes = [""] + [p for p in pilotos if p not in pilotos_usados]
-                    piloto_sel = st.selectbox(
-                        f"{pos}º colocado",
-                        opcoes,
-                        index=0,
                         key=f"pos_{pos}"
                     )
                     if piloto_sel:
