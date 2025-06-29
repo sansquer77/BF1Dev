@@ -937,7 +937,7 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                 total_pontos += pontos_11_col
     
                 if automatica and int(automatica) >= 2:
-                    total_pontos = int(total_pontos * 0.75)
+                    total_pontos = round(total_pontos * 0.75, 2)
     
                 st.markdown(f"#### {prova_nome} ({tipo_prova})")
                 st.dataframe(pd.DataFrame(dados), hide_index=True)
