@@ -430,7 +430,6 @@ def gerar_aposta_aleatoria(pilotos_df):
     
     # Garante pelo menos 3 equipes
     if len(equipes_unicas) < 3:
-        # Usa todas as equipes disponíveis e completa com pilotos aleatórios
         equipes_selecionadas = equipes_unicas.copy()
         while len(equipes_selecionadas) < 3:
             equipes_selecionadas.append(random.choice(equipes_unicas))
@@ -447,21 +446,27 @@ def gerar_aposta_aleatoria(pilotos_df):
     fichas = []
     total_fichas = 15
     
-    # Distribuição robusta de fichas
+    # Distribuição robusta de fichas (corrigida)
     if total_fichas < n_pilotos:
-        # Modo de emergência: 1 ficha por piloto + excedente no primeiro
         fichas = [1] * n_pilotos
         fichas[0] += total_fichas - n_pilotos
     else:
+        # Garante pelo menos 1 ficha para cada piloto
+        fichas = [1] * n_pilotos
+        total_fichas -= n_pilotos
+        
+        # Distribui as fichas restantes
         for i in range(n_pilotos):
+            if total_fichas <= 0:
+                break
             if i == n_pilotos - 1:
-                fichas.append(total_fichas)
+                fichas[i] += total_fichas
+                total_fichas = 0
             else:
-                reserva_restante = n_pilotos - i - 1
-                max_ficha = min(10, total_fichas - reserva_restante)
-                ficha = random.randint(1, max_ficha)
-                fichas.append(ficha)
-                total_fichas -= ficha
+                max_para_este = min(9, total_fichas)  # Máximo 10 fichas por piloto (1 já foi dada)
+                adicionais = random.randint(0, max_para_este)
+                fichas[i] += adicionais
+                total_fichas -= adicionais
     
     # Seleção do 11º colocado
     todos_pilotos = pilotos_df['nome'].tolist()
@@ -496,7 +501,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     # Verificar posição da prova no calendário
     provas_df = provas_df.sort_values('data')
     try:
-        idx_prova = provas_df[provas_df['id'] == prova_id].index[0]
+        idx_prova = provas_df.index[provas_df['id'] == prova_id].tolist()[0]
     except IndexError:
         return False, "Prova não encontrada no calendário."
     
@@ -506,8 +511,12 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     if idx_prova > 0:  # Não é a primeira prova
         # Busca prova anterior
         prova_ant_id = provas_df.iloc[idx_prova-1]['id']
-        ap_ant = apostas_df[(apostas_df['usuario_id'] == usuario_id) & 
-                            (apostas_df['prova_id'] == prova_ant_id)]
+        
+        # Buscar TODAS as apostas do usuário
+        apostas_usuario = apostas_df[apostas_df['usuario_id'] == usuario_id]
+        
+        # Filtrar aposta na prova anterior
+        ap_ant = apostas_usuario[apostas_usuario['prova_id'] == prova_ant_id]
         
         if not ap_ant.empty:
             # Usa aposta anterior se existir
@@ -553,7 +562,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         fichas_ant, 
         piloto_11_ant, 
         nome_prova, 
-        automatica=nova_automatica,  # Usar valor incrementado
+        automatica=nova_automatica,
         horario_forcado=horario_limite
     )
     
