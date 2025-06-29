@@ -1430,7 +1430,7 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
             posicoes = {}
             st.markdown("**Informe o piloto para cada posição:**")
             col1, col2 = st.columns(2)
-            # Inicializa opções para cada posição
+            pilotos_usados = set()
             # 1º ao 5º
             for pos in range(1, 6):
                 with col1:
@@ -1448,6 +1448,10 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
             for pos in range(6, 11):
                 with col2:
                     opcoes = [""] + [p for p in pilotos if p not in pilotos_usados]
+                    piloto_sel = st.selectbox(
+                        f"{pos}º colocado",
+                        opcoes,
+                        index=0,
                         key=f"pos_{pos}"
                     )
                     if piloto_sel:
@@ -1573,6 +1577,7 @@ def importar_apostas_campeonato_excel(arquivo_excel_bytes):
     
     # Lê e valida o Excel
     df = pd.read_excel(io.BytesIO(arquivo_excel_bytes))
+
     colunas_obrigatorias = ['ID Usuário', 'Participante', 'Campeão', 'Vice', 'Equipe']
     if not all(col in df.columns for col in colunas_obrigatorias):
 
