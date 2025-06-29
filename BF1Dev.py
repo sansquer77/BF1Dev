@@ -602,7 +602,7 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
         if piloto_11 == piloto_11_real:
             pt += bonus_11
         if automatica >= 2:
-            pt = int(pt * 0.75)
+            pt = round(pt * 0.75, 2)
         pontos.append(pt)
     return pontos
 
