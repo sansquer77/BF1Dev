@@ -424,7 +424,7 @@ def salvar_aposta(
         automatica=automatica,
         horario=agora_sp
     )
-    salvar_classificacao_prova(prova_id_atual, df_classificacao)
+    
     return True
 
 def gerar_aposta_aleatoria(pilotos_df):
@@ -625,6 +625,7 @@ def salvar_classificacao_prova(prova_id, df_classificacao):
             (prova_id, usuario_id, posicao, pontos, data_registro)
             VALUES (?, ?, ?, ?, ?)
         ''', (prova_id, usuario_id, posicao, pontos, data_registro))
+        salvar_classificacao_prova(prova_id_atual, df_classificacao)
     conn.commit()
     conn.close()
 
