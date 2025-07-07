@@ -632,7 +632,7 @@ def salvar_classificacao_prova(prova_id, df_classificacao):
     conn = db_connect()
     cursor = conn.cursor()
     for _, row in df_classificacao.iterrows():
-        usuario_id = row['usuario_id']
+        usuario_id = int(row['usuario_id'])  # Garante que é inteiro
         posicao = int(row['posicao'])
         pontos = float(row['pontos'])
         data_registro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -667,13 +667,42 @@ def atualizar_classificacoes_todas_as_provas():
             aposta = apostas_prova[apostas_prova['usuario_id'] == usuario['id']]
             if aposta.empty:
                 pontos = 0
+                data_envio = None
+                acerto_11 = 0
             else:
                 pontos = calcular_pontuacao_lote(aposta, resultados_df, provas_df)
                 pontos = pontos[0] if pontos and pontos[0] is not None else 0
-            tabela.append({'usuario_id': usuario['id'], 'pontos': pontos})
+                data_envio = aposta.iloc[0]['data_envio'] if 'data_envio' in aposta.columns else None
 
-        df_classificacao = pd.DataFrame(tabela).sort_values('pontos', ascending=False).reset_index(drop=True)
+                # Checa acerto do 11º colocado
+                acerto_11 = 0
+                if not aposta.empty and not resultados_df.empty:
+                    resultado = resultados_df[resultados_df['prova_id'] == prova_id]
+                    if not resultado.empty:
+                        import ast
+                        posicoes = ast.literal_eval(resultado.iloc[0]['posicoes'])
+                        piloto_11_real = posicoes.get(11, "")
+                        piloto_11_apostado = aposta.iloc[0]['piloto_11']
+                        if piloto_11_apostado == piloto_11_real:
+                            acerto_11 = 1
+
+            tabela.append({
+                'usuario_id': int(usuario['id']),
+                'pontos': pontos,
+                'data_envio': data_envio,
+                'acerto_11': acerto_11
+            })
+
+        # Ordena por: pontos (desc), data_envio (asc), acerto_11 (desc)
+        df_classificacao = pd.DataFrame(tabela)
+        # Para garantir ordenação correta, converte data_envio para datetime (None vai para o fim)
+        df_classificacao['data_envio'] = pd.to_datetime(df_classificacao['data_envio'], errors='coerce')
+        df_classificacao = df_classificacao.sort_values(
+            by=['pontos', 'acerto_11', 'data_envio'],
+            ascending=[False, False, True]
+        ).reset_index(drop=True)
         df_classificacao['posicao'] = df_classificacao.index + 1
+
         salvar_classificacao_prova(prova_id, df_classificacao)
 
 # --- INICIALIZAÇÃO E MENU ---
