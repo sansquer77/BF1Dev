@@ -1578,6 +1578,9 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
 
     # --------- 5. Gráfico geral de posições de todos ---------
     st.subheader("Classificação de Cada Participante ao Longo do Campeonato")
+    conn = db_connect()
+    df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
+    conn.close()
     fig_all = go.Figure()
     for part in participantes['nome']:
         usuario_id = participantes[participantes['nome'] == part].iloc[0]['id']
@@ -1596,7 +1599,6 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
         legend_title="Participante"
     )
     st.plotly_chart(fig_all, use_container_width=True)
-
 
 # --- ATUALIZAÇÃO DE RESULTADOS (apenas master/admin) ---
 if st.session_state['pagina'] == "Atualização de resultados" and st.session_state['token']:
