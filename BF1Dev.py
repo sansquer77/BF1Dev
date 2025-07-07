@@ -1484,8 +1484,11 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
         diferencas.append(pontos_float[i-1] - pontos_float[i])
     df_class["Diferença"] = ["-" if i == 0 else f"{d:.2f}" for i, d in enumerate(diferencas)]
 
+    # --------- ORDEM DAS COLUNAS E EXIBIÇÃO SEM ÍNDICE ---------
+    colunas_ordem = ["Posição", "Participante", "Pontos Provas", "Diferença", "Movimentação"]
+
     st.subheader("Classificação Geral - Apenas Provas")
-    st.table(df_class[["Participante", "Pontos Provas", "Posição", "Movimentação", "Diferença"]])
+    st.table(df_class[colunas_ordem])
 
     # --------- 2. Pontuação final (Provas + Campeonato) ----------
     resultado_campeonato = get_final_results()
