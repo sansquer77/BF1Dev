@@ -625,7 +625,7 @@ def salvar_classificacao_prova(prova_id, df_classificacao):
             (prova_id, usuario_id, posicao, pontos, data_registro)
             VALUES (?, ?, ?, ?, ?)
         ''', (prova_id, usuario_id, posicao, pontos, data_registro))
-        salvar_classificacao_prova(prova_id_atual, df_classificacao)
+        salvar_classificacao_prova(prova_id, df_classificacao)
     conn.commit()
     conn.close()
 
