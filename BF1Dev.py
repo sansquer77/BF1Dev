@@ -17,6 +17,7 @@ from analysis import main as analysis_main
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import plotly.graph_objects as go
 
 st.set_page_config(
     page_title="BF1",
