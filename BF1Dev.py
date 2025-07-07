@@ -164,6 +164,17 @@ prova_id INTEGER PRIMARY KEY,
 posicoes TEXT,
 FOREIGN KEY(prova_id) REFERENCES provas(id)
 )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS posicoes_participantes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prova_id INTEGER NOT NULL,
+    usuario_id INTEGER NOT NULL,
+    posicao INTEGER NOT NULL,
+    pontos REAL NOT NULL,
+    data_registro TEXT DEFAULT (datetime('now')),
+    UNIQUE(prova_id, usuario_id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (prova_id) REFERENCES provas(id)
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS log_apostas (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 apostador TEXT,
@@ -260,13 +271,11 @@ def get_user_by_id(user_id):
     user = c.fetchone()
     conn.close()
     return user
-
 def autenticar_usuario(email, senha):
     user = get_user_by_email(email)
     if user and check_password(senha, user[3]):
         return user
     return None
-
 def get_horario_prova(prova_id):
     conn = db_connect()
     c = conn.cursor()
@@ -276,7 +285,6 @@ def get_horario_prova(prova_id):
     if not prova:
         return None, None, None
     return prova[0], prova[1], prova[2]
-
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario=None):
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -294,7 +302,6 @@ def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, 
               (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica))
     conn.commit()
     conn.close()
-
 def log_aposta_existe(apostador, nome_prova, tipo_aposta, automatica, dados_aposta):
     conn = db_connect()
     c = conn.cursor()
@@ -304,7 +311,6 @@ def log_aposta_existe(apostador, nome_prova, tipo_aposta, automatica, dados_apos
     count = c.fetchone()[0]
     conn.close()
     return count > 0
-
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
     automatica=0, horario_forcado=None
@@ -418,7 +424,7 @@ def salvar_aposta(
         automatica=automatica,
         horario=agora_sp
     )
-
+    salvar_classificacao_prova(prova_id_atual, df_classificacao)
     return True
 
 def gerar_aposta_aleatoria(pilotos_df):
@@ -605,6 +611,34 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
             pt = round(pt * 0.75, 2)
         pontos.append(pt)
     return pontos
+
+def salvar_classificacao_prova(prova_id, df_classificacao):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    for _, row in df_classificacao.iterrows():
+        usuario_id = row['usuario_id']
+        posicao = int(row['posicao'])
+        pontos = float(row['pontos'])
+        data_registro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT OR REPLACE INTO posicoes_participantes 
+            (prova_id, usuario_id, posicao, pontos, data_registro)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (prova_id, usuario_id, posicao, pontos, data_registro))
+    conn.commit()
+    conn.close()
+
+def obter_classificacao_prova(prova_id):
+    conn = sqlite3.connect(DB_PATH)
+    query = '''
+        SELECT usuario_id, posicao, pontos
+        FROM posicoes_participantes
+        WHERE prova_id = ?
+        ORDER BY posicao ASC
+    '''
+    df = pd.read_sql_query(query, conn, params=(prova_id,))
+    conn.close()
+    return df
 
 # --- INICIALIZAÇÃO E MENU ---
 init_db()
