@@ -1046,39 +1046,39 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     else:
         st.info("Nenhuma aposta registrada.")
     
-# --------- Gráfico de evolução da posição do participante logado ---------
-st.subheader("Evolução da Posição no Campeonato")
+    # --------- Gráfico de evolução da posição do participante logado ---------
+    st.subheader("Evolução da Posição no Campeonato")
 
-user_id_logado = user[0]  # ID do usuário logado
-user_nome_logado = user[1]  # Nome do usuário logado
+    user_id_logado = user[0]  # ID do usuário logado
+    user_nome_logado = user[1]  # Nome do usuário logado
 
-conn = db_connect()
-df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
-conn.close()
+    conn = db_connect()
+    df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
+    conn.close()
 
-# Filtra apenas as posições do usuário logado
-posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
+    # Filtra apenas as posições do usuário logado
+    posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
 
-if not posicoes_part.empty:
-    # Certifique-se de que provas_df está definido e atualizado antes deste bloco
-    provas_nomes = [provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']]
-    fig_pos = go.Figure()
-    fig_pos.add_trace(go.Scatter(
-        x=provas_nomes,
-        y=posicoes_part['posicao'],
-        mode='lines+markers',
-        name=user_nome_logado if user_nome_logado else "Você"
-    ))
-    fig_pos.update_yaxes(autorange="reversed")  # Posição 1 no topo
-    fig_pos.update_layout(
-        xaxis_title="Prova",
-        yaxis_title="Posição",
-        title=f"Evolução da Posição - {user_nome_logado if user_nome_logado else 'Você'}",
-        showlegend=False
-    )
-    st.plotly_chart(fig_pos, use_container_width=True)
-else:
-    st.info("Ainda não há histórico de posições para o seu usuário.")
+    if not posicoes_part.empty:
+        # Certifique-se de que provas_df está definido e atualizado antes deste bloco
+        provas_nomes = [provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']]
+        fig_pos = go.Figure()
+        fig_pos.add_trace(go.Scatter(
+            x=provas_nomes,
+            y=posicoes_part['posicao'],
+            mode='lines+markers',
+            name=user_nome_logado if user_nome_logado else "Você"
+        ))
+        fig_pos.update_yaxes(autorange="reversed")  # Posição 1 no topo
+        fig_pos.update_layout(
+            xaxis_title="Prova",
+            yaxis_title="Posição",
+            title=f"Evolução da Posição - {user_nome_logado if user_nome_logado else 'Você'}",
+            showlegend=False
+        )
+        st.plotly_chart(fig_pos, use_container_width=True)
+    else:
+        st.info("Ainda não há histórico de posições para o seu usuário.")
 
 # --- GESTÃO DE USUÁRIOS (apenas master) ---
 if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
