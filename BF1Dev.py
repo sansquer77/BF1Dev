@@ -1046,14 +1046,11 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
     else:
         st.info("Nenhuma aposta registrada.")
     
-    # --------- Gráfico de evolução da posição do participante logado ---------
+# --------- Gráfico de evolução da posição do participante logado ---------
 st.subheader("Evolução da Posição no Campeonato")
 
-# Obtém o ID do usuário logado a partir do token/session
-user_id_logado = st.session_state.get('user_id')
-user_nome_logado = None
-if user_id_logado is not None:
-    user_nome_logado = participantes[participantes['id'] == user_id_logado]['nome'].values[0]
+user_id_logado = user[0]  # ID do usuário logado
+user_nome_logado = user[1]  # Nome do usuário logado
 
 conn = db_connect()
 df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
@@ -1063,14 +1060,16 @@ conn.close()
 posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
 
 if not posicoes_part.empty:
+    # Certifique-se de que provas_df está definido e atualizado antes deste bloco
+    provas_nomes = [provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']]
     fig_pos = go.Figure()
     fig_pos.add_trace(go.Scatter(
-        x=[provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']],
+        x=provas_nomes,
         y=posicoes_part['posicao'],
         mode='lines+markers',
         name=user_nome_logado if user_nome_logado else "Você"
     ))
-    fig_pos.update_yaxes(autorange="reversed")
+    fig_pos.update_yaxes(autorange="reversed")  # Posição 1 no topo
     fig_pos.update_layout(
         xaxis_title="Prova",
         yaxis_title="Posição",
