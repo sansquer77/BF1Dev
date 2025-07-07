@@ -629,7 +629,7 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     return pontos
 
 def salvar_classificacao_prova(prova_id, df_classificacao):
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     cursor = conn.cursor()
     for _, row in df_classificacao.iterrows():
         usuario_id = row['usuario_id']
@@ -644,39 +644,24 @@ def salvar_classificacao_prova(prova_id, df_classificacao):
     conn.commit()
     conn.close()
 
-def obter_classificacao_prova(prova_id):
-    conn = sqlite3.connect(DB_PATH)
-    query = '''
-        SELECT usuario_id, posicao, pontos
-        FROM posicoes_participantes
-        WHERE prova_id = ?
-        ORDER BY posicao ASC
-    '''
-    df = pd.read_sql_query(query, conn, params=(prova_id,))
-    conn.close()
-    return df
-
 def atualizar_classificacoes_todas_as_provas():
     """Calcula e salva a classificação de todas as provas já ocorridas com resultado cadastrado."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     usuarios_df = pd.read_sql('SELECT * FROM usuarios WHERE status = "Ativo"', conn)
     provas_df = pd.read_sql('SELECT * FROM provas', conn)
     apostas_df = pd.read_sql('SELECT * FROM apostas', conn)
     resultados_df = pd.read_sql('SELECT * FROM resultados', conn)
     conn.close()
 
-    # Para cada prova com resultado cadastrado
     for _, prova in provas_df.iterrows():
         prova_id = prova['id']
         if prova_id not in resultados_df['prova_id'].values:
-            continue  # Só processa provas com resultado cadastrado
+            continue
 
-        # Filtra apostas da prova
         apostas_prova = apostas_df[apostas_df['prova_id'] == prova_id]
         if apostas_prova.empty:
             continue
 
-        # Calcula pontuação de cada participante
         tabela = []
         for _, usuario in usuarios_df.iterrows():
             aposta = apostas_prova[apostas_prova['usuario_id'] == usuario['id']]
@@ -687,11 +672,8 @@ def atualizar_classificacoes_todas_as_provas():
                 pontos = pontos[0] if pontos and pontos[0] is not None else 0
             tabela.append({'usuario_id': usuario['id'], 'pontos': pontos})
 
-        # Ordena por pontos decrescentes e salva posição
         df_classificacao = pd.DataFrame(tabela).sort_values('pontos', ascending=False).reset_index(drop=True)
         df_classificacao['posicao'] = df_classificacao.index + 1
-
-        # Salva classificação na tabela histórica
         salvar_classificacao_prova(prova_id, df_classificacao)
 
 # --- INICIALIZAÇÃO E MENU ---
