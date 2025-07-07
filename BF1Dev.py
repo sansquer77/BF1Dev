@@ -196,35 +196,42 @@ def get_usuarios_df():
     conn.close()
     return df
 @st.cache_data
+
 def get_pilotos_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM pilotos', conn)
     conn.close()
     return df
 @st.cache_data
+
 def get_provas_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM provas', conn)
     conn.close()
     return df
 @st.cache_data
+
 def get_apostas_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM apostas', conn)
     conn.close()
     return df
 @st.cache_data
+
 def get_resultados_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM resultados', conn)
     conn.close()
     return df
+
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode('utf-8')
+
 def check_password(password, hashed):
     if isinstance(hashed, str):
         hashed = hashed.encode()  # converte para bytes
     return bcrypt.checkpw(password.encode(), hashed)
+
 def generate_token(user_id, perfil, status):
     payload = {
         'user_id': user_id,
@@ -236,6 +243,7 @@ def generate_token(user_id, perfil, status):
     if isinstance(token, bytes):
         token = token.decode('utf-8')
     return token
+
 def decode_token(token):
     try:
         payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
@@ -244,6 +252,7 @@ def decode_token(token):
         return None
     except Exception:
         return None
+
 def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo'):
     conn = db_connect()
     c = conn.cursor()
@@ -257,6 +266,7 @@ def cadastrar_usuario(nome, email, senha, perfil='participante', status='Ativo')
         return False
     finally:
         conn.close()
+
 def get_user_by_email(email):
     conn = db_connect()
     c = conn.cursor()
@@ -264,6 +274,7 @@ def get_user_by_email(email):
     user = c.fetchone()
     conn.close()
     return user
+
 def get_user_by_id(user_id):
     conn = db_connect()
     c = conn.cursor()
@@ -271,11 +282,13 @@ def get_user_by_id(user_id):
     user = c.fetchone()
     conn.close()
     return user
+
 def autenticar_usuario(email, senha):
     user = get_user_by_email(email)
     if user and check_password(senha, user[3]):
         return user
     return None
+
 def get_horario_prova(prova_id):
     conn = db_connect()
     c = conn.cursor()
@@ -285,6 +298,7 @@ def get_horario_prova(prova_id):
     if not prova:
         return None, None, None
     return prova[0], prova[1], prova[2]
+
 def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario=None):
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -302,6 +316,7 @@ def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, 
               (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica))
     conn.commit()
     conn.close()
+
 def log_aposta_existe(apostador, nome_prova, tipo_aposta, automatica, dados_aposta):
     conn = db_connect()
     c = conn.cursor()
@@ -311,6 +326,7 @@ def log_aposta_existe(apostador, nome_prova, tipo_aposta, automatica, dados_apos
     count = c.fetchone()[0]
     conn.close()
     return count > 0
+
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
     automatica=0, horario_forcado=None
@@ -625,7 +641,6 @@ def salvar_classificacao_prova(prova_id, df_classificacao):
             (prova_id, usuario_id, posicao, pontos, data_registro)
             VALUES (?, ?, ?, ?, ?)
         ''', (prova_id, usuario_id, posicao, pontos, data_registro))
-        salvar_classificacao_prova(prova_id, df_classificacao)
     conn.commit()
     conn.close()
 
@@ -640,6 +655,44 @@ def obter_classificacao_prova(prova_id):
     df = pd.read_sql_query(query, conn, params=(prova_id,))
     conn.close()
     return df
+
+def atualizar_classificacoes_todas_as_provas():
+    """Calcula e salva a classificação de todas as provas já ocorridas com resultado cadastrado."""
+    conn = sqlite3.connect(DB_PATH)
+    usuarios_df = pd.read_sql('SELECT * FROM usuarios WHERE status = "Ativo"', conn)
+    provas_df = pd.read_sql('SELECT * FROM provas', conn)
+    apostas_df = pd.read_sql('SELECT * FROM apostas', conn)
+    resultados_df = pd.read_sql('SELECT * FROM resultados', conn)
+    conn.close()
+
+    # Para cada prova com resultado cadastrado
+    for _, prova in provas_df.iterrows():
+        prova_id = prova['id']
+        if prova_id not in resultados_df['prova_id'].values:
+            continue  # Só processa provas com resultado cadastrado
+
+        # Filtra apostas da prova
+        apostas_prova = apostas_df[apostas_df['prova_id'] == prova_id]
+        if apostas_prova.empty:
+            continue
+
+        # Calcula pontuação de cada participante
+        tabela = []
+        for _, usuario in usuarios_df.iterrows():
+            aposta = apostas_prova[apostas_prova['usuario_id'] == usuario['id']]
+            if aposta.empty:
+                pontos = 0
+            else:
+                pontos = calcular_pontuacao_lote(aposta, resultados_df, provas_df)
+                pontos = pontos[0] if pontos and pontos[0] is not None else 0
+            tabela.append({'usuario_id': usuario['id'], 'pontos': pontos})
+
+        # Ordena por pontos decrescentes e salva posição
+        df_classificacao = pd.DataFrame(tabela).sort_values('pontos', ascending=False).reset_index(drop=True)
+        df_classificacao['posicao'] = df_classificacao.index + 1
+
+        # Salva classificação na tabela histórica
+        salvar_classificacao_prova(prova_id, df_classificacao)
 
 # --- INICIALIZAÇÃO E MENU ---
 init_db()
@@ -1559,7 +1612,7 @@ if st.session_state['pagina'] == "Atualização de resultados" and st.session_st
             st.warning("Cadastre provas e pilotos ativos antes de lançar resultados.")
     else:
         st.warning("Acesso restrito ao administrador/master.")
-
+    atualizar_classificacoes_todas_as_provas()
 
 # --- LOG DE APOSTAS (visível para todos, mas com filtros) ---
 if st.session_state['pagina'] == "Log de Apostas" and st.session_state['token']:
