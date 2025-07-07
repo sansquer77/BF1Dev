@@ -1045,6 +1045,41 @@ if st.session_state['pagina'] == "Painel do Participante" and st.session_state['
                 st.markdown("---")
     else:
         st.info("Nenhuma aposta registrada.")
+    
+    # --------- Gráfico de evolução da posição do participante logado ---------
+st.subheader("Evolução da Posição no Campeonato")
+
+# Obtém o ID do usuário logado a partir do token/session
+user_id_logado = st.session_state.get('user_id')
+user_nome_logado = None
+if user_id_logado is not None:
+    user_nome_logado = participantes[participantes['id'] == user_id_logado]['nome'].values[0]
+
+conn = db_connect()
+df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
+conn.close()
+
+# Filtra apenas as posições do usuário logado
+posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
+
+if not posicoes_part.empty:
+    fig_pos = go.Figure()
+    fig_pos.add_trace(go.Scatter(
+        x=[provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']],
+        y=posicoes_part['posicao'],
+        mode='lines+markers',
+        name=user_nome_logado if user_nome_logado else "Você"
+    ))
+    fig_pos.update_yaxes(autorange="reversed")
+    fig_pos.update_layout(
+        xaxis_title="Prova",
+        yaxis_title="Posição",
+        title=f"Evolução da Posição - {user_nome_logado if user_nome_logado else 'Você'}",
+        showlegend=False
+    )
+    st.plotly_chart(fig_pos, use_container_width=True)
+else:
+    st.info("Ainda não há histórico de posições para o seu usuário.")
 
 # --- GESTÃO DE USUÁRIOS (apenas master) ---
 if st.session_state['pagina'] == "Gestão de Usuários" and st.session_state['token']:
@@ -1539,32 +1574,7 @@ if st.session_state['pagina'] == "Classificação" and st.session_state['token']
     else:
         st.info("Sem dados para exibir o gráfico de evolução.")
 
-    # --------- 5. Gráfico de evolução da posição do participante (cada um) ---------
-    st.subheader("Evolução da Posição no Campeonato")
-    conn = db_connect()
-    df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
-    conn.close()
-    for part in participantes['nome']:
-        usuario_id = participantes[participantes['nome'] == part].iloc[0]['id']
-        posicoes_part = df_posicoes[df_posicoes['usuario_id'] == usuario_id].sort_values('prova_id')
-        if not posicoes_part.empty:
-            fig_pos = go.Figure()
-            fig_pos.add_trace(go.Scatter(
-                x=[provas_df[provas_df['id']==pid]['nome'].values[0] for pid in posicoes_part['prova_id']],
-                y=posicoes_part['posicao'],
-                mode='lines+markers',
-                name=part
-            ))
-            fig_pos.update_yaxes(autorange="reversed")
-            fig_pos.update_layout(
-                xaxis_title="Prova",
-                yaxis_title="Posição",
-                title=f"Evolução da Posição - {part}",
-                showlegend=False
-            )
-            st.plotly_chart(fig_pos, use_container_width=True)
-
-    # --------- 6. Gráfico geral de posições de todos ---------
+    # --------- 5. Gráfico geral de posições de todos ---------
     st.subheader("Classificação de Cada Participante ao Longo do Campeonato")
     fig_all = go.Figure()
     for part in participantes['nome']:
