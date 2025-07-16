@@ -18,6 +18,8 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import plotly.graph_objects as go
+import extra_streamlit_components as stx
+import uuid
 
 st.set_page_config(
     page_title="BF1",
@@ -27,7 +29,27 @@ st.set_page_config(
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
+cookie_manager = stx.CookieManager()
 data_envio = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
+
+# ⬇️ Tentar restaurar sessão a partir do cookie (executado uma única vez)
+cookies = cookie_manager.get_all()
+jwt_token = cookies.get("session_token")
+
+if jwt_token and 'token' not in st.session_state:
+    try:
+        payload = jwt.decode(jwt_token, JWT_SECRET, algorithms=["HS256"])
+        st.session_state['token'] = jwt_token
+        st.session_state['user_id'] = payload.get("sub")
+        st.session_state['user_role'] = payload.get("role")
+        st.session_state['pagina'] = "Painel do Participante"  # Ou outro destino padrão
+        st.toast("Sessão restaurada com sucesso!", icon="✅")  # ou st.success
+    except jwt.ExpiredSignatureError:
+        st.warning("Sua sessão expirou. Faça login novamente.")
+        cookie_manager.delete("session_token")
+    except jwt.InvalidTokenError:
+        st.error("Token de sessão inválido.")
+        cookie_manager.delete("session_token")
 
 REGULAMENTO = """
 REGULAMENTO BF1-2025
@@ -791,6 +813,14 @@ if st.session_state['pagina'] == "Login":
                     st.session_state['user_id'] = user[0]  # user[0] deve ser o ID do usuário
                     st.session_state['user_role'] = user[4]  # perfil
                     st.session_state['pagina'] = "Painel do Participante"
+                    # ⚠️ Grava JWT em cookie seguro no browser
+                    expire_time = datetime.now() + timedelta(minutes=JWT_EXP_MINUTES)
+                    cookie_manager.set(
+                        "session_token",
+                        token,
+                        expires_at=expire_time.strftime("%a, %d-%b-%Y %H:%M:%S GMT")
+                        secure=True
+                    )
                     st.success(f"Bem-vindo, {user[1]}!")
                     st.write("Perfil do usuário:", st.session_state.get("user_role"))
                 else:
@@ -1945,8 +1975,17 @@ if st.session_state['pagina'] == "Backup dos Bancos de Dados":
     backup_main()
 
 # --- Logoff ---
-if st.session_state['pagina'] == "Logout" and st.session_state['token']:
+if st.session_state['pagina'] == "Logout" and st.session_state.get('token'):
+    # Limpa o estado da sessão
     st.session_state['token'] = None
+    st.session_state['user_id'] = None
+    st.session_state['user_role'] = None
+
+    # Deleta o cookie
+    cookie_manager.delete("session_token")
+
+    # Redireciona para login
     st.session_state['pagina'] = "Login"
     st.success("Logout realizado com sucesso!")
+    st.experimental_rerun()
 # --- FIM DO CÓDIGO PRINCIPAL ---

@@ -7,3 +7,4 @@ openpyxl
 plotly
 seaborn
 fastf1>=3.3.6
+extra-streamlit-components
