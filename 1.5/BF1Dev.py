@@ -781,14 +781,22 @@ def menu_participante():
 def get_payload():
     token = st.session_state.get('token')
     if not token:
+        st.warning("Você precisa estar logado para acessar essa área.")
         st.session_state['pagina'] = "Login"
         st.stop()
-    payload = decode_token(token)
-    if not payload:
-        st.session_state['pagina'] = "Login"
-        st.session_state['token'] = None
-        st.stop()
-    return payload
+
+    try:
+        payload = jwt.decode(token, st.secrets["JWT_SECRET"], algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        st.warning("Sua sessão expirou. Faça login novamente.")
+    except jwt.InvalidTokenError:
+        st.error("Token inválido. Faça login novamente.")
+
+    # Qualquer erro leva ao logout/reset seguro
+    st.session_state['token'] = None
+    st.session_state['pagina'] = "Login"
+    st.stop()
 
 # --- Login, Esqueceu a Senha e Criar Usuário Inativo ---
 if st.session_state.get("pagina") == "Login" or "pagina" not in st.session_state:
@@ -815,7 +823,7 @@ if st.session_state.get("pagina") == "Login" or "pagina" not in st.session_state
                     st.session_state["pagina"] = "Painel do Participante"
 
                     # Grava cookie JWT
-                    expire_time = datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
+                    expire_time = datetime.now() + timedelta(minutes=JWT_EXP_MINUTES)
                     cookie_manager.set(
                         "session_token",
                         token,
