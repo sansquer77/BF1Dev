@@ -786,17 +786,17 @@ def get_payload():
         st.stop()
 
     try:
-        payload = jwt.decode(token, st.secrets["JWT_SECRET"], algorithms=["HS256"])
+        payload = pyjwt.decode(token, st.secrets["JWT_SECRET"], algorithms=["HS256"])
         return payload
-    except jwt.ExpiredSignatureError:
+    except pyjwt.ExpiredSignatureError:
         st.warning("Sua sessão expirou. Faça login novamente.")
-    except jwt.InvalidTokenError:
+    except pyjwt.InvalidTokenError:
         st.error("Token inválido. Faça login novamente.")
 
-    # Qualquer erro leva ao logout/reset seguro
     st.session_state['token'] = None
     st.session_state['pagina'] = "Login"
     st.stop()
+
 
 # --- Login, Esqueceu a Senha e Criar Usuário Inativo ---
 if st.session_state.get("pagina") == "Login" or "pagina" not in st.session_state:
