@@ -1978,18 +1978,15 @@ if st.session_state['pagina'] == "Backup dos Bancos de Dados":
 
 # --- Logoff ---
 if st.session_state['pagina'] == "Logout" and st.session_state.get('token'):
-    # Limpa o estado da sessão
     st.session_state['token'] = None
     st.session_state['user_id'] = None
     st.session_state['user_role'] = None
 
-    # Deleta o cookie de forma segura
     cookies = cookie_manager.get_all()
     if "session_token" in cookies:
         cookie_manager.delete("session_token")
 
-    # Redireciona para login
     st.session_state['pagina'] = "Login"
     st.success("Logout realizado com sucesso!")
-    st.experimental_rerun() 
+    st.experimental_rerun()
 # --- FIM DO CÓDIGO PRINCIPAL ---
