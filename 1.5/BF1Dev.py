@@ -29,7 +29,9 @@ st.set_page_config(
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
-cookie_manager = stx.CookieManager()
+if "cookie_manager" not in st.session_state:
+    st.session_state["cookie_manager"] = stx.CookieManager()
+cookie_manager = st.session_state["cookie_manager"]
 data_envio = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
 
 # ⬇️ Tentar restaurar sessão a partir do cookie (executado uma única vez)
@@ -1989,5 +1991,5 @@ if st.session_state['pagina'] == "Logout" and st.session_state.get('token'):
     # Redireciona para login
     st.session_state['pagina'] = "Login"
     st.success("Logout realizado com sucesso!")
-    st.experimental_rerun()
+    st.experimental_rerun() 
 # --- FIM DO CÓDIGO PRINCIPAL ---
