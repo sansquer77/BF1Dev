@@ -832,7 +832,7 @@ if st.session_state.get("pagina") == "Login" or "pagina" not in st.session_state
                     )
 
                     st.success(f"Bem-vindo, {user[1]}!")
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Usuário ou senha inválidos.")
 
