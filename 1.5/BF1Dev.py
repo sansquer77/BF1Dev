@@ -2002,5 +2002,5 @@ if st.session_state.get('pagina') == "Logout" and st.session_state.get('token'):
 
     st.session_state['pagina'] = "Login"
     st.success("Logout realizado com sucesso!")
-    st.experimental_rerun()
+    st.rerun()
 # --- FIM DO CÓDIGO PRINCIPAL ---
