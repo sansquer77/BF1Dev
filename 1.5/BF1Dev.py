@@ -29,23 +29,19 @@ st.set_page_config(
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
-if "cookie_manager" not in st.session_state:
-    st.session_state["cookie_manager"] = stx.CookieManager()
-cookie_manager = st.session_state["cookie_manager"]
+cookie_manager = stx.CookieManager()
+cookies = cookie_manager.get_all()
 data_envio = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
 
 # ⬇️ Tentar restaurar sessão a partir do cookie (executado uma única vez)
-cookies = cookie_manager.get_all()
-jwt_token = cookies.get("session_token")
-
-if jwt_token and 'token' not in st.session_state:
+if cookies.get("session_token") and 'token' not in st.session_state:
     try:
-        payload = jwt.decode(jwt_token, JWT_SECRET, algorithms=["HS256"])
-        st.session_state['token'] = jwt_token
+        payload = jwt.decode(cookies["session_token"], JWT_SECRET, algorithms=["HS256"])
+        st.session_state['token'] = cookies["session_token"]
         st.session_state['user_id'] = payload.get("sub")
         st.session_state['user_role'] = payload.get("role")
-        st.session_state['pagina'] = "Painel do Participante"  # Ou outro destino padrão
-        st.toast("Sessão restaurada com sucesso!", icon="✅")  # ou st.success
+        st.session_state['pagina'] = "Painel do Participante"
+        st.toast("Sessão restaurada com sucesso!", icon="✅")
     except jwt.ExpiredSignatureError:
         st.warning("Sua sessão expirou. Faça login novamente.")
         cookie_manager.delete("session_token")
@@ -795,54 +791,64 @@ def get_payload():
     return payload
 
 # --- Login, Esqueceu a Senha e Criar Usuário Inativo ---
-if st.session_state['pagina'] == "Login":
+if st.session_state.get("pagina") == "Login" or "pagina" not in st.session_state:
     st.title("Login")
-    if 'esqueceu_senha' not in st.session_state:
-        st.session_state['esqueceu_senha'] = False
-    if 'criar_usuario' not in st.session_state:
-        st.session_state['criar_usuario'] = False
 
-    if not st.session_state['esqueceu_senha'] and not st.session_state['criar_usuario']:
+    if "esqueceu_senha" not in st.session_state:
+        st.session_state["esqueceu_senha"] = False
+    if "criar_usuario" not in st.session_state:
+        st.session_state["criar_usuario"] = False
+
+    if not st.session_state["esqueceu_senha"] and not st.session_state["criar_usuario"]:
         email = st.text_input("Email")
         senha = st.text_input("Senha", type="password")
-        col1, col2, col3 = st.columns([2,1,1])
+
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             if st.button("Entrar"):
                 user = autenticar_usuario(email, senha)
                 if user:
                     token = generate_token(user[0], user[4], user[5])
-                    st.session_state['token'] = token
-                    st.session_state['user_id'] = user[0]  # user[0] deve ser o ID do usuário
-                    st.session_state['user_role'] = user[4]  # perfil
-                    st.session_state['pagina'] = "Painel do Participante"
-                    # ⚠️ Grava JWT em cookie seguro no browser
-                    expire_time = datetime.now() + timedelta(minutes=JWT_EXP_MINUTES)
+                    st.session_state["token"] = token
+                    st.session_state["user_id"] = user[0]
+                    st.session_state["user_role"] = user[4]
+                    st.session_state["pagina"] = "Painel do Participante"
+
+                    # Grava cookie JWT
+                    expire_time = datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
                     cookie_manager.set(
                         "session_token",
                         token,
                         expires_at=expire_time,
                         secure=True
                     )
+
                     st.success(f"Bem-vindo, {user[1]}!")
-                    st.write("Perfil do usuário:", st.session_state.get("user_role"))
+                    st.experimental_rerun()
                 else:
                     st.error("Usuário ou senha inválidos.")
+
         with col2:
             if st.button("Esqueceu a senha?"):
-                st.session_state['esqueceu_senha'] = True
+                st.session_state["esqueceu_senha"] = True
+
         with col3:
             if st.button("Criar usuário"):
-                st.session_state['criar_usuario'] = True
+                st.session_state["criar_usuario"] = True
+
+        # ✅ Badge do DigitalOcean
         st.markdown(
             """
-            <a href="https://www.digitalocean.com/?refcode=7a57329868da&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge" target="_blank">
-                <img src="https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg" alt="DigitalOcean Referral Badge" style="width:160px;" />
-            </a>
+            <div style="margin-top: 2em; text-align: center;">
+                <a href="https://www.digitalocean.com/?refcode=7a57329868da&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge" target="_blank">
+                    <img src="https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg" alt="DigitalOcean Referral Badge" style="width:160px;" />
+                </a>
+            </div>
             """,
             unsafe_allow_html=True
         )
-            
-    elif st.session_state['esqueceu_senha']:
+
+    elif st.session_state["esqueceu_senha"]:
         st.subheader("Redefinir senha")
         email_reset = st.text_input("Email cadastrado")
         nova_senha = st.text_input("Nova senha", type="password")
@@ -855,26 +861,26 @@ if st.session_state['pagina'] == "Login":
                 c.execute('UPDATE usuarios SET senha_hash=? WHERE email=?', (nova_hash, email_reset))
                 conn.commit()
                 conn.close()
-                st.success("Senha redefinida com sucesso! Faça login com a nova senha.")
-                st.session_state['esqueceu_senha'] = False
+                st.success("Senha redefinida com sucesso.")
+                st.session_state["esqueceu_senha"] = False
             else:
                 st.error("Email não cadastrado.")
         if st.button("Voltar para login"):
-            st.session_state['esqueceu_senha'] = False
+            st.session_state["esqueceu_senha"] = False
 
-    elif st.session_state['criar_usuario']:
+    elif st.session_state["criar_usuario"]:
         st.subheader("Criar novo usuário")
         nome_novo = st.text_input("Nome completo")
         email_novo = st.text_input("Email")
         senha_novo = st.text_input("Senha", type="password")
         if st.button("Cadastrar usuário"):
-            if cadastrar_usuario(nome_novo, email_novo, senha_novo, perfil='participante', status='Inativo'):
-                st.success("Usuário criado com sucesso! Aguarde aprovação do administrador.")
-                st.session_state['criar_usuario'] = False
+            if cadastrar_usuario(nome_novo, email_novo, senha_novo, perfil="participante", status="Inativo"):
+                st.success("Usuário criado com sucesso! Aguarde aprovação.")
+                st.session_state["criar_usuario"] = False
             else:
                 st.error("Email já cadastrado.")
         if st.button("Voltar para login", key="voltar_login_criar"):
-            st.session_state['criar_usuario'] = False
+            st.session_state["criar_usuario"] = False
 
 # ---------------- MENU LATERAL ----------------
 if st.session_state['token']:
@@ -1977,15 +1983,16 @@ if st.session_state['pagina'] == "Backup dos Bancos de Dados":
     backup_main()
 
 # --- Logoff ---
-if st.session_state['pagina'] == "Logout" and st.session_state.get('token'):
+if st.session_state.get('pagina') == "Logout" and st.session_state.get('token'):
     st.session_state['token'] = None
     st.session_state['user_id'] = None
     st.session_state['user_role'] = None
 
-    cookies = cookie_manager.get_all()
+    # ✅ Deleta o cookie apenas se existir no cache coletado
     if "session_token" in cookies:
         cookie_manager.delete("session_token")
 
     st.session_state['pagina'] = "Login"
     st.success("Logout realizado com sucesso!")
+    st.experimental_rerun()
 # --- FIM DO CÓDIGO PRINCIPAL ---
