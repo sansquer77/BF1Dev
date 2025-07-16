@@ -818,7 +818,7 @@ if st.session_state['pagina'] == "Login":
                     cookie_manager.set(
                         "session_token",
                         token,
-                        expires_at=expire_time.strftime("%a, %d-%b-%Y %H:%M:%S GMT"),
+                        expires_at=expire_time,
                         secure=True
                     )
                     st.success(f"Bem-vindo, {user[1]}!")
