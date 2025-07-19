@@ -797,7 +797,6 @@ def get_payload():
     st.session_state['pagina'] = "Login"
     st.stop()
 
-
 # --- Login, Esqueceu a Senha e Criar Usuário Inativo ---
 if st.session_state.get("pagina") == "Login" or "pagina" not in st.session_state:
     st.title("Login")
@@ -1816,12 +1815,9 @@ def importar_apostas_campeonato_excel(arquivo_excel_bytes):
     
     # Lê e valida o Excel
     df = pd.read_excel(io.BytesIO(arquivo_excel_bytes))
-
     colunas_obrigatorias = ['ID Usuário', 'Participante', 'Campeão', 'Vice', 'Equipe']
     if not all(col in df.columns for col in colunas_obrigatorias):
-
         raise ValueError("Arquivo Excel não possui colunas obrigatórias!")
-
     
     # Processa cada linha
     for _, row in df.iterrows():
