@@ -1,5 +1,5 @@
 import streamlit as st
-import backup_utils
+from db.backup_utils import download_db, upload_db, download_tabela, upload_tabela
 
 def main():
     st.set_page_config(
@@ -19,17 +19,17 @@ def main():
     st.header("Backup/Restauração do arquivo completo (.db)")
     col1, col2 = st.columns(2)
     with col1:
-        backup_utils.download_db()
+        download_db()
     with col2:
-        backup_utils.upload_db()
+        upload_db()
 
     st.divider()
     st.header("Backup/Restauração de tabelas específicas")
     tab1, tab2 = st.tabs(["Exportar Tabela", "Importar Tabela"])
     with tab1:
-        backup_utils.download_tabela()
+        download_tabela()
     with tab2:
-        backup_utils.upload_tabela()
+        upload_tabela()
 
 if __name__ == "__main__":
     main()

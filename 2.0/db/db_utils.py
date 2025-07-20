@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
 import pandas as pd
+import streamlit as st
+import bcrypt
 
 DB_PATH = Path("bolao_f1Dev.db")
 
@@ -11,99 +13,132 @@ def db_connect(db_path: Path = DB_PATH):
 
 
 def init_db():
-    """Cria todas as tabelas necessárias, inclusive as de campeonato."""
+    """
+    Cria todas as tabelas necessárias para o sistema — inclusive as do campeonato —
+    e garante a existência do usuário master, lendo dados de st.secrets.
+    """
     conn = db_connect()
     c = conn.cursor()
 
     # Tabelas principais
-    c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        email TEXT UNIQUE,
-        senha_hash TEXT,
-        perfil TEXT,
-        status TEXT DEFAULT 'Ativo',
-        faltas INTEGER DEFAULT 0
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS pilotos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        equipe TEXT,
-        status TEXT DEFAULT 'Ativo'
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS provas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        data TEXT,
-        horario_prova TEXT,
-        status TEXT DEFAULT 'Ativo',
-        tipo TEXT DEFAULT 'Normal'
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS apostas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER,
-        prova_id INTEGER,
-        data_envio TEXT,
-        pilotos TEXT,
-        fichas TEXT,
-        piloto_11 TEXT,
-        nome_prova TEXT,
-        automatica INTEGER DEFAULT 0,
-        FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-        FOREIGN KEY(prova_id) REFERENCES provas(id)
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS resultados (
-        prova_id INTEGER PRIMARY KEY,
-        posicoes TEXT,
-        FOREIGN KEY(prova_id) REFERENCES provas(id)
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS posicoes_participantes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        prova_id INTEGER NOT NULL,
-        usuario_id INTEGER NOT NULL,
-        posicao INTEGER NOT NULL,
-        pontos REAL NOT NULL,
-        data_registro TEXT DEFAULT (datetime('now')),
-        UNIQUE(prova_id, usuario_id),
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
-        FOREIGN KEY (prova_id) REFERENCES provas(id)
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS log_apostas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        apostador TEXT,
-        data TEXT,
-        horario TEXT,
-        aposta TEXT,
-        piloto_11 TEXT,
-        nome_prova TEXT,
-        tipo_aposta INTEGER DEFAULT 0,
-        automatica INTEGER DEFAULT 0
-    )''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT,
+            email TEXT UNIQUE,
+            senha_hash TEXT,
+            perfil TEXT,
+            status TEXT DEFAULT 'Ativo',
+            faltas INTEGER DEFAULT 0
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS pilotos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT,
+            equipe TEXT,
+            status TEXT DEFAULT 'Ativo'
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS provas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT,
+            data TEXT,
+            horario_prova TEXT,
+            status TEXT DEFAULT 'Ativo',
+            tipo TEXT DEFAULT 'Normal'
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS apostas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER,
+            prova_id INTEGER,
+            data_envio TEXT,
+            pilotos TEXT,
+            fichas TEXT,
+            piloto_11 TEXT,
+            nome_prova TEXT,
+            automatica INTEGER DEFAULT 0,
+            FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+            FOREIGN KEY(prova_id) REFERENCES provas(id)
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS resultados (
+            prova_id INTEGER PRIMARY KEY,
+            posicoes TEXT,
+            FOREIGN KEY(prova_id) REFERENCES provas(id)
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS posicoes_participantes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prova_id INTEGER NOT NULL,
+            usuario_id INTEGER NOT NULL,
+            posicao INTEGER NOT NULL,
+            pontos REAL NOT NULL,
+            data_registro TEXT DEFAULT (datetime('now')),
+            UNIQUE(prova_id, usuario_id),
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+            FOREIGN KEY (prova_id) REFERENCES provas(id)
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS log_apostas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            apostador TEXT,
+            data TEXT,
+            horario TEXT,
+            aposta TEXT,
+            piloto_11 TEXT,
+            nome_prova TEXT,
+            tipo_aposta INTEGER DEFAULT 0,
+            automatica INTEGER DEFAULT 0
+        )
+    ''')
 
-    # Tabelas do campeonato (unificadas)
-    c.execute('''CREATE TABLE IF NOT EXISTS championship_bets (
-        user_id INTEGER PRIMARY KEY,
-        user_nome TEXT NOT NULL,
-        champion TEXT NOT NULL,
-        vice TEXT NOT NULL,
-        team TEXT NOT NULL,
-        bet_time TEXT NOT NULL
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS championship_bets_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        user_nome TEXT NOT NULL,
-        champion TEXT NOT NULL,
-        vice TEXT NOT NULL,
-        team TEXT NOT NULL,
-        bet_time TEXT NOT NULL
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS championship_results (
-        season INTEGER PRIMARY KEY DEFAULT 2025,
-        champion TEXT NOT NULL,
-        vice TEXT NOT NULL,
-        team TEXT NOT NULL
-    )''')
+    # Tabelas do campeonato
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS championship_bets (
+            user_id INTEGER PRIMARY KEY,
+            user_nome TEXT NOT NULL,
+            champion TEXT NOT NULL,
+            vice TEXT NOT NULL,
+            team TEXT NOT NULL,
+            bet_time TEXT NOT NULL
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS championship_bets_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            user_nome TEXT NOT NULL,
+            champion TEXT NOT NULL,
+            vice TEXT NOT NULL,
+            team TEXT NOT NULL,
+            bet_time TEXT NOT NULL
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS championship_results (
+            season INTEGER PRIMARY KEY DEFAULT 2025,
+            champion TEXT NOT NULL,
+            vice TEXT NOT NULL,
+            team TEXT NOT NULL
+        )
+    ''')
+
+    # Criação do usuário master
+    usuario_master = st.secrets["usuario_master"]
+    email_master = st.secrets["email_master"]
+    senha_master = st.secrets["senha_master"]
+    senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt()).decode("utf-8")
+    c.execute("""
+        INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
 
     conn.commit()
     conn.close()
@@ -140,6 +175,16 @@ def get_resultados_df():
     conn.close()
     return df
 
+def get_horario_prova(prova_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT nome, data, horario_prova FROM provas WHERE id=?', (prova_id,))
+    prova = c.fetchone()
+    conn.close()
+    if not prova:
+        return None, None, None
+    return prova[0], prova[1], prova[2]
+
 
 # Funções utilitárias para as tabelas de championship
 def get_championship_bets_df():
@@ -160,8 +205,7 @@ def get_championship_results_df():
     conn.close()
     return df
 
-
-# Utilitários extras para championship (usando uma única conexão)
+# Utilitário para buscar nome de usuário pelo ID
 def get_user_name(user_id: int) -> str:
     try:
         conn = db_connect()
@@ -172,3 +216,11 @@ def get_user_name(user_id: int) -> str:
         return result[0] if result else "Nome não encontrado"
     except Exception:
         return "Erro ao buscar nome"
+
+def get_user_by_id(user_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT id, nome, email, perfil, status, faltas FROM usuarios WHERE id=?', (user_id,))
+    user = c.fetchone()
+    conn.close()
+    return user

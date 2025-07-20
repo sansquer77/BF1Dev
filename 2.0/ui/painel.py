@@ -1,0 +1,231 @@
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import ast
+from db.db_utils import (
+    db_connect,
+    get_user_by_id,
+    get_provas_df,
+    get_pilotos_df,
+    get_apostas_df,
+    get_resultados_df
+)
+from services.bets_service import salvar_aposta
+
+def participante_view():
+    if 'token' not in st.session_state or 'user_id' not in st.session_state:
+        st.warning("Você precisa estar logado para acessar essa página.")
+        return
+
+    user = get_user_by_id(st.session_state['user_id'])
+    st.title("Painel do Participante")
+    st.write(f"Bem-vindo, {user[1]} ({user[3]}) - Status: {user[4]}")
+    st.cache_data.clear()
+
+    provas = get_provas_df()
+    pilotos_df = get_pilotos_df()
+    pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
+    pilotos = pilotos_ativos_df['nome'].tolist()
+    equipes = pilotos_ativos_df['equipe'].tolist()
+    pilotos_equipe = dict(zip(pilotos, equipes))
+
+    if user[4] == "Ativo":
+        if len(provas) > 0 and len(pilotos_df) > 2:
+            prova_id = st.selectbox(
+                "Escolha a prova",
+                provas['id'],
+                format_func=lambda x: provas[provas['id'] == x]['nome'].values[0]
+            )
+            nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
+            apostas_df = get_apostas_df()
+            aposta_existente = apostas_df[
+                (apostas_df['usuario_id'] == user[0]) & (apostas_df['prova_id'] == prova_id)
+            ]
+            pilotos_apostados_ant = []
+            fichas_ant = []
+            piloto_11_ant = ""
+            if not aposta_existente.empty:
+                aposta_existente = aposta_existente.iloc[0]
+                pilotos_apostados_ant = aposta_existente['pilotos'].split(",")
+                fichas_ant = list(map(int, aposta_existente['fichas'].split(",")))
+                piloto_11_ant = aposta_existente['piloto_11']
+            else:
+                fichas_ant = []
+                piloto_11_ant = ""
+
+            st.write("Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
+            max_linhas = 10
+            pilotos_aposta = []
+            fichas_aposta = []
+
+            for i in range(max_linhas):
+                mostrar = False
+                if i < 3:
+                    mostrar = True
+                elif i < max_linhas and len([p for p in pilotos_aposta if p != "Nenhum"]) == i and sum(fichas_aposta) < 15:
+                    mostrar = True
+
+                if mostrar:
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        piloto_sel = st.selectbox(
+                            f"Piloto {i+1}",
+                            ["Nenhum"] + pilotos,
+                            index=(pilotos.index(pilotos_apostados_ant[i]) + 1) if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos else 0,
+                            key=f"piloto_aposta_{i}"
+                        )
+                    with col2:
+                        if piloto_sel != "Nenhum":
+                            valor_ficha = st.number_input(
+                                f"Fichas para {piloto_sel}", min_value=0, max_value=15,
+                                value=fichas_ant[i] if len(fichas_ant) > i else 0,
+                                key=f"fichas_aposta_{i}"
+                            )
+                            pilotos_aposta.append(piloto_sel)
+                            fichas_aposta.append(valor_ficha)
+                        else:
+                            pilotos_aposta.append("Nenhum")
+                            fichas_aposta.append(0)
+
+            pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
+            fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
+            equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
+            total_fichas = sum(fichas_validas)
+
+            pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
+            if not pilotos_11_opcoes:
+                pilotos_11_opcoes = pilotos
+            piloto_11 = st.selectbox(
+                "Palpite para 11º colocado", pilotos_11_opcoes,
+                index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
+            )
+
+            erro = None
+            if st.button("Efetivar Aposta"):
+                if len(set(pilotos_validos)) != len(pilotos_validos):
+                    erro = "Não é permitido apostar em dois pilotos iguais."
+                elif len(set(equipes_apostadas)) < len(equipes_apostadas):
+                    erro = "Não é permitido apostar em dois pilotos da mesma equipe."
+                elif len(pilotos_validos) < 3:
+                    erro = "Você deve apostar em pelo menos 3 pilotos de equipes diferentes."
+                elif total_fichas != 15:
+                    erro = "A soma das fichas deve ser exatamente 15."
+                elif piloto_11 in pilotos_validos:
+                    erro = "O 11º colocado não pode ser um dos pilotos apostados."
+                if erro:
+                    st.error(erro)
+                else:
+                    salvar_aposta(
+                        user[0], prova_id, pilotos_validos,
+                        fichas_validas,
+                        piloto_11, nome_prova, automatica=0
+                    )
+                    st.success("Aposta registrada/atualizada!")
+                    st.cache_data.clear()
+                    st.rerun()
+        else:
+            st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
+    else:
+        st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
+
+    st.subheader("Minhas apostas detalhadas")
+    apostas_df = get_apostas_df()
+    resultados_df = get_resultados_df()
+    provas_df = get_provas_df()
+    apostas_part = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
+
+    pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
+    bonus_11 = 25
+
+    if not apostas_part.empty:
+        nomes_abas = [f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
+        abas = st.tabs(nomes_abas)
+        for aba, (_, aposta) in zip(abas, apostas_part.iterrows()):
+            with aba:
+                prova_id = aposta['prova_id']
+                prova_nome = aposta['nome_prova']
+                fichas = list(map(int, aposta['fichas'].split(',')))
+                pilotos_apostados = aposta['pilotos'].split(',')
+                piloto_11_apostado = aposta['piloto_11']
+                automatica = aposta.get('automatica', 0)
+
+                tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
+                resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
+                if not resultado_row.empty:
+                    try:
+                        posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                    except Exception:
+                        posicoes_dict = {}
+                else:
+                    posicoes_dict = {}
+
+                dados = []
+                total_pontos = 0
+
+                if tipo_prova == 'Sprint':
+                    pontos_lista = pontos_sprint
+                    n_pos = 8
+                else:
+                    pontos_lista = pontos_f1
+                    n_pos = 10
+
+                piloto_para_pos = {v: int(k) for k, v in posicoes_dict.items()}
+                for i in range(n_pos):
+                    aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
+                    ficha = fichas[i] if i < len(fichas) else 0
+                    pos_real = piloto_para_pos.get(aposta_piloto, None)
+                    pontos = 0
+                    if pos_real is not None and 1 <= pos_real <= n_pos:
+                        pontos = ficha * pontos_lista[pos_real - 1]
+                    total_pontos += pontos
+                    dados.append({
+                        "Piloto Apostado": aposta_piloto,
+                        "Fichas": ficha,
+                        "Posição Real": pos_real if pos_real is not None else "-",
+                        "Pontos": f"{pontos:.2f}"
+                    })
+
+                piloto_11_real = posicoes_dict.get(11, "")
+                pontos_11_col = bonus_11 if piloto_11_apostado == piloto_11_real else 0
+                total_pontos += pontos_11_col
+
+                if automatica and int(automatica) >= 2:
+                    total_pontos = round(total_pontos * 0.75, 2)
+
+                st.markdown(f"#### {prova_nome} ({tipo_prova})")
+                st.dataframe(pd.DataFrame(dados), hide_index=True)
+                st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
+                st.write(f"**Total de Pontos na Prova:** {total_pontos:.2f}")
+                st.markdown("---")
+    else:
+        st.info("Nenhuma aposta registrada.")
+
+    st.subheader("Evolução da Posição no Campeonato")
+    user_id_logado = user[0]
+    user_nome_logado = user[1]
+    conn = db_connect()
+    df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
+    conn.close()
+
+    posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
+
+    if not posicoes_part.empty:
+        provas_nomes = [provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']]
+        fig_pos = go.Figure()
+        fig_pos.add_trace(go.Scatter(
+            x=provas_nomes,
+            y=posicoes_part['posicao'],
+            mode='lines+markers',
+            name=user_nome_logado if user_nome_logado else "Você"
+        ))
+        fig_pos.update_yaxes(autorange="reversed")
+        fig_pos.update_layout(
+            xaxis_title="Prova",
+            yaxis_title="Posição",
+            title=f"Evolução da Posição - {user_nome_logado if user_nome_logado else 'Você'}",
+            showlegend=False
+        )
+        st.plotly_chart(fig_pos, use_container_width=True)
+    else:
+        st.info("Ainda não há histórico de posições para o seu usuário.")
