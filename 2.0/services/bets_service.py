@@ -1,73 +1,62 @@
 import pandas as pd
-from db.db_utils import db_connect, get_user_by_id, get_horario_prova
 from services.email_service import enviar_email_confirmacao_aposta
+from db.db_utils import registrar_log_aposta, log_aposta_existe, get_user_by_id, get_horario_prova, db_connect
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 def salvar_aposta(
-    usuario_id: int,
-    prova_id: int,
-    pilotos: list[str],
-    fichas: list[int],
-    piloto_11: str,
-    nome_prova: str,
-    automatica: int = 0,
-    horario_forcado: datetime = None
-) -> bool:
-    """
-    Salva ou atualiza uma aposta para o usuário e uma prova. Gera log e, se dentro do prazo, envia email de confirmação.
-    """
-    from email_service import enviar_email_confirmacao_aposta
+    usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
+    automatica=0, horario_forcado=None
+):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    import streamlit as st
 
-    # Obtenha informações do horário da prova
     nome_prova_bd, data_prova, horario_prova = get_horario_prova(prova_id)
     if not horario_prova:
+        st.error("Prova não encontrada ou horário não cadastrado.")
         return False
 
-    # Ajusta o horário limite para apostas
-    horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S')
-    horario_limite = horario_limite.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+    horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
     agora_sp = horario_forcado or datetime.now(ZoneInfo("America/Sao_Paulo"))
-
-    # Tipo de aposta: 0 = em dia, 1 = fora do prazo
     tipo_aposta = 0 if agora_sp <= horario_limite else 1
-
-    # Dados da aposta para registrar log
     dados_aposta = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
 
-    # Busca usuário
     usuario = get_user_by_id(usuario_id)
     if not usuario:
         return False
 
-    # Evita log duplicado
     if log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, automatica, dados_aposta):
         return True
 
     conn = db_connect()
     try:
         c = conn.cursor()
-        # Remove aposta anterior, se houver, para essa prova
         c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
 
-        # Só salva aposta se for até o horário limite
         if tipo_aposta == 0:
             data_envio = agora_sp.isoformat()
-            c.execute('''INSERT INTO apostas
+            c.execute(
+                '''INSERT INTO apostas
                 (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova_bd, automatica))
-            conn.commit()
-            # Envia email de confirmação
-            enviar_email_confirmacao_aposta(
-                email_usuario=usuario[2],
-                nome_prova=nome_prova_bd,
-                pilotos=pilotos,
-                fichas=fichas,
-                piloto_11=piloto_11,
-                data_envio=data_envio
+                (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova_bd, automatica)
             )
-        # Registrar log
+            conn.commit()
+            # Envio de e-mail via serviço modular
+            try:
+                enviar_email_confirmacao_aposta(
+                    email_usuario=usuario[2],
+                    nome_prova=nome_prova_bd,
+                    pilotos=pilotos,
+                    fichas=fichas,
+                    piloto_11=piloto_11,
+                    data_envio=data_envio
+                )
+            except Exception as e:
+                st.error(f"Falha no envio de e-mail: {str(e)}")
+
+        # Log sempre é gravado, não apenas em sucesso ou em apostas no prazo
         registrar_log_aposta(
             apostador=usuario[1],
             aposta=dados_aposta,
@@ -78,11 +67,13 @@ def salvar_aposta(
             horario=agora_sp
         )
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"Erro ao salvar aposta: {str(e)}")
         conn.rollback()
         return False
     finally:
         conn.close()
+
 
 def log_aposta_existe(apostador: str, nome_prova: str, tipo_aposta: int, automatica: int, dados_aposta: str) -> bool:
     """
