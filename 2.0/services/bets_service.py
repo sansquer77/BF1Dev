@@ -33,7 +33,6 @@ def salvar_aposta(
 
     # Só impede duplicidade para apostas no prazo!
     if tipo_aposta == 0 and log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, automatica, dados_aposta):
-        # Já registrado, não duplica aposta feita no prazo
         return True
 
     conn = db_connect()
@@ -72,23 +71,64 @@ def salvar_aposta(
             except Exception as e:
                 st.error(f"Falha no envio de e-mail: {str(e)}")
 
-        # Log sempre é gravado, inclusive para apostas FORA do prazo (NÃO faz deduplicação neste caso)
-        registrar_log_aposta(
-            apostador=usuario[1],
-            aposta=dados_aposta,
-            nome_prova=nome_prova_bd,
-            piloto_11=piloto_11,
-            tipo_aposta=tipo_aposta,
-            automatica=automatica,
-            horario=agora_sp
-        )
-        return True
     except Exception as e:
         st.error(f"Erro ao salvar aposta: {str(e)}")
         conn.rollback()
         return False
     finally:
         conn.close()
+
+    # REGISTRO DE LOG: sempre (dentro ou fora do prazo)
+    registrar_log_aposta(
+        apostador=usuario[1],
+        aposta=dados_aposta,
+        nome_prova=nome_prova_bd,
+        piloto_11=piloto_11,
+        tipo_aposta=tipo_aposta,
+        automatica=automatica,
+        horario=agora_sp
+    )
+    return True
+
+def log_aposta_existe(apostador: str, nome_prova: str, tipo_aposta: int, automatica: int, dados_aposta: str) -> bool:
+    """
+    True se já existir um registro idêntico de log de aposta (deduplicação usada só no prazo).
+    """
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute(
+        '''SELECT COUNT(*) FROM log_apostas
+           WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND automatica=? AND aposta=?''',
+        (apostador, nome_prova, tipo_aposta, automatica, dados_aposta)
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count > 0
+
+def registrar_log_aposta(
+    apostador: str, aposta: str, nome_prova: str, piloto_11: str, tipo_aposta: int,
+    automatica: int = 0, horario: datetime = None
+):
+    """
+    Sempre registra, inclusive duplicatas, fora do prazo.
+    """
+    if horario is None:
+        horario = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    data = horario.strftime('%Y-%m-%d')
+    hora = horario.strftime('%H:%M:%S')
+
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute(
+        '''
+        INSERT INTO log_apostas
+        (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta, automatica)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica)
+    )
+    conn.commit()
+    conn.close()
 
 def log_aposta_existe(apostador: str, nome_prova: str, tipo_aposta: int, automatica: int, dados_aposta: str) -> bool:
     """
