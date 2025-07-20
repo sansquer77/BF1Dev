@@ -3,9 +3,8 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-# Use Streamlit Secrets to store sensitive data
 EMAIL_REMETENTE = st.secrets["EMAIL_REMETENTE"]
-SENHA_REMETENTE = st.secrets["SENHA_EMAIL"]  # senha de app do Gmail
+SENHA_REMETENTE = st.secrets["SENHA_EMAIL"]
 EMAIL_ADMIN = st.secrets.get("EMAIL_ADMIN", "")
 
 def enviar_email(destinatario: str, assunto: str, corpo_html: str) -> bool:

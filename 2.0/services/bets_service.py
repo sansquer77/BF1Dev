@@ -1,23 +1,28 @@
 import pandas as pd
-from services.email_service import enviar_email_confirmacao_aposta
-from db.db_utils import registrar_log_aposta, log_aposta_existe, get_user_by_id, get_horario_prova, db_connect
+import streamlit as st
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+from services.email_service import enviar_email_confirmacao_aposta
+from db.db_utils import (
+    get_user_by_id,
+    get_horario_prova,
+    db_connect,
+    get_pilotos_df
+)
 
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
     automatica=0, horario_forcado=None
 ):
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    import streamlit as st
-
     nome_prova_bd, data_prova, horario_prova = get_horario_prova(prova_id)
     if not horario_prova:
         st.error("Prova não encontrada ou horário não cadastrado.")
         return False
 
-    horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+    horario_limite = datetime.strptime(
+        f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S'
+    ).replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
     agora_sp = horario_forcado or datetime.now(ZoneInfo("America/Sao_Paulo"))
     tipo_aposta = 0 if agora_sp <= horario_limite else 1
     dados_aposta = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
@@ -26,24 +31,35 @@ def salvar_aposta(
     if not usuario:
         return False
 
-    if log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, automatica, dados_aposta):
+    # Só impede duplicidade para apostas no prazo!
+    if tipo_aposta == 0 and log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, automatica, dados_aposta):
+        # Já registrado, não duplica aposta feita no prazo
         return True
 
     conn = db_connect()
     try:
         c = conn.cursor()
-        c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+        c.execute(
+            'DELETE FROM apostas WHERE usuario_id=? AND prova_id=?',
+            (usuario_id, prova_id)
+        )
 
         if tipo_aposta == 0:
             data_envio = agora_sp.isoformat()
             c.execute(
-                '''INSERT INTO apostas
+                '''
+                INSERT INTO apostas
                 (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                (usuario_id, prova_id, data_envio, ','.join(pilotos), ','.join(map(str, fichas)), piloto_11, nome_prova_bd, automatica)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    usuario_id, prova_id, data_envio,
+                    ','.join(pilotos),
+                    ','.join(map(str, fichas)),
+                    piloto_11, nome_prova_bd, automatica
+                )
             )
             conn.commit()
-            # Envio de e-mail via serviço modular
             try:
                 enviar_email_confirmacao_aposta(
                     email_usuario=usuario[2],
@@ -56,7 +72,7 @@ def salvar_aposta(
             except Exception as e:
                 st.error(f"Falha no envio de e-mail: {str(e)}")
 
-        # Log sempre é gravado, não apenas em sucesso ou em apostas no prazo
+        # Log sempre é gravado, inclusive para apostas FORA do prazo (NÃO faz deduplicação neste caso)
         registrar_log_aposta(
             apostador=usuario[1],
             aposta=dados_aposta,
@@ -74,40 +90,49 @@ def salvar_aposta(
     finally:
         conn.close()
 
-
 def log_aposta_existe(apostador: str, nome_prova: str, tipo_aposta: int, automatica: int, dados_aposta: str) -> bool:
     """
-    Retorna True se já existir um registro idêntico de log de aposta para evitar duplicidade.
+    Retorna True se já existir um registro idêntico de log de aposta para evitar duplicidade (usado apenas no prazo!).
     """
     conn = db_connect()
     c = conn.cursor()
-    c.execute('''SELECT COUNT(*) FROM log_apostas 
-                 WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND automatica=? AND aposta=?''',
-              (apostador, nome_prova, tipo_aposta, automatica, dados_aposta))
+    c.execute(
+        '''SELECT COUNT(*) FROM log_apostas
+           WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND automatica=? AND aposta=?''',
+        (apostador, nome_prova, tipo_aposta, automatica, dados_aposta)
+    )
     count = c.fetchone()[0]
     conn.close()
     return count > 0
 
-def registrar_log_aposta(apostador: str, aposta: str, nome_prova: str, piloto_11: str, tipo_aposta: int, automatica: int = 0, horario: datetime = None):
+def registrar_log_aposta(
+    apostador: str, aposta: str, nome_prova: str, piloto_11: str, tipo_aposta: int,
+    automatica: int = 0, horario: datetime = None
+):
     """
-    Registra cada aposta em um log detalhado.
+    Registra cada aposta em um log detalhado (sempre registra, mesmo ocorrendo multiplicidade fora do prazo).
     """
     if horario is None:
         horario = datetime.now(ZoneInfo("America/Sao_Paulo"))
     data = horario.strftime('%Y-%m-%d')
     hora = horario.strftime('%H:%M:%S')
+
     conn = db_connect()
     c = conn.cursor()
-    c.execute('''INSERT INTO log_apostas 
-                (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta, automatica) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-              (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica))
+    c.execute(
+        '''
+        INSERT INTO log_apostas
+        (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta, automatica)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica)
+    )
     conn.commit()
     conn.close()
 
 def gerar_aposta_aleatoria(pilotos_df: pd.DataFrame):
     """
-    Gera apostas necessárias e válidas para o regulamento (mínimo 3 equipes distintas e soma 15 fichas).
+    Gera apostas válidas (mínimo 3 equipes e soma 15 fichas).
     """
     import random
     equipes_unicas = pilotos_df['equipe'].unique().tolist()
@@ -140,14 +165,12 @@ def gerar_aposta_automatica(usuario_id: int, prova_id: int, nome_prova: str, apo
     """
     Gera aposta automática: replica a última ou gera aleatória se não houver anterior.
     """
-    # Buscar aposta anterior
     prova_atual = provas_df[provas_df['id'] == prova_id]
     if prova_atual.empty:
         return False, "Prova não encontrada."
     data_prova = prova_atual['data'].iloc[0]
     horario_prova = prova_atual['horario_prova'].iloc[0]
-    horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S')
-    horario_limite = horario_limite.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+    horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
     pilotos_df = get_pilotos_df()
     prova_ant_id = prova_id - 1
     prova_ant = provas_df[provas_df['id'] == prova_ant_id]
@@ -162,7 +185,6 @@ def gerar_aposta_automatica(usuario_id: int, prova_id: int, nome_prova: str, apo
             pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
     else:
         pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
-    # Busca maior valor atual de 'automatica' para o usuário
     conn = db_connect()
     c = conn.cursor()
     c.execute('SELECT MAX(automatica) FROM apostas WHERE usuario_id=?', (usuario_id,))
@@ -174,7 +196,11 @@ def gerar_aposta_automatica(usuario_id: int, prova_id: int, nome_prova: str, apo
     ), "Aposta automática gerada com sucesso!"
 
 def atualizar_classificacoes_todas_as_provas():
-    """Calcula e salva a classificação de todas as provas já ocorridas com resultado cadastrado."""
+    """
+    Calcula e salva a classificação de todas as provas já ocorridas com resultado cadastrado.
+    """
+    import ast
+
     conn = db_connect()
     usuarios_df = pd.read_sql('SELECT * FROM usuarios WHERE status = "Ativo"', conn)
     provas_df = pd.read_sql('SELECT * FROM provas', conn)
@@ -202,8 +228,6 @@ def atualizar_classificacoes_todas_as_provas():
                 pontos = calcular_pontuacao_lote(aposta, resultados_df, provas_df)
                 pontos = pontos[0] if pontos and pontos[0] is not None else 0
                 data_envio = aposta.iloc[0]['data_envio'] if 'data_envio' in aposta.columns else None
-
-                # Checa acerto do 11º colocado
                 acerto_11 = 0
                 if not aposta.empty and not resultados_df.empty:
                     resultado = resultados_df[resultados_df['prova_id'] == prova_id]
@@ -213,7 +237,6 @@ def atualizar_classificacoes_todas_as_provas():
                         piloto_11_apostado = aposta.iloc[0]['piloto_11']
                         if piloto_11_apostado == piloto_11_real:
                             acerto_11 = 1
-
             tabela.append({
                 'usuario_id': int(usuario['id']),
                 'pontos': pontos,
@@ -221,7 +244,6 @@ def atualizar_classificacoes_todas_as_provas():
                 'acerto_11': acerto_11
             })
 
-        # Ordena por: pontos (desc), data_envio (asc), acerto_11 (desc)
         df_classificacao = pd.DataFrame(tabela)
         df_classificacao['data_envio'] = pd.to_datetime(df_classificacao['data_envio'], errors='coerce')
         df_classificacao = df_classificacao.sort_values(
@@ -229,5 +251,4 @@ def atualizar_classificacoes_todas_as_provas():
             ascending=[False, False, True]
         ).reset_index(drop=True)
         df_classificacao['posicao'] = df_classificacao.index + 1
-
         salvar_classificacao_prova(prova_id, df_classificacao)

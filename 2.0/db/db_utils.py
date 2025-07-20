@@ -6,11 +6,9 @@ import bcrypt
 
 DB_PATH = Path("bolao_f1Dev.db")
 
-
 def db_connect(db_path: Path = DB_PATH):
     """Retorna uma conexão SQLite com o banco principal do bolão e campeonato."""
     return sqlite3.connect(str(db_path))
-
 
 def init_db():
     """
@@ -19,7 +17,6 @@ def init_db():
     """
     conn = db_connect()
     c = conn.cursor()
-
     # Tabelas principais
     c.execute('''
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -143,8 +140,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-
-# Funções utilitárias para DataFrames (pandas) das tabelas principais
 def get_usuarios_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM usuarios', conn)
@@ -185,8 +180,14 @@ def get_horario_prova(prova_id):
         return None, None, None
     return prova[0], prova[1], prova[2]
 
+def get_user_by_id(user_id):
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT id, nome, email, perfil, status, faltas FROM usuarios WHERE id=?', (user_id,))
+    user = c.fetchone()
+    conn.close()
+    return user
 
-# Funções utilitárias para as tabelas de championship
 def get_championship_bets_df():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM championship_bets', conn)
@@ -205,7 +206,6 @@ def get_championship_results_df():
     conn.close()
     return df
 
-# Utilitário para buscar nome de usuário pelo ID
 def get_user_name(user_id: int) -> str:
     try:
         conn = db_connect()
@@ -216,11 +216,3 @@ def get_user_name(user_id: int) -> str:
         return result[0] if result else "Nome não encontrado"
     except Exception:
         return "Erro ao buscar nome"
-
-def get_user_by_id(user_id):
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute('SELECT id, nome, email, perfil, status, faltas FROM usuarios WHERE id=?', (user_id,))
-    user = c.fetchone()
-    conn.close()
-    return user
