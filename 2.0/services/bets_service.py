@@ -1,5 +1,6 @@
 import pandas as pd
 from db.db_utils import db_connect, get_user_by_id, get_horario_prova
+from services.email_service import enviar_email_confirmacao_aposta
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -180,3 +181,62 @@ def gerar_aposta_automatica(usuario_id: int, prova_id: int, nome_prova: str, apo
     return salvar_aposta(
         usuario_id, prova_id, pilotos_ant, fichas_ant, piloto_11_ant, nome_prova, automatica=nova_automatica, horario_forcado=horario_limite
     ), "Aposta automática gerada com sucesso!"
+
+def atualizar_classificacoes_todas_as_provas():
+    """Calcula e salva a classificação de todas as provas já ocorridas com resultado cadastrado."""
+    conn = db_connect()
+    usuarios_df = pd.read_sql('SELECT * FROM usuarios WHERE status = "Ativo"', conn)
+    provas_df = pd.read_sql('SELECT * FROM provas', conn)
+    apostas_df = pd.read_sql('SELECT * FROM apostas', conn)
+    resultados_df = pd.read_sql('SELECT * FROM resultados', conn)
+    conn.close()
+
+    for _, prova in provas_df.iterrows():
+        prova_id = prova['id']
+        if prova_id not in resultados_df['prova_id'].values:
+            continue
+
+        apostas_prova = apostas_df[apostas_df['prova_id'] == prova_id]
+        if apostas_prova.empty:
+            continue
+
+        tabela = []
+        for _, usuario in usuarios_df.iterrows():
+            aposta = apostas_prova[apostas_prova['usuario_id'] == usuario['id']]
+            if aposta.empty:
+                pontos = 0
+                data_envio = None
+                acerto_11 = 0
+            else:
+                pontos = calcular_pontuacao_lote(aposta, resultados_df, provas_df)
+                pontos = pontos[0] if pontos and pontos[0] is not None else 0
+                data_envio = aposta.iloc[0]['data_envio'] if 'data_envio' in aposta.columns else None
+
+                # Checa acerto do 11º colocado
+                acerto_11 = 0
+                if not aposta.empty and not resultados_df.empty:
+                    resultado = resultados_df[resultados_df['prova_id'] == prova_id]
+                    if not resultado.empty:
+                        posicoes = ast.literal_eval(resultado.iloc[0]['posicoes'])
+                        piloto_11_real = posicoes.get(11, "")
+                        piloto_11_apostado = aposta.iloc[0]['piloto_11']
+                        if piloto_11_apostado == piloto_11_real:
+                            acerto_11 = 1
+
+            tabela.append({
+                'usuario_id': int(usuario['id']),
+                'pontos': pontos,
+                'data_envio': data_envio,
+                'acerto_11': acerto_11
+            })
+
+        # Ordena por: pontos (desc), data_envio (asc), acerto_11 (desc)
+        df_classificacao = pd.DataFrame(tabela)
+        df_classificacao['data_envio'] = pd.to_datetime(df_classificacao['data_envio'], errors='coerce')
+        df_classificacao = df_classificacao.sort_values(
+            by=['pontos', 'acerto_11', 'data_envio'],
+            ascending=[False, False, True]
+        ).reset_index(drop=True)
+        df_classificacao['posicao'] = df_classificacao.index + 1
+
+        salvar_classificacao_prova(prova_id, df_classificacao)

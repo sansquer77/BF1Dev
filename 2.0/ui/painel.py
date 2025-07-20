@@ -20,8 +20,8 @@ def participante_view():
     user = get_user_by_id(st.session_state['user_id'])
     st.title("Painel do Participante")
     st.write(f"Bem-vindo, {user[1]} ({user[3]}) - Status: {user[4]}")
-    st.cache_data.clear()
 
+    st.cache_data.clear()
     provas = get_provas_df()
     pilotos_df = get_pilotos_df()
     pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
@@ -91,7 +91,6 @@ def participante_view():
             fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
             equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
             total_fichas = sum(fichas_validas)
-
             pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
             if not pilotos_11_opcoes:
                 pilotos_11_opcoes = pilotos
@@ -99,7 +98,6 @@ def participante_view():
                 "Palpite para 11º colocado", pilotos_11_opcoes,
                 index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
             )
-
             erro = None
             if st.button("Efetivar Aposta"):
                 if len(set(pilotos_validos)) != len(pilotos_validos):
@@ -117,8 +115,7 @@ def participante_view():
                 else:
                     salvar_aposta(
                         user[0], prova_id, pilotos_validos,
-                        fichas_validas,
-                        piloto_11, nome_prova, automatica=0
+                        fichas_validas, piloto_11, nome_prova, automatica=0
                     )
                     st.success("Aposta registrada/atualizada!")
                     st.cache_data.clear()
@@ -128,6 +125,7 @@ def participante_view():
     else:
         st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
 
+    # --- Exibição detalhada das apostas do participante ---
     st.subheader("Minhas apostas detalhadas")
     apostas_df = get_apostas_df()
     resultados_df = get_resultados_df()
@@ -171,6 +169,7 @@ def participante_view():
                     n_pos = 10
 
                 piloto_para_pos = {v: int(k) for k, v in posicoes_dict.items()}
+
                 for i in range(n_pos):
                     aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
                     ficha = fichas[i] if i < len(fichas) else 0
@@ -201,13 +200,16 @@ def participante_view():
     else:
         st.info("Nenhuma aposta registrada.")
 
+    # --------- Gráfico de evolução da posição do participante logado ---------
     st.subheader("Evolução da Posição no Campeonato")
     user_id_logado = user[0]
     user_nome_logado = user[1]
+
     conn = db_connect()
     df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
     conn.close()
 
+    # Filtra apenas as posições do usuário logado
     posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
 
     if not posicoes_part.empty:

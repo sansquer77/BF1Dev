@@ -8,6 +8,7 @@ init_db()
 from ui.login import login_view
 from ui.painel import participante_view
 from ui.usuarios import main as usuarios_view
+from ui.gestao_resultados import resultados_view
 from ui.championship_bets import main as championship_bets_view
 from ui.championship_results import main as championship_results_view
 from ui.gestao_apostas import main as gestao_apostas_view
@@ -20,7 +21,6 @@ from ui.gestao_pilotos import main as gestao_pilotos_view
 from ui.backup import main as backup_view
 from ui.dashboard import main as dashboard_view
 from ui.sobre import main as sobre_view
-
 from utils.security import decode_token
 
 # ESTADO INICIAL DA SESSÃO
@@ -37,6 +37,7 @@ def menu_master():
         "Gestão de Pilotos",
         "Gestão de Provas",
         "Gestão de Apostas",
+        "Gestão de Resultados",
         "Análise de Apostas",
         "Atualização de resultados",
         "Apostas Campeonato",
@@ -49,12 +50,14 @@ def menu_master():
         "Sobre",
         "Logout"
     ]
+
 def menu_admin():
     return [
         "Painel do Participante",
         "Gestão de Apostas",
         "Gestão de Pilotos",
         "Gestão de Provas",
+        "Gestão de Resultados",
         "Análise de Apostas",
         "Atualização de resultados",
         "Apostas Campeonato",
@@ -66,6 +69,7 @@ def menu_admin():
         "Sobre",
         "Logout"
     ]
+
 def menu_participante():
     return [
         "Painel do Participante",
@@ -99,8 +103,9 @@ PAGES = {
     "Gestão de Pilotos": gestao_pilotos_view,
     "Gestão de Provas": gestao_provas_view,
     "Gestão de Apostas": gestao_apostas_view,
+    "Gestão de Resultados": resultados_view,
     "Análise de Apostas": analysis_view,
-    "Atualização de resultados": championship_results_view,
+    "Atualização de resultados": resultados_view,
     "Apostas Campeonato": championship_bets_view,
     "Resultado Campeonato": championship_results_view,
     "Log de Apostas": log_apostas_view,
