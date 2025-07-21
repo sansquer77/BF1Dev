@@ -4,7 +4,8 @@ from services.auth_service import (
     cadastrar_usuario,
     generate_token,
     get_user_by_email,
-    hash_password
+    hash_password,
+    redefinir_senha_usuario
 )
 from services.email_service import enviar_email_recuperacao_senha
 from datetime import datetime, timedelta
@@ -22,7 +23,6 @@ def logout():
 def login_view():
     st.title("Login do BF1")
 
-    # Estados de navegação das telas
     if "esqueceu_senha" not in st.session_state:
         st.session_state["esqueceu_senha"] = False
     if "criar_usuario" not in st.session_state:
@@ -30,14 +30,11 @@ def login_view():
 
     cookie_manager = stx.CookieManager()
 
-    # Caso queira um botão visível de Logout (Insira este botão em seu menu/cabeçalho)
     if st.session_state.get("token"):
         if st.button("Logout", key="btn_logout"):
             logout()
         st.stop()
 
-    # --- FORÇA DELEÇÃO DO COOKIE NO INÍCIO APÓS LOGOUT ---
-    # Isso impede troca de usuário com cookie antigo na sessão anterior
     if st.session_state.get("logout", False):
         cookie_manager.delete("session_token")
         st.session_state["logout"] = False
@@ -51,17 +48,14 @@ def login_view():
                 user = autenticar_usuario(email, senha)
                 if user:
                     token = generate_token(
-                        user_id=user[0],
-                        nome=user[1],
-                        perfil=user[4],
-                        status=user[5]
+                        user_id=user[0], nome=user[1], perfil=user[4], status=user[5]
                     )
                     expire_time = datetime.now() + timedelta(minutes=120)
                     cookie_manager.set(
                         "session_token",
                         token,
                         expires_at=expire_time,
-                        secure=True  # Troque para True em produção HTTPS
+                        secure=False  # True em produção HTTPS
                     )
                     st.session_state["token"] = token
                     st.session_state["user_id"] = user[0]
@@ -94,11 +88,13 @@ def login_view():
         st.header("Recuperar senha")
         rec_email = st.text_input("Seu email para recuperação")
         if st.button("Enviar email de recuperação"):
-            if get_user_by_email(rec_email):
-                enviar_email_recuperacao_senha(rec_email)
-                st.success("Email de recuperação enviado! Verifique sua caixa de entrada.")
+            ok, result = redefinir_senha_usuario(rec_email)
+            if ok:
+                nome, nova_senha = result
+                enviar_email_recuperacao_senha(rec_email, nome, nova_senha)
+                st.success("Senha temporária gerada e enviada! Verifique seu e-mail.")
             else:
-                st.error("Usuário não encontrado com este email.")
+                st.error(result)
         if st.button("Voltar"):
             st.session_state["esqueceu_senha"] = False
 

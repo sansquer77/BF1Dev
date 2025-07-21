@@ -23,25 +23,12 @@ def enviar_email(destinatario: str, assunto: str, corpo_html: str) -> bool:
         st.error(f"Erro no envio para {destinatario}: {str(e)}")
         return False
 
-def enviar_email_confirmacao_aposta(email_usuario: str, nome_prova: str, pilotos: list, fichas: list, piloto_11: str, data_envio: str):
-    """Envia e-mail de confirmação de aposta para o usuário e para o admin."""
+def enviar_email_recuperacao_senha(email_usuario: str, nome_usuario: str, nova_senha: str):
+    """Envia e-mail com senha temporária para o usuário."""
     corpo_html = f"""
-    <h3>Confirmação de Aposta - BF1</h3>
-    <b>Prova:</b> {nome_prova}<br>
-    <b>Pilotos:</b> {', '.join(pilotos)}<br>
-    <b>Fichas:</b> {', '.join(map(str, fichas))}<br>
-    <b>11º Colocado:</b> {piloto_11}<br>
-    <b>Data/Hora:</b> {data_envio}
+    <h3>Recuperação de Senha - BF1Dev</h3>
+    <p>Olá, {nome_usuario}!</p>
+    <p>Sua nova senha temporária é: <b>{nova_senha}</b></p>
+    <p>Faça login e altere sua senha imediatamente após o acesso.</p>
     """
-    enviar_email(email_usuario, f"Confirmação de Aposta - {nome_prova}", corpo_html)
-    if EMAIL_ADMIN:
-        enviar_email(EMAIL_ADMIN, f"Nova aposta de {email_usuario}", corpo_html)
-
-def enviar_email_recuperacao_senha(destinatario: str, nova_senha: str):
-    """Envia um e-mail de recuperação de senha com a nova senha definida."""
-    corpo_html = f"""
-    <h3>Redefinição de Senha - BF1</h3>
-    <b>Sua nova senha:</b> <code>{nova_senha}</code>
-    <br>Recomendamos alterar a senha após o login.
-    """
-    enviar_email(destinatario, "Redefinição de Senha - BF1", corpo_html)
+    enviar_email(email_usuario, "Recuperação de Senha - BF1Dev", corpo_html)

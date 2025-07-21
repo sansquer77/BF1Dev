@@ -1,9 +1,9 @@
 import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
-from db.db_utils import db_connect
 import streamlit as st
 import extra_streamlit_components as stx
+from db.db_utils import db_connect
 
 JWT_SECRET = st.secrets["JWT_SECRET"]
 JWT_EXP_MINUTES = 120
@@ -24,10 +24,7 @@ def autenticar_usuario(email: str, senha: str):
     """Retorna o usuário autenticado (tupla de dados) ou None."""
     conn = db_connect()
     c = conn.cursor()
-    c.execute(
-        "SELECT id, nome, email, senha_hash, perfil, status FROM usuarios WHERE email=?",
-        (email,)
-    )
+    c.execute("SELECT id, nome, email, senha_hash, perfil, status FROM usuarios WHERE email=?", (email,))
     user = c.fetchone()
     conn.close()
     if user and check_password(senha, user[3]):
@@ -39,7 +36,7 @@ def generate_token(user_id: int, nome: str, perfil: str, status: str) -> str:
     """Gera um JWT para o usuário autenticado, incluindo o nome."""
     payload = {
         "user_id": user_id,
-        "nome": nome,     # Incluído o nome no payload
+        "nome": nome,
         "perfil": perfil,
         "status": status,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXP_MINUTES)
@@ -79,7 +76,6 @@ def cadastrar_usuario(nome: str, email: str, senha: str, perfil="participante", 
 
 # --- BUSCA DE USUÁRIOS ---
 def get_user_by_email(email: str):
-    """Busca e retorna dados do usuário pelo email."""
     conn = db_connect()
     c = conn.cursor()
     c.execute(
@@ -91,7 +87,6 @@ def get_user_by_email(email: str):
     return user
 
 def get_user_by_id(user_id):
-    """Busca e retorna dados do usuário pelo id."""
     conn = db_connect()
     c = conn.cursor()
     c.execute(
@@ -110,10 +105,50 @@ def set_auth_cookies(token, expires_minutes=JWT_EXP_MINUTES):
     cookie_manager.set(
         "session_token",
         token,
-        expires_at=expires_at,
-        key="session_token"
+        expires_at=expires_at
     )
 
 def clear_auth_cookies():
     cookie_manager = stx.CookieManager()
-    cookie_manager.delete("session_token", key="session_token")
+    cookie_manager.delete("session_token")
+
+# --- RECUPERAÇÃO DE SENHA SEGURA ---
+import random
+import string
+def gerar_senha_temporaria(tamanho=10):
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choices(chars, k=tamanho))
+
+def redefinir_senha_usuario(email: str):
+    usuario = get_user_by_email(email)
+    if not usuario:
+        return False, "Usuário não encontrado."
+    nova_senha = gerar_senha_temporaria()
+    senha_hash = hash_password(nova_senha)
+    # Atualiza a senha no banco
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute("UPDATE usuarios SET senha_hash=? WHERE email=?", (senha_hash, email))
+    conn.commit()
+    conn.close()
+    return True, (usuario[1], nova_senha)  # nome, nova_senha
+
+# --- CRIAÇÃO AUTOMÁTICA DO MASTER ---
+def criar_master_se_nao_existir():
+    nome = st.secrets.get('usuario_master')
+    email = st.secrets.get('email_master')
+    senha = st.secrets.get('senha_master')
+    if not (nome and email and senha):
+        return
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM usuarios WHERE perfil="master"')
+    existe = c.fetchone()[0] > 0
+    if not existe:
+        senha_hash = hash_password(senha)
+        c.execute(
+            'INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, "master", "Ativo", 0)',
+            (nome, email, senha_hash)
+        )
+        conn.commit()
+    conn.close()
