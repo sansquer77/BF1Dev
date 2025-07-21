@@ -267,8 +267,9 @@ def participante_view():
                     st.rerun()
 
     # Filtra apenas as posições do usuário logado
+    # Verifica se as colunas existem e só então faz o filtro
+if not df_posicoes.empty and {'usuario_id', 'prova_id', 'posicao'}.issubset(df_posicoes.columns):
     posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
-
     if not posicoes_part.empty:
         provas_nomes = [provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']]
         fig_pos = go.Figure()
@@ -288,3 +289,6 @@ def participante_view():
         st.plotly_chart(fig_pos, use_container_width=True)
     else:
         st.info("Ainda não há histórico de posições para o seu usuário.")
+else:
+    st.info("Ainda não há histórico de posições registrado.")
+
