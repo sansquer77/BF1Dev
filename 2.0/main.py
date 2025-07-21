@@ -44,7 +44,7 @@ from ui.gestao_pilotos import main as gestao_pilotos_view
 from ui.backup import main as backup_view
 from ui.dashboard import main as dashboard_view
 from ui.sobre import main as sobre_view
-from utils.security import decode_token
+from services.auth_service import decode_token
 
 # ESTADO INICIAL DA SESSÃO
 if 'pagina' not in st.session_state:
