@@ -257,7 +257,7 @@ def participante_view():
             if senha_atual or nova_senha or confirma_senha:
                 if not senha_atual:
                     erros.append("Informe a senha atual para alterar a senha.")
-                elif not check_password(senha_atual, user[5]):
+                elif not check_password(senha_atual, user[3]):
                     erros.append("Senha atual incorreta.")
                 elif not nova_senha:
                     erros.append("Informe a nova senha.")

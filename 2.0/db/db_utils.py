@@ -90,7 +90,10 @@ def get_usuarios_df():
 def get_user_by_id(user_id):
     conn = db_connect()
     c = conn.cursor()
-    c.execute('SELECT id, nome, email, perfil, status, faltas FROM usuarios WHERE id=?', (user_id,))
+    c.execute(
+        "SELECT id, nome, email, senha_hash, perfil, status, faltas FROM usuarios WHERE id=?",
+        (user_id,)
+    )
     user = c.fetchone()
     conn.close()
     return user
