@@ -5,7 +5,7 @@ import ast
 
 from db.db_utils import (
     db_connect, get_user_by_id, get_provas_df, get_pilotos_df, get_apostas_df, get_resultados_df,
-    update_user_email, update_user_password
+    update_user_email, update_user_password, get_user_by_email
 )
 from services.bets_service import salvar_aposta
 from services.auth_service import check_password, hash_password
@@ -25,7 +25,7 @@ def participante_view():
 
     tabs = st.tabs(["Apostas", "Minha Conta"])
 
-    # --- Aba: Apostas (igual sua lógica atual) ---
+    # ------------------ Aba: Apostas ----------------------
     with tabs[0]:
         st.cache_data.clear()
         provas = get_provas_df()
@@ -89,6 +89,7 @@ def participante_view():
                     else:
                         pilotos_aposta.append("Nenhum")
                         fichas_aposta.append(0)
+
                 pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
                 fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
                 equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
@@ -100,6 +101,7 @@ def participante_view():
                     "Palpite para 11º colocado", pilotos_11_opcoes,
                     index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
                 )
+
                 erro = None
                 if st.button("Efetivar Aposta"):
                     if len(set(pilotos_validos)) != len(pilotos_validos):
@@ -127,96 +129,111 @@ def participante_view():
         else:
             st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
 
-    # --- Exibição detalhada das apostas do participante ---
-    st.subheader("Minhas apostas detalhadas")
-    apostas_df = get_apostas_df()
-    resultados_df = get_resultados_df()
-    provas_df = get_provas_df()
-    apostas_part = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
+        # --- Exibição detalhada das apostas do participante ---
+        st.subheader("Minhas apostas detalhadas")
+        apostas_df = get_apostas_df()
+        resultados_df = get_resultados_df()
+        provas_df = get_provas_df()
 
-    pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
-    pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
-    bonus_11 = 25
+        apostas_part = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
+        pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+        pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
+        bonus_11 = 25
 
-    if not apostas_part.empty:
-        nomes_abas = [f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
-        abas = st.tabs(nomes_abas)
-        for aba, (_, aposta) in zip(abas, apostas_part.iterrows()):
-            with aba:
-                prova_id = aposta['prova_id']
-                prova_nome = aposta['nome_prova']
-                fichas = list(map(int, aposta['fichas'].split(',')))
-                pilotos_apostados = aposta['pilotos'].split(',')
-                piloto_11_apostado = aposta['piloto_11']
-                automatica = aposta.get('automatica', 0)
-
-                tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
-                resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
-                if not resultado_row.empty:
-                    try:
-                        posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
-                    except Exception:
+        if not apostas_part.empty:
+            nomes_abas = [f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
+            abas = st.tabs(nomes_abas)
+            for aba, (_, aposta) in zip(abas, apostas_part.iterrows()):
+                with aba:
+                    prova_id = aposta['prova_id']
+                    prova_nome = aposta['nome_prova']
+                    fichas = list(map(int, aposta['fichas'].split(',')))
+                    pilotos_apostados = aposta['pilotos'].split(',')
+                    piloto_11_apostado = aposta['piloto_11']
+                    automatica = aposta.get('automatica', 0)
+                    tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
+                    resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
+                    if not resultado_row.empty:
+                        try:
+                            posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                        except Exception:
+                            posicoes_dict = {}
+                    else:
                         posicoes_dict = {}
-                else:
-                    posicoes_dict = {}
+                    dados = []
+                    total_pontos = 0
+                    if tipo_prova == 'Sprint':
+                        pontos_lista = pontos_sprint
+                        n_pos = 8
+                    else:
+                        pontos_lista = pontos_f1
+                        n_pos = 10
+                    piloto_para_pos = {v: int(k) for k, v in posicoes_dict.items()}
+                    for i in range(n_pos):
+                        aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
+                        ficha = fichas[i] if i < len(fichas) else 0
+                        pos_real = piloto_para_pos.get(aposta_piloto, None)
+                        pontos = 0
+                        if pos_real is not None and 1 <= pos_real <= n_pos:
+                            pontos = ficha * pontos_lista[pos_real - 1]
+                            total_pontos += pontos
+                        dados.append({
+                            "Piloto Apostado": aposta_piloto,
+                            "Fichas": ficha,
+                            "Posição Real": pos_real if pos_real is not None else "-",
+                            "Pontos": f"{pontos:.2f}"
+                        })
+                    piloto_11_real = posicoes_dict.get(11, "")
+                    pontos_11_col = bonus_11 if piloto_11_apostado == piloto_11_real else 0
+                    total_pontos += pontos_11_col
+                    if automatica and int(automatica) >= 2:
+                        total_pontos = round(total_pontos * 0.75, 2)
+                    st.markdown(f"#### {prova_nome} ({tipo_prova})")
+                    st.dataframe(pd.DataFrame(dados), hide_index=True)
+                    st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
+                    st.write(f"**Total de Pontos na Prova:** {total_pontos:.2f}")
+                    st.markdown("---")
+        else:
+            st.info("Nenhuma aposta registrada.")
 
-                dados = []
-                total_pontos = 0
+        # --------- Gráfico de evolução da posição do participante logado ---------
+        st.subheader("Evolução da Posição no Campeonato")
+        user_id_logado = user[0]
+        user_nome_logado = user[1]
+        conn = db_connect()
+        try:
+            df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
+        except Exception:
+            st.info("Nenhum histórico de posições disponível ainda. Quando houver dados, eles aparecerão aqui.")
+            df_posicoes = pd.DataFrame()
+        conn.close()
 
-                if tipo_prova == 'Sprint':
-                    pontos_lista = pontos_sprint
-                    n_pos = 8
-                else:
-                    pontos_lista = pontos_f1
-                    n_pos = 10
+        # Verifica se as colunas existem e só então faz o filtro
+        if not df_posicoes.empty and {'usuario_id', 'prova_id', 'posicao'}.issubset(df_posicoes.columns):
+            posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
+            if not posicoes_part.empty:
+                provas_nomes = [provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']]
+                fig_pos = go.Figure()
+                fig_pos.add_trace(go.Scatter(
+                    x=provas_nomes,
+                    y=posicoes_part['posicao'],
+                    mode='lines+markers',
+                    name=user_nome_logado if user_nome_logado else "Você"
+                ))
+                fig_pos.update_yaxes(autorange="reversed")
+                fig_pos.update_layout(
+                    xaxis_title="Prova",
+                    yaxis_title="Posição",
+                    title=f"Evolução da Posição - {user_nome_logado if user_nome_logado else 'Você'}",
+                    showlegend=False
+                )
+                st.plotly_chart(fig_pos, use_container_width=True)
+            else:
+                st.info("Ainda não há histórico de posições para o seu usuário.")
+        else:
+            st.info("Ainda não há histórico de posições registrado.")
 
-                piloto_para_pos = {v: int(k) for k, v in posicoes_dict.items()}
-
-                for i in range(n_pos):
-                    aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
-                    ficha = fichas[i] if i < len(fichas) else 0
-                    pos_real = piloto_para_pos.get(aposta_piloto, None)
-                    pontos = 0
-                    if pos_real is not None and 1 <= pos_real <= n_pos:
-                        pontos = ficha * pontos_lista[pos_real - 1]
-                    total_pontos += pontos
-                    dados.append({
-                        "Piloto Apostado": aposta_piloto,
-                        "Fichas": ficha,
-                        "Posição Real": pos_real if pos_real is not None else "-",
-                        "Pontos": f"{pontos:.2f}"
-                    })
-
-                piloto_11_real = posicoes_dict.get(11, "")
-                pontos_11_col = bonus_11 if piloto_11_apostado == piloto_11_real else 0
-                total_pontos += pontos_11_col
-
-                if automatica and int(automatica) >= 2:
-                    total_pontos = round(total_pontos * 0.75, 2)
-
-                st.markdown(f"#### {prova_nome} ({tipo_prova})")
-                st.dataframe(pd.DataFrame(dados), hide_index=True)
-                st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
-                st.write(f"**Total de Pontos na Prova:** {total_pontos:.2f}")
-                st.markdown("---")
-    else:
-        st.info("Nenhuma aposta registrada.")
-
-    # --------- Gráfico de evolução da posição do participante logado ---------
-    st.subheader("Evolução da Posição no Campeonato")
-    user_id_logado = user[0]
-    user_nome_logado = user[1]
-
-    conn = db_connect()
-    try:
-        df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
-    except Exception:
-        st.info("Nenhum histórico de posições disponível ainda. Quando houver dados, eles aparecerão aqui.")
-    df_posicoes = pd.DataFrame()  # opcional: para não quebrar o código abaixo
-
-    conn.close()
-
-# --- Aba: Minha Conta ---
+    # ---------------- Aba: Minha Conta ----------------------
     with tabs[1]:
         st.header("Gestão da Minha Conta")
         st.write(f"Usuário: **{user[1]}**")
@@ -225,16 +242,17 @@ def participante_view():
         senha_atual = st.text_input("Senha Atual", type="password", key="senha_atual")
         nova_senha = st.text_input("Nova Senha", type="password", key="nova_senha")
         confirma_senha = st.text_input("Confirme Nova Senha", type="password", key="confirma_senha")
+
         if st.button("Salvar Alterações (Conta)"):
             erros = []
             if not novo_email:
                 erros.append("Email não pode ficar vazio.")
             elif novo_email != user[2]:
                 # só verifica duplicidade se o email mudou
-                from db.db_utils import get_user_by_email
                 email_cadastrado = get_user_by_email(novo_email)
                 if email_cadastrado and email_cadastrado[0] != user[0]:
                     erros.append("O email informado já está em uso por outro usuário.")
+
             # Troca de senha (opcional)
             if senha_atual or nova_senha or confirma_senha:
                 if not senha_atual:
@@ -245,6 +263,7 @@ def participante_view():
                     erros.append("Informe a nova senha.")
                 elif nova_senha != confirma_senha:
                     erros.append("Nova senha e confirmação não coincidem.")
+
             if erros:
                 for erro in erros:
                     st.error(erro)
@@ -265,30 +284,3 @@ def participante_view():
                         st.error("Falha ao alterar senha.")
                 if atualizado:
                     st.rerun()
-
-    # Filtra apenas as posições do usuário logado
-    # Verifica se as colunas existem e só então faz o filtro
-if not df_posicoes.empty and {'usuario_id', 'prova_id', 'posicao'}.issubset(df_posicoes.columns):
-    posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
-    if not posicoes_part.empty:
-        provas_nomes = [provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']]
-        fig_pos = go.Figure()
-        fig_pos.add_trace(go.Scatter(
-            x=provas_nomes,
-            y=posicoes_part['posicao'],
-            mode='lines+markers',
-            name=user_nome_logado if user_nome_logado else "Você"
-        ))
-        fig_pos.update_yaxes(autorange="reversed")
-        fig_pos.update_layout(
-            xaxis_title="Prova",
-            yaxis_title="Posição",
-            title=f"Evolução da Posição - {user_nome_logado if user_nome_logado else 'Você'}",
-            showlegend=False
-        )
-        st.plotly_chart(fig_pos, use_container_width=True)
-    else:
-        st.info("Ainda não há histórico de posições para o seu usuário.")
-else:
-    st.info("Ainda não há histórico de posições registrado.")
-
