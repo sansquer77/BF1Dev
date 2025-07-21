@@ -4,7 +4,7 @@ from pathlib import Path
 import streamlit as st
 import bcrypt
 
-DB_PATH = Path("bolao_f1Dev.db")
+DB_PATH = Path("bolao_f1.db")
 
 def db_connect(db_path=DB_PATH):
     return sqlite3.connect(str(db_path))

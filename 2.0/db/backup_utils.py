@@ -6,7 +6,7 @@ import io  # IMPORTANTE: necessário para exportar Excel em memória
 from pathlib import Path
 from db.db_utils import db_connect
 
-DB_PATH = Path("bolao_f1Dev.db")
+DB_PATH = Path("bolao_f1.db")
 
 def download_db():
     """Permite fazer o download do arquivo inteiro do banco de dados SQLite."""
