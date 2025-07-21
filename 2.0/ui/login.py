@@ -10,6 +10,15 @@ from services.email_service import enviar_email_recuperacao_senha
 from datetime import datetime, timedelta
 import extra_streamlit_components as stx
 
+def logout():
+    cookie_manager = stx.CookieManager()
+    cookie_manager.delete("session_token")
+    for k in ["token", "user_id", "user_name", "user_role", "pagina"]:
+        if k in st.session_state:
+            del st.session_state[k]
+    st.success("Logout realizado com sucesso!")
+    st.experimental_rerun()
+
 def login_view():
     st.title("Login do BF1")
 
@@ -21,7 +30,18 @@ def login_view():
 
     cookie_manager = stx.CookieManager()
 
-    # Tela padrão de login
+    # Caso queira um botão visível de Logout (Insira este botão em seu menu/cabeçalho)
+    if st.session_state.get("token"):
+        if st.button("Logout", key="btn_logout"):
+            logout()
+        st.stop()
+
+    # --- FORÇA DELEÇÃO DO COOKIE NO INÍCIO APÓS LOGOUT ---
+    # Isso impede troca de usuário com cookie antigo na sessão anterior
+    if st.session_state.get("logout", False):
+        cookie_manager.delete("session_token")
+        st.session_state["logout"] = False
+
     if not st.session_state["esqueceu_senha"] and not st.session_state["criar_usuario"]:
         email = st.text_input("Email")
         senha = st.text_input("Senha", type="password")
@@ -30,10 +50,9 @@ def login_view():
             if st.button("Entrar"):
                 user = autenticar_usuario(email, senha)
                 if user:
-                    # user -> (id, nome, email, senha_hash, perfil, status, faltas)
                     token = generate_token(
                         user_id=user[0],
-                        nome=user[1],         # INCLUI NOME NO TOKEN!
+                        nome=user[1],
                         perfil=user[4],
                         status=user[5]
                     )
@@ -42,11 +61,11 @@ def login_view():
                         "session_token",
                         token,
                         expires_at=expire_time,
-                        secure=True
+                        secure=True  # Troque para True em produção HTTPS
                     )
                     st.session_state["token"] = token
                     st.session_state["user_id"] = user[0]
-                    st.session_state["user_name"] = user[1]     # <-- PARA LOG, CRÍTICO!
+                    st.session_state["user_name"] = user[1]
                     st.session_state["user_role"] = user[4]
                     st.session_state["pagina"] = "Painel do Participante"
                     st.success(f"Bem-vindo, {user[1]}!")
@@ -60,7 +79,6 @@ def login_view():
             if st.button("Criar usuário"):
                 st.session_state["criar_usuario"] = True
 
-        # Bloco do badge/link da DigitalOcean como na versão original
         st.markdown(
             """
             <div style="display: flex; align-items: center; justify-content: flex-end; margin-top: 32px;">
@@ -72,7 +90,6 @@ def login_view():
             unsafe_allow_html=True
         )
 
-    # Recuperação de senha
     elif st.session_state["esqueceu_senha"]:
         st.header("Recuperar senha")
         rec_email = st.text_input("Seu email para recuperação")
@@ -85,7 +102,6 @@ def login_view():
         if st.button("Voltar"):
             st.session_state["esqueceu_senha"] = False
 
-    # Cadastro de novo usuário
     elif st.session_state["criar_usuario"]:
         st.header("Criar novo usuário")
         nome = st.text_input("Nome completo")
