@@ -2,6 +2,7 @@ import streamlit as st
 
 # INICIALIZAÇÃO DO BANCO
 from db.db_utils import init_db, db_connect, hash_password
+
 init_db()
 
 def criar_master_se_nao_existir():
@@ -23,6 +24,8 @@ def criar_master_se_nao_existir():
         )
         conn.commit()
     conn.close()
+
+criar_master_se_nao_existir()
 
 # IMPORTAÇÃO DAS VIEWS/MÓDULOS DE INTERFACE
 from ui.login import login_view
