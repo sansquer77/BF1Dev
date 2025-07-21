@@ -5,7 +5,7 @@ import streamlit as st
 import extra_streamlit_components as stx
 from db.db_utils import db_connect
 
-JWT_SECRET = st.secrets["JWT_SECRET"]
+JWT_SECRET = st.secrets["JWT_SECRET"] or os.environ.get("JWT_SECRET")
 JWT_EXP_MINUTES = 120
 
 # --- HASH E CHECK DE SENHA ---
@@ -135,9 +135,9 @@ def redefinir_senha_usuario(email: str):
 
 # --- CRIAÇÃO AUTOMÁTICA DO MASTER ---
 def criar_master_se_nao_existir():
-    nome = st.secrets.get('usuario_master')
-    email = st.secrets.get('email_master')
-    senha = st.secrets.get('senha_master')
+    nome = st.secrets.get('usuario_master') or os.environ.get('usuario_master')
+    email = st.secrets.get('email_master') or os.environ.get('email_master')
+    senha = st.secrets.get('senha_master') or os.environ.get('senha_master')
     if not (nome and email and senha):
         return
     conn = db_connect()

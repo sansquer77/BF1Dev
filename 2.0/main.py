@@ -6,7 +6,7 @@ from db.db_utils import init_db, db_connect, hash_password
 init_db()
 
 def criar_master_se_nao_existir():
-    secrets = st.secrets
+    secrets = st.secrets or os.environ.get
     nome = secrets.get('usuario_master')
     email = secrets.get('email_master')
     senha = secrets.get('senha_master')
