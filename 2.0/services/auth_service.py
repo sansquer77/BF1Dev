@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import streamlit as st
 import extra_streamlit_components as stx
 from db.db_utils import db_connect
+import os
 
 JWT_SECRET = st.secrets["JWT_SECRET"] or os.environ.get("JWT_SECRET")
 JWT_EXP_MINUTES = 120

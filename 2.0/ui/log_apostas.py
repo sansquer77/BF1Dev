@@ -3,6 +3,7 @@ import pandas as pd
 from db.db_utils import db_connect
 import extra_streamlit_components as stx
 import jwt
+import os
 
 def carregar_logs():
     conn = db_connect()
