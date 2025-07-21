@@ -2,7 +2,7 @@ import streamlit as st
 from db.db_utils import get_usuarios_df, get_provas_df, get_apostas_df
 from services.bets_service import gerar_aposta_automatica
 
-st.image("assets/logo.jpg", size="small")
+st.image("assets/logo.jpg", width=200)
 def main():
     st.title("🗂️ Gestão de Apostas dos Participantes")
 

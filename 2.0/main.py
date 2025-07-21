@@ -3,7 +3,7 @@ import os
 import os
 print("Conteúdo da pasta assets:", os.listdir("assets"))
 
-st.image("assets/logo.jpg", size="small")
+st.image("assets/logo.jpg", width=200)
 
 # INICIALIZAÇÃO DO BANCO
 from db.db_utils import init_db, db_connect, hash_password

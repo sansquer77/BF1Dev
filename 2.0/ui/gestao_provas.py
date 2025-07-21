@@ -3,7 +3,7 @@ import pandas as pd
 from db.db_utils import get_provas_df, db_connect
 from datetime import datetime
 
-st.image("assets/logo.jpg", size="small")
+st.image("assets/logo.jpg", width=200)
 def main():
     st.title("🏁 Gestão de Provas")
 
