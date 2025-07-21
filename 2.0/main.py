@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import os
 print("Conteúdo da pasta assets:", os.listdir("assets"))
+
 st.image("assets/logo.jpg", size="small")
 
 # INICIALIZAÇÃO DO BANCO
