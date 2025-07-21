@@ -1,7 +1,6 @@
 import streamlit as st
 import os
 import os
-print("Conteúdo da pasta assets:", os.listdir("assets"))
 
 st.image("logo.jpg", width=200)
 
