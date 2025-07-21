@@ -21,7 +21,7 @@ def participante_view():
         return
 
     st.title("Painel do Participante")
-    st.write(f"Bem-vindo, {user[1]} ({user[3]}) - Status: {user[4]}")
+    st.write(f"Bem-vindo, {user[1]} ({user[2]}) - Status: {user[4]}")
 
     tabs = st.tabs(["Apostas", "Minha Conta"])
 
