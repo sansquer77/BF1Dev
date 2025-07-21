@@ -53,31 +53,30 @@ def main():
             st.rerun()
 
     with col2:
-    if "alterar_senha" not in st.session_state:
-        st.session_state["alterar_senha"] = False
-
-    if st.button("Alterar senha do usuário"):
-        st.session_state["alterar_senha"] = True
-
-    if st.session_state["alterar_senha"]:
-        nova_senha = st.text_input("Nova senha", type="password", key="senha_reset")
-        if st.button("Salvar nova senha"):
-            if not nova_senha:
-                st.error("Digite a nova senha.")
-            else:
-                nova_hash = hash_password(nova_senha)
-                conn = db_connect()
-                c = conn.cursor()
-                c.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (nova_hash, int(user_row["id"])))
-                conn.commit()
-                conn.close()
-                st.success("Senha atualizada com sucesso!")
-                st.session_state["alterar_senha"] = False
-                st.cache_data.clear()
-                st.rerun()
-        if st.button("Cancelar alteração de senha"):
+        if "alterar_senha" not in st.session_state:
             st.session_state["alterar_senha"] = False
 
+        if st.button("Alterar senha do usuário"):
+            st.session_state["alterar_senha"] = True
+
+        if st.session_state["alterar_senha"]:
+            nova_senha = st.text_input("Nova senha", type="password", key="senha_reset")
+            if st.button("Salvar nova senha"):
+                if not nova_senha:
+                    st.error("Digite a nova senha.")
+                else:
+                    nova_hash = hash_password(nova_senha)
+                    conn = db_connect()
+                    c = conn.cursor()
+                    c.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (nova_hash, int(user_row["id"])))
+                    conn.commit()
+                    conn.close()
+                    st.success("Senha atualizada com sucesso!")
+                    st.session_state["alterar_senha"] = False
+                    st.cache_data.clear()
+                    st.rerun()
+            if st.button("Cancelar alteração de senha"):
+                st.session_state["alterar_senha"] = False
 
     st.markdown("### Excluir usuário")
     if perfil == "master":
