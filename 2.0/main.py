@@ -1,7 +1,8 @@
 import streamlit as st
 import os
-
-st.logo("assets/logo.jpg", size="small")
+import os
+print("Conteúdo da pasta assets:", os.listdir("assets"))
+st.image("assets/logo.jpg", size="small")
 
 # INICIALIZAÇÃO DO BANCO
 from db.db_utils import init_db, db_connect, hash_password

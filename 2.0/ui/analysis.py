@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 from db.db_utils import db_connect
 
-st.logo("assets/logo.jpg", size="small")
+st.image("assets/logo.jpg", size="small")
 def get_apostas_por_piloto():
     """
     Agrupa apostas por participante e piloto para análise da distribuição de apostas.

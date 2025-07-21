@@ -7,7 +7,7 @@ from services.championship_service import (
 )
 from services.bets_service import calcular_pontuacao_lote
 
-st.logo("assets/logo.jpg", size="small")
+st.image("assets/logo.jpg", size="small")
 def main():
     st.title("Classificação Geral do Bolão")
 
