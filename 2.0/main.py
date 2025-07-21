@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 
-st.logo("assets/logo.png")
+st.logo("assets/logo.jpg", size="small")
 
 # INICIALIZAÇÃO DO BANCO
 from db.db_utils import init_db, db_connect, hash_password

@@ -5,7 +5,7 @@ import extra_streamlit_components as stx
 import jwt
 import os
 
-st.logo("assets/logo.png", size="small")
+st.logo("assets/logo.jpg", size="small")
 def carregar_logs():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM log_apostas ORDER BY id DESC', conn)
