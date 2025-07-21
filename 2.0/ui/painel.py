@@ -209,9 +209,9 @@ def participante_view():
 
     conn = db_connect()
     try:
-    df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
+        df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
     except Exception:
-    st.info("Nenhum histórico de posições disponível ainda. Quando houver dados, eles aparecerão aqui.")
+        st.info("Nenhum histórico de posições disponível ainda. Quando houver dados, eles aparecerão aqui.")
     df_posicoes = pd.DataFrame()  # opcional: para não quebrar o código abaixo
 
     conn.close()
