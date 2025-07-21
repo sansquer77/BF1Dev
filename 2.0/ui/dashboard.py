@@ -1,5 +1,5 @@
 import streamlit as st
-from ui.data_utils import (
+from utils.data_utils import (
     get_current_season,
     get_current_driver_standings,
     get_current_constructor_standings,

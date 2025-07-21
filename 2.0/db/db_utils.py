@@ -1,23 +1,18 @@
 import sqlite3
-from pathlib import Path
 import pandas as pd
+from pathlib import Path
 import streamlit as st
 import bcrypt
 
 DB_PATH = Path("bolao_f1Dev.db")
 
-def db_connect(db_path: Path = DB_PATH):
-    """Retorna uma conexão SQLite com o banco principal do bolão e campeonato."""
+def db_connect(db_path=DB_PATH):
     return sqlite3.connect(str(db_path))
 
 def init_db():
-    """
-    Cria todas as tabelas necessárias para o sistema — inclusive as do campeonato —
-    e garante a existência do usuário master, lendo dados de st.secrets.
-    """
     conn = db_connect()
     c = conn.cursor()
-    # Tabelas principais
+    # Tabela de usuários
     c.execute('''
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,6 +24,7 @@ def init_db():
             faltas INTEGER DEFAULT 0
         )
     ''')
+    # Tabela de pilotos
     c.execute('''
         CREATE TABLE IF NOT EXISTS pilotos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,6 +33,7 @@ def init_db():
             status TEXT DEFAULT 'Ativo'
         )
     ''')
+    # Tabela de provas/corridas
     c.execute('''
         CREATE TABLE IF NOT EXISTS provas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +44,7 @@ def init_db():
             tipo TEXT DEFAULT 'Normal'
         )
     ''')
+    # Tabela de apostas
     c.execute('''
         CREATE TABLE IF NOT EXISTS apostas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +60,7 @@ def init_db():
             FOREIGN KEY(prova_id) REFERENCES provas(id)
         )
     ''')
+    # Tabela de resultados
     c.execute('''
         CREATE TABLE IF NOT EXISTS resultados (
             prova_id INTEGER PRIMARY KEY,
@@ -69,19 +68,7 @@ def init_db():
             FOREIGN KEY(prova_id) REFERENCES provas(id)
         )
     ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS posicoes_participantes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            prova_id INTEGER NOT NULL,
-            usuario_id INTEGER NOT NULL,
-            posicao INTEGER NOT NULL,
-            pontos REAL NOT NULL,
-            data_registro TEXT DEFAULT (datetime('now')),
-            UNIQUE(prova_id, usuario_id),
-            FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
-            FOREIGN KEY (prova_id) REFERENCES provas(id)
-        )
-    ''')
+    # Tabela de log de apostas
     c.execute('''
         CREATE TABLE IF NOT EXISTS log_apostas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,53 +76,23 @@ def init_db():
             data TEXT,
             horario TEXT,
             aposta TEXT,
-            piloto_11 TEXT,
             nome_prova TEXT,
+            piloto_11 TEXT,
             tipo_aposta INTEGER DEFAULT 0,
             automatica INTEGER DEFAULT 0
         )
     ''')
 
-    # Tabelas do campeonato
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS championship_bets (
-            user_id INTEGER PRIMARY KEY,
-            user_nome TEXT NOT NULL,
-            champion TEXT NOT NULL,
-            vice TEXT NOT NULL,
-            team TEXT NOT NULL,
-            bet_time TEXT NOT NULL
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS championship_bets_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            user_nome TEXT NOT NULL,
-            champion TEXT NOT NULL,
-            vice TEXT NOT NULL,
-            team TEXT NOT NULL,
-            bet_time TEXT NOT NULL
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS championship_results (
-            season INTEGER PRIMARY KEY DEFAULT 2025,
-            champion TEXT NOT NULL,
-            vice TEXT NOT NULL,
-            team TEXT NOT NULL
-        )
-    ''')
-
-    # Criação do usuário master
-    usuario_master = st.secrets["usuario_master"]
-    email_master = st.secrets["email_master"]
-    senha_master = st.secrets["senha_master"]
-    senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt()).decode("utf-8")
-    c.execute("""
-        INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
+    # Usuário master se já houver st.secrets
+    if hasattr(st, "secrets") and all(k in st.secrets for k in ["usuario_master", "email_master", "senha_master"]):
+        usuario_master = st.secrets["usuario_master"]
+        email_master = st.secrets["email_master"]
+        senha_master = st.secrets["senha_master"]
+        senha_hash = bcrypt.hashpw(senha_master.encode(), bcrypt.gensalt()).decode("utf-8")
+        c.execute('''
+            INSERT OR IGNORE INTO usuarios (nome, email, senha_hash, perfil, status, faltas)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (usuario_master, email_master, senha_hash, 'master', 'Ativo', 0))
 
     conn.commit()
     conn.close()
@@ -164,21 +121,15 @@ def get_apostas_df():
     conn.close()
     return df
 
-def get_resultados_df():
-    conn = db_connect()
-    df = pd.read_sql('SELECT * FROM resultados', conn)
-    conn.close()
-    return df
-
 def get_horario_prova(prova_id):
     conn = db_connect()
     c = conn.cursor()
     c.execute('SELECT nome, data, horario_prova FROM provas WHERE id=?', (prova_id,))
-    prova = c.fetchone()
+    res = c.fetchone()
     conn.close()
-    if not prova:
+    if not res:
         return None, None, None
-    return prova[0], prova[1], prova[2]
+    return res[0], res[1], res[2]
 
 def get_user_by_id(user_id):
     conn = db_connect()
@@ -188,31 +139,34 @@ def get_user_by_id(user_id):
     conn.close()
     return user
 
-def get_championship_bets_df():
+def get_resultados_df():
     conn = db_connect()
-    df = pd.read_sql('SELECT * FROM championship_bets', conn)
+    df = pd.read_sql('SELECT * FROM resultados', conn)
     conn.close()
     return df
 
-def get_championship_bets_log_df():
+def registrar_log_aposta(apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario=None):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    if horario is None:
+        horario = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    data = horario.strftime('%Y-%m-%d')
+    hora = horario.strftime('%H:%M:%S')
     conn = db_connect()
-    df = pd.read_sql('SELECT * FROM championship_bets_log', conn)
+    c = conn.cursor()
+    c.execute('''INSERT INTO log_apostas
+                 (apostador, data, horario, aposta, nome_prova, piloto_11, tipo_aposta, automatica)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+              (apostador, data, hora, aposta, nome_prova, piloto_11, tipo_aposta, automatica))
+    conn.commit()
     conn.close()
-    return df
 
-def get_championship_results_df():
+def log_aposta_existe(apostador, nome_prova, tipo_aposta, automatica, dados_aposta):
     conn = db_connect()
-    df = pd.read_sql('SELECT * FROM championship_results', conn)
+    c = conn.cursor()
+    c.execute('''SELECT COUNT(*) FROM log_apostas
+                 WHERE apostador=? AND nome_prova=? AND tipo_aposta=? AND automatica=? AND aposta=?''',
+              (apostador, nome_prova, tipo_aposta, automatica, dados_aposta))
+    count = c.fetchone()[0]
     conn.close()
-    return df
-
-def get_user_name(user_id: int) -> str:
-    try:
-        conn = db_connect()
-        cursor = conn.cursor()
-        cursor.execute("SELECT nome FROM usuarios WHERE id = ?", (user_id,))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else "Nome não encontrado"
-    except Exception:
-        return "Erro ao buscar nome"
+    return count > 0
