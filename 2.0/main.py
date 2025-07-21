@@ -1,8 +1,28 @@
 import streamlit as st
 
 # INICIALIZAÇÃO DO BANCO
-from db.db_utils import init_db
+from db.db_utils import init_db, db_connect, hash_password
 init_db()
+
+def criar_master_se_nao_existir():
+    secrets = st.secrets
+    nome = secrets.get('usuario_master')
+    email = secrets.get('email_master')
+    senha = secrets.get('senha_master')
+    if not (nome and email and senha):
+        return
+    conn = db_connect()
+    c = conn.cursor()
+    c.execute('SELECT COUNT(*) FROM usuarios WHERE perfil="master"')
+    existe = c.fetchone()[0] > 0
+    if not existe:
+        senha_hash = hash_password(senha)
+        c.execute(
+            'INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, "master", "Ativo", 0)',
+            (nome, email, senha_hash)
+        )
+        conn.commit()
+    conn.close()
 
 # IMPORTAÇÃO DAS VIEWS/MÓDULOS DE INTERFACE
 from ui.login import login_view
