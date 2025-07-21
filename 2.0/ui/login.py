@@ -25,18 +25,18 @@ def login_view():
     if not st.session_state["esqueceu_senha"] and not st.session_state["criar_usuario"]:
         email = st.text_input("Email")
         senha = st.text_input("Senha", type="password")
-
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             if st.button("Entrar"):
                 user = autenticar_usuario(email, senha)
                 if user:
-                    token = generate_token(user[0], user[4], user[5])
-                    st.session_state["token"] = token
-                    st.session_state["user_id"] = user[0]
-                    st.session_state["user_role"] = user[4]
-                    st.session_state["pagina"] = "Painel do Participante"
-
+                    # user -> (id, nome, email, senha_hash, perfil, status, faltas)
+                    token = generate_token(
+                        user_id=user[0],
+                        nome=user[1],         # INCLUI NOME NO TOKEN!
+                        perfil=user[4],
+                        status=user[5]
+                    )
                     expire_time = datetime.now() + timedelta(minutes=120)
                     cookie_manager.set(
                         "session_token",
@@ -44,15 +44,18 @@ def login_view():
                         expires_at=expire_time,
                         secure=True
                     )
+                    st.session_state["token"] = token
+                    st.session_state["user_id"] = user[0]
+                    st.session_state["user_name"] = user[1]     # <-- PARA LOG, CRÍTICO!
+                    st.session_state["user_role"] = user[4]
+                    st.session_state["pagina"] = "Painel do Participante"
                     st.success(f"Bem-vindo, {user[1]}!")
                     st.rerun()
                 else:
                     st.error("Usuário ou senha inválidos.")
-
         with col2:
             if st.button("Esqueceu a senha?"):
                 st.session_state["esqueceu_senha"] = True
-
         with col3:
             if st.button("Criar usuário"):
                 st.session_state["criar_usuario"] = True
@@ -60,62 +63,51 @@ def login_view():
         # Bloco do badge/link da DigitalOcean como na versão original
         st.markdown(
             """
-            <div style="margin-top: 2em; text-align: center;">
-                <a href="https://www.digitalocean.com/?refcode=7a57329868da&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge" target="_blank">
-                    <img src="https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg" alt="DigitalOcean Referral Badge" style="width:160px;" />
+            <div style="display: flex; align-items: center; justify-content: flex-end; margin-top: 32px;">
+                <a href="https://m.do.co/c/ed76b371e0d7" target="_blank">
+                    <img src="https://static.streamlit.io/badges/streamlit_badge_black_white.svg" alt="DigitalOcean Referral" width="80">
                 </a>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    # Tela "Esqueceu a senha"
+    # Recuperação de senha
     elif st.session_state["esqueceu_senha"]:
-        st.subheader("Recuperação de Senha")
-        email_reset = st.text_input("Informe o email cadastrado")
-        nova_senha = st.text_input("Nova senha", type="password")
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if st.button("Salvar nova senha"):
-                usuario = get_user_by_email(email_reset)
-                if usuario:
-                    nova_hash = hash_password(nova_senha)
-                    from db.db_utils import db_connect
-                    conn = db_connect()
-                    c = conn.cursor()
-                    c.execute('UPDATE usuarios SET senha_hash=? WHERE email=?', (nova_hash, email_reset))
-                    conn.commit()
-                    conn.close()
-                    st.success("Senha redefinida com sucesso. Você já pode fazer login.")
-                    try:
-                        enviar_email_recuperacao_senha(email_reset, nova_senha)
-                    except Exception:
-                        st.info("Não foi possível enviar o e-mail de confirmação.")
-                    st.session_state["esqueceu_senha"] = False
-                else:
-                    st.error("Email não cadastrado.")
-        with col2:
-            if st.button("Voltar ao login"):
-                st.session_state["esqueceu_senha"] = False
+        st.header("Recuperar senha")
+        rec_email = st.text_input("Seu email para recuperação")
+        if st.button("Enviar email de recuperação"):
+            if get_user_by_email(rec_email):
+                enviar_email_recuperacao_senha(rec_email)
+                st.success("Email de recuperação enviado! Verifique sua caixa de entrada.")
+            else:
+                st.error("Usuário não encontrado com este email.")
+        if st.button("Voltar"):
+            st.session_state["esqueceu_senha"] = False
 
-    # Tela "Criar usuário"
+    # Cadastro de novo usuário
     elif st.session_state["criar_usuario"]:
-        st.subheader("Cadastro de Novo Usuário")
+        st.header("Criar novo usuário")
         nome = st.text_input("Nome completo")
-        email = st.text_input("Email")
-        senha = st.text_input("Senha", type="password")
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if st.button("Cadastrar"):
-                if not nome or not email or not senha:
-                    st.error("Preencha todos os campos!")
+        email_novo = st.text_input("Email para cadastro")
+        senha_novo = st.text_input("Senha", type="password")
+        senha_conf = st.text_input("Confirme a senha", type="password")
+        if st.button("Registrar"):
+            if not nome or not email_novo or not senha_novo or not senha_conf:
+                st.warning("Preencha todos os campos.")
+            elif senha_novo != senha_conf:
+                st.error("As senhas não coincidem.")
+            elif get_user_by_email(email_novo):
+                st.error("Já existe um usuário com este email.")
+            else:
+                ok = cadastrar_usuario(nome, email_novo, senha_novo)
+                if ok:
+                    st.success("Usuário criado com sucesso! Faça login.")
+                    st.session_state["criar_usuario"] = False
                 else:
-                    sucesso = cadastrar_usuario(nome, email, senha, perfil="participante", status="Inativo")
-                    if sucesso:
-                        st.success("Usuário cadastrado com sucesso! Aguarde ativação pela administração.")
-                        st.session_state["criar_usuario"] = False
-                    else:
-                        st.error("Email já cadastrado.")
-        with col2:
-            if st.button("Voltar ao login", key="voltar_login_criar"):
-                st.session_state["criar_usuario"] = False
+                    st.error("Erro ao cadastrar o usuário. Tente novamente.")
+        if st.button("Voltar "):
+            st.session_state["criar_usuario"] = False
+
+if __name__ == '__main__':
+    login_view()
