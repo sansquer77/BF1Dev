@@ -11,7 +11,7 @@ from services.email_service import enviar_email_recuperacao_senha
 from datetime import datetime, timedelta
 import extra_streamlit_components as stx
 
-st.image("assets/logo.jpg", width=200)
+st.image("logo.jpg", width=200)
 def logout():
     cookie_manager = stx.CookieManager()
     cookie_manager.delete("session_token")
