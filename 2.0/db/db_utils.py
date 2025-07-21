@@ -199,3 +199,25 @@ def get_user_name(user_id: int) -> str:
         return result[0] if result else "Nome não encontrado"
     except Exception:
         return "Erro ao buscar nome"
+
+def update_user_email(user_id, novo_email):
+    try:
+        conn = db_connect()
+        c = conn.cursor()
+        c.execute("UPDATE usuarios SET email = ? WHERE id = ?", (novo_email, user_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+def update_user_password(user_id, senha_hash):
+    try:
+        conn = db_connect()
+        c = conn.cursor()
+        c.execute("UPDATE usuarios SET senha_hash = ? WHERE id = ?", (senha_hash, user_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False

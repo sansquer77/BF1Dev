@@ -2,15 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import ast
+
 from db.db_utils import (
-    db_connect,
-    get_user_by_id,
-    get_provas_df,
-    get_pilotos_df,
-    get_apostas_df,
-    get_resultados_df
+    db_connect, get_user_by_id, get_provas_df, get_pilotos_df, get_apostas_df, get_resultados_df,
+    update_user_email, update_user_password
 )
 from services.bets_service import salvar_aposta
+from services.auth_service import check_password, hash_password
 
 def participante_view():
     if 'token' not in st.session_state or 'user_id' not in st.session_state:
@@ -18,112 +16,116 @@ def participante_view():
         return
 
     user = get_user_by_id(st.session_state['user_id'])
+    if not user:
+        st.error("Usuário não encontrado.")
+        return
+
     st.title("Painel do Participante")
     st.write(f"Bem-vindo, {user[1]} ({user[3]}) - Status: {user[4]}")
 
-    st.cache_data.clear()
-    provas = get_provas_df()
-    pilotos_df = get_pilotos_df()
-    pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
-    pilotos = pilotos_ativos_df['nome'].tolist()
-    equipes = pilotos_ativos_df['equipe'].tolist()
-    pilotos_equipe = dict(zip(pilotos, equipes))
+    tabs = st.tabs(["Apostas", "Minha Conta"])
 
-    if user[4] == "Ativo":
-        if len(provas) > 0 and len(pilotos_df) > 2:
-            prova_id = st.selectbox(
-                "Escolha a prova",
-                provas['id'],
-                format_func=lambda x: provas[provas['id'] == x]['nome'].values[0]
-            )
-            nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
-            apostas_df = get_apostas_df()
-            aposta_existente = apostas_df[
-                (apostas_df['usuario_id'] == user[0]) & (apostas_df['prova_id'] == prova_id)
-            ]
-            pilotos_apostados_ant = []
-            fichas_ant = []
-            piloto_11_ant = ""
-            if not aposta_existente.empty:
-                aposta_existente = aposta_existente.iloc[0]
-                pilotos_apostados_ant = aposta_existente['pilotos'].split(",")
-                fichas_ant = list(map(int, aposta_existente['fichas'].split(",")))
-                piloto_11_ant = aposta_existente['piloto_11']
-            else:
-                fichas_ant = []
-                piloto_11_ant = ""
+    # --- Aba: Apostas (igual sua lógica atual) ---
+    with tabs[0]:
+        st.cache_data.clear()
+        provas = get_provas_df()
+        pilotos_df = get_pilotos_df()
+        pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
+        pilotos = pilotos_ativos_df['nome'].tolist()
+        equipes = pilotos_ativos_df['equipe'].tolist()
+        pilotos_equipe = dict(zip(pilotos, equipes))
 
-            st.write("Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
-            max_linhas = 10
-            pilotos_aposta = []
-            fichas_aposta = []
-
-            for i in range(max_linhas):
-                mostrar = False
-                if i < 3:
-                    mostrar = True
-                elif i < max_linhas and len([p for p in pilotos_aposta if p != "Nenhum"]) == i and sum(fichas_aposta) < 15:
-                    mostrar = True
-
-                if mostrar:
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        piloto_sel = st.selectbox(
-                            f"Piloto {i+1}",
-                            ["Nenhum"] + pilotos,
-                            index=(pilotos.index(pilotos_apostados_ant[i]) + 1) if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos else 0,
-                            key=f"piloto_aposta_{i}"
-                        )
-                    with col2:
-                        if piloto_sel != "Nenhum":
-                            valor_ficha = st.number_input(
-                                f"Fichas para {piloto_sel}", min_value=0, max_value=15,
-                                value=fichas_ant[i] if len(fichas_ant) > i else 0,
-                                key=f"fichas_aposta_{i}"
-                            )
-                            pilotos_aposta.append(piloto_sel)
-                            fichas_aposta.append(valor_ficha)
-                        else:
-                            pilotos_aposta.append("Nenhum")
-                            fichas_aposta.append(0)
-
-            pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
-            fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
-            equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
-            total_fichas = sum(fichas_validas)
-            pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
-            if not pilotos_11_opcoes:
-                pilotos_11_opcoes = pilotos
-            piloto_11 = st.selectbox(
-                "Palpite para 11º colocado", pilotos_11_opcoes,
-                index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
-            )
-            erro = None
-            if st.button("Efetivar Aposta"):
-                if len(set(pilotos_validos)) != len(pilotos_validos):
-                    erro = "Não é permitido apostar em dois pilotos iguais."
-                elif len(set(equipes_apostadas)) < len(equipes_apostadas):
-                    erro = "Não é permitido apostar em dois pilotos da mesma equipe."
-                elif len(pilotos_validos) < 3:
-                    erro = "Você deve apostar em pelo menos 3 pilotos de equipes diferentes."
-                elif total_fichas != 15:
-                    erro = "A soma das fichas deve ser exatamente 15."
-                elif piloto_11 in pilotos_validos:
-                    erro = "O 11º colocado não pode ser um dos pilotos apostados."
-                if erro:
-                    st.error(erro)
+        if user[4] == "Ativo":
+            if len(provas) > 0 and len(pilotos_df) > 2:
+                prova_id = st.selectbox(
+                    "Escolha a prova",
+                    provas['id'],
+                    format_func=lambda x: provas[provas['id'] == x]['nome'].values[0]
+                )
+                nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
+                apostas_df = get_apostas_df()
+                aposta_existente = apostas_df[
+                    (apostas_df['usuario_id'] == user[0]) & (apostas_df['prova_id'] == prova_id)
+                ]
+                pilotos_apostados_ant, fichas_ant, piloto_11_ant = [], [], ""
+                if not aposta_existente.empty:
+                    aposta_existente = aposta_existente.iloc[0]
+                    pilotos_apostados_ant = aposta_existente['pilotos'].split(",")
+                    fichas_ant = list(map(int, aposta_existente['fichas'].split(",")))
+                    piloto_11_ant = aposta_existente['piloto_11']
                 else:
-                    salvar_aposta(
-                        user[0], prova_id, pilotos_validos,
-                        fichas_validas, piloto_11, nome_prova, automatica=0
-                    )
-                    st.success("Aposta registrada/atualizada!")
-                    st.cache_data.clear()
-                    st.rerun()
+                    fichas_ant = []
+                    piloto_11_ant = ""
+
+                st.write("Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
+                max_linhas = 10
+                pilotos_aposta, fichas_aposta = [], []
+                for i in range(max_linhas):
+                    mostrar = False
+                    if i < 3:
+                        mostrar = True
+                    elif i < max_linhas and len([p for p in pilotos_aposta if p != "Nenhum"]) == i and sum(fichas_aposta) < 15:
+                        mostrar = True
+                    if mostrar:
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            piloto_sel = st.selectbox(
+                                f"Piloto {i+1}",
+                                ["Nenhum"] + pilotos,
+                                index=(pilotos.index(pilotos_apostados_ant[i]) + 1) if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos else 0,
+                                key=f"piloto_aposta_{i}"
+                            )
+                        with col2:
+                            if piloto_sel != "Nenhum":
+                                valor_ficha = st.number_input(
+                                    f"Fichas para {piloto_sel}", min_value=0, max_value=15,
+                                    value=fichas_ant[i] if len(fichas_ant) > i else 0,
+                                    key=f"fichas_aposta_{i}"
+                                )
+                            else:
+                                valor_ficha = 0
+                        pilotos_aposta.append(piloto_sel)
+                        fichas_aposta.append(valor_ficha)
+                    else:
+                        pilotos_aposta.append("Nenhum")
+                        fichas_aposta.append(0)
+                pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
+                fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
+                equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
+                total_fichas = sum(fichas_validas)
+                pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
+                if not pilotos_11_opcoes:
+                    pilotos_11_opcoes = pilotos
+                piloto_11 = st.selectbox(
+                    "Palpite para 11º colocado", pilotos_11_opcoes,
+                    index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
+                )
+                erro = None
+                if st.button("Efetivar Aposta"):
+                    if len(set(pilotos_validos)) != len(pilotos_validos):
+                        erro = "Não é permitido apostar em dois pilotos iguais."
+                    elif len(set(equipes_apostadas)) < len(equipes_apostadas):
+                        erro = "Não é permitido apostar em dois pilotos da mesma equipe."
+                    elif len(pilotos_validos) < 3:
+                        erro = "Você deve apostar em pelo menos 3 pilotos de equipes diferentes."
+                    elif total_fichas != 15:
+                        erro = "A soma das fichas deve ser exatamente 15."
+                    elif piloto_11 in pilotos_validos:
+                        erro = "O 11º colocado não pode ser um dos pilotos apostados."
+                    if erro:
+                        st.error(erro)
+                    else:
+                        salvar_aposta(
+                            user[0], prova_id, pilotos_validos,
+                            fichas_validas, piloto_11, nome_prova, automatica=0
+                        )
+                        st.success("Aposta registrada/atualizada!")
+                        st.cache_data.clear()
+                        st.rerun()
+            else:
+                st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
         else:
-            st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
-    else:
-        st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
+            st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
 
     # --- Exibição detalhada das apostas do participante ---
     st.subheader("Minhas apostas detalhadas")
@@ -208,6 +210,56 @@ def participante_view():
     conn = db_connect()
     df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
     conn.close()
+
+# --- Aba: Minha Conta ---
+    with tabs[1]:
+        st.header("Gestão da Minha Conta")
+        st.write(f"Usuário: **{user[1]}**")
+        novo_email = st.text_input("Email cadastrado", value=user[2])
+        st.subheader("Alterar Senha")
+        senha_atual = st.text_input("Senha Atual", type="password", key="senha_atual")
+        nova_senha = st.text_input("Nova Senha", type="password", key="nova_senha")
+        confirma_senha = st.text_input("Confirme Nova Senha", type="password", key="confirma_senha")
+        if st.button("Salvar Alterações (Conta)"):
+            erros = []
+            if not novo_email:
+                erros.append("Email não pode ficar vazio.")
+            elif novo_email != user[2]:
+                # só verifica duplicidade se o email mudou
+                from db.db_utils import get_user_by_email
+                email_cadastrado = get_user_by_email(novo_email)
+                if email_cadastrado and email_cadastrado[0] != user[0]:
+                    erros.append("O email informado já está em uso por outro usuário.")
+            # Troca de senha (opcional)
+            if senha_atual or nova_senha or confirma_senha:
+                if not senha_atual:
+                    erros.append("Informe a senha atual para alterar a senha.")
+                elif not check_password(senha_atual, user[5]):
+                    erros.append("Senha atual incorreta.")
+                elif not nova_senha:
+                    erros.append("Informe a nova senha.")
+                elif nova_senha != confirma_senha:
+                    erros.append("Nova senha e confirmação não coincidem.")
+            if erros:
+                for erro in erros:
+                    st.error(erro)
+            else:
+                atualizado = False
+                if novo_email != user[2]:
+                    if update_user_email(user[0], novo_email):
+                        st.success("Email atualizado!")
+                        atualizado = True
+                    else:
+                        st.error("Falha ao atualizar email.")
+                if nova_senha:
+                    senha_hash = hash_password(nova_senha)
+                    if update_user_password(user[0], senha_hash):
+                        st.success("Senha alterada!")
+                        atualizado = True
+                    else:
+                        st.error("Falha ao alterar senha.")
+                if atualizado:
+                    st.rerun()
 
     # Filtra apenas as posições do usuário logado
     posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
