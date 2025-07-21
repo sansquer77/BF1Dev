@@ -5,7 +5,7 @@ import ast
 from db.db_utils import db_connect, get_provas_df, get_pilotos_df, get_resultados_df
 from services.bets_service import atualizar_classificacoes_todas_as_provas
 
-st.logo("assets/logo.png")
+st.logo("assets/logo.png", size="small")
 def resultados_view():
     # Verificação de permissão (apenas admin/master)
     if 'token' not in st.session_state or st.session_state.get('user_role') not in ('admin', 'master'):
