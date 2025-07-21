@@ -10,7 +10,6 @@ from db.db_utils import (
 from services.bets_service import salvar_aposta
 from services.auth_service import check_password, hash_password
 
-st.image("logo.jpg", width=200)
 def participante_view():
     if 'token' not in st.session_state or 'user_id' not in st.session_state:
         st.warning("Você precisa estar logado para acessar essa página.")
@@ -21,7 +20,12 @@ def participante_view():
         st.error("Usuário não encontrado.")
         return
 
-    st.title("Painel do Participante")
+    col1, col2 = st.columns([1, 16])  # Proporção ajustável conforme aparência desejada
+    with col1:
+        st.image("logo.jpg", width=75)
+    with col2:
+        st.title("Painel do Participante")
+    
     st.write(f"Bem-vindo, {user[1]} ({user[2]}) - Status: {user[4]}")
 
     tabs = st.tabs(["Apostas", "Minha Conta"])

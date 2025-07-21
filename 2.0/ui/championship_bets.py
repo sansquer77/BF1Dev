@@ -8,7 +8,6 @@ from services.championship_service import (
 )
 from db.db_utils import get_pilotos_df, get_usuarios_df
 
-st.image("logo.jpg", width=200)
 def main():
     st.title("📣 Apostas do Campeonato")
 

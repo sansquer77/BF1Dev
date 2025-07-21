@@ -11,7 +11,6 @@ from services.email_service import enviar_email_recuperacao_senha
 from datetime import datetime, timedelta
 import extra_streamlit_components as stx
 
-st.image("logo.jpg", width=200)
 def logout():
     cookie_manager = stx.CookieManager()
     cookie_manager.delete("session_token")
@@ -22,8 +21,12 @@ def logout():
     st.experimental_rerun()
 
 def login_view():
-    st.title("Login do BF1")
-
+    col1, col2 = st.columns([1, 16])  # Proporção ajustável conforme aparência desejada
+    with col1:
+        st.image("logo.jpg", width=75)
+    with col2:
+        st.title("Login do BF1")
+    
     if "esqueceu_senha" not in st.session_state:
         st.session_state["esqueceu_senha"] = False
     if "criar_usuario" not in st.session_state:

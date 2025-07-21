@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from db.db_utils import get_pilotos_df, db_connect
 
-st.image("logo.jpg", width=200)
 def main():
     st.title("🏎️ Gestão de Pilotos")
 

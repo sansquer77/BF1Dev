@@ -6,7 +6,6 @@ from services.championship_service import (
     get_final_results, save_final_results
 )
 
-st.image("logo.jpg", width=200)
 def main():
     st.title("Cadastrar/Atualizar Resultado Oficial do Campeonato")
 

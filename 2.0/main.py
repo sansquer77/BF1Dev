@@ -2,8 +2,6 @@ import streamlit as st
 import os
 import os
 
-st.image("logo.jpg", width=200)
-
 # INICIALIZAÇÃO DO BANCO
 from db.db_utils import init_db, db_connect, hash_password
 
