@@ -1,74 +1,69 @@
 import streamlit as st
 import pandas as pd
+
+from db.db_utils import db_connect, get_pilotos_df
 from services.championship_service import (
-    save_final_results,
-    get_final_results,
-    get_championship_bets_df,
-    calcular_pontuacao_campeonato
+    get_final_results, save_final_results
 )
-from db.db_utils import get_usuarios_df
 
 def main():
-    st.title("🏆 Resultado Oficial do Campeonato")
+    st.title("Cadastrar/Atualizar Resultado Oficial do Campeonato")
 
-    # Apenas admin ou master pode alterar o resultado oficial
-    perfil = st.session_state.get("user_role", "participante")
-    is_admin = perfil in ("admin", "master")
+    # Carregar lista completa de pilotos e equipes do banco
+    pilotos_df = get_pilotos_df()
+    pilotos = sorted(pilotos_df["nome"].unique())
+    equipes = sorted(pilotos_df["equipe"].unique())
 
-    # Busca resultado atual, se houver
-    temporada = 2025  # Ajuste para parametrização futura, se necessário
-    resultado_atual = get_final_results(temporada)
+    # Resultado atual salvo, se houver
+    resultado_atual = get_final_results()
 
-    st.header("📢 Resultado Oficial (Pilotos e Equipes)")
+    st.subheader("Resultado Oficial")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        champion = st.selectbox(
+            "Piloto Campeão",
+            pilotos,
+            index=pilotos.index(resultado_atual['champion']) if (resultado_atual and resultado_atual['champion'] in pilotos) else 0
+        )
+    with col2:
+        vice = st.selectbox(
+            "Piloto Vice",
+            pilotos,
+            index=pilotos.index(resultado_atual['vice']) if (resultado_atual and resultado_atual['vice'] in pilotos) else 0
+        )
+    with col3:
+        team = st.selectbox(
+            "Equipe Campeã",
+            equipes,
+            index=equipes.index(resultado_atual['team']) if (resultado_atual and resultado_atual['team'] in equipes) else 0
+        )
+
+    erro = None
+    if st.button("Salvar resultado oficial"):
+        if not champion or not vice or not team:
+            erro = "Preencha todos os campos obrigatórios."
+        elif champion == vice:
+            erro = "Campeão e vice não podem ser o mesmo piloto."
+        if erro:
+            st.error(erro)
+        else:
+            save_final_results(champion, vice, team)
+            st.success("Resultado oficial salvo/atualizado com sucesso!")
+            st.rerun()
+
+    # Exibe resultado atual
     if resultado_atual:
-        st.success(
-            f"**Campeão:** {resultado_atual['champion']}  \n"
-            f"**Vice:** {resultado_atual['vice']}  \n"
-            f"**Equipe Campeã:** {resultado_atual['team']}"
+        st.markdown(
+            f"""
+            <div style='background-color:#d4edda;padding:1em;border-radius:0.5em;color:black;'>
+            🏆 <b>Campeão:</b> {resultado_atual['champion']}<br>
+            🥈 <b>Vice:</b> {resultado_atual['vice']}<br>
+            🏭 <b>Equipe Campeã:</b> {resultado_atual['team']}
+            </div>
+            """,
+            unsafe_allow_html=True
         )
-    else:
-        st.info("Nenhum resultado oficial cadastrado ainda.")
-
-    # Se admin, exibe formulário para registrar ou atualizar o resultado
-    if is_admin:
-        st.markdown("### Cadastrar/Atualizar Resultado Oficial")
-        apostas_df = get_championship_bets_df()
-        pilotos = sorted(set(apostas_df["champion"].tolist() + apostas_df["vice"].tolist()))
-        equipes = sorted(apostas_df["team"].unique())
-
-        with st.form("form_resultado_campeonato"):
-            champion = st.selectbox("Piloto Campeão", pilotos, index=pilotos.index(resultado_atual['champion']) if resultado_atual else 0)
-            vice = st.selectbox("Piloto Vice", pilotos, index=pilotos.index(resultado_atual['vice']) if resultado_atual else 0)
-            team = st.selectbox("Equipe Campeã", equipes, index=equipes.index(resultado_atual['team']) if resultado_atual else 0)
-            submitted = st.form_submit_button("Salvar resultado oficial")
-
-            if submitted:
-                if champion == vice:
-                    st.error("Campeão e Vice devem ser pilotos diferentes.")
-                else:
-                    salvo = save_final_results(champion, vice, team, temporada)
-                    if salvo:
-                        st.success("Resultado oficial do campeonato salvo!")
-                    else:
-                        st.error("Erro ao salvar resultado.")
-
-    st.markdown("---")
-
-    st.header("📑 Resumo das apostas dos participantes")
-    apostas_df = get_championship_bets_df()
-    usuarios_df = get_usuarios_df()
-    if not apostas_df.empty:
-        apostas_df = apostas_df.copy()
-        apostas_df["user_nome"] = apostas_df["user_id"].apply(
-            lambda uid: usuarios_df[usuarios_df["id"] == uid]["nome"].values[0]
-            if uid in usuarios_df["id"].values else "Desconhecido"
-        )
-        apostas_df["Pontos Bônus"] = apostas_df["user_id"].apply(lambda uid: calcular_pontuacao_campeonato(uid, temporada))
-        apostas_df = apostas_df[["user_nome", "champion", "vice", "team", "bet_time", "Pontos Bônus"]]
-        apostas_df.columns = ["Participante", "Campeão", "Vice", "Equipe", "Data/Hora Aposta", "Pontos Bônus"]
-        st.dataframe(apostas_df, use_container_width=True)
-    else:
-        st.info("Nenhuma aposta registrada pelos participantes.")
 
 if __name__ == "__main__":
     main()

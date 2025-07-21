@@ -4,6 +4,7 @@ from services.bets_service import gerar_aposta_automatica
 
 def main():
     st.title("🗂️ Gestão de Apostas dos Participantes")
+
     perfil = st.session_state.get("user_role", "participante")
     if perfil not in ("admin", "master"):
         st.warning("Acesso restrito a administradores.")
@@ -16,7 +17,8 @@ def main():
     provas_df = provas_df.sort_values("data")
 
     st.markdown("### Apostas dos Participantes")
-    aba_participante, aba_prova, aba_lote = st.tabs(["Por Participante", "Por Prova", "Apostas Automáticas em Lote"])
+
+    aba_participante, aba_prova = st.tabs(["Por Participante", "Por Prova"])
 
     with aba_participante:
         st.subheader("Gerenciar Apostas de um Participante")
@@ -63,6 +65,7 @@ def main():
         prova_id = prova_row["id"]
         apostas_df = get_apostas_df()
         apostas_prova = apostas_df[apostas_df["prova_id"] == prova_id]
+
         for idx, part in enumerate(participantes.itertuples()):
             aposta = apostas_prova[apostas_prova["usuario_id"] == part.id]
             existe_aposta_manual = (
@@ -93,30 +96,6 @@ def main():
                     st.rerun()
                 else:
                     st.error(msg)
-
-    with aba_lote:
-        st.subheader("Gerar apostas automáticas para todos sem aposta em uma prova")
-        prova_para_auto = st.selectbox("Escolha uma prova para ação em lote", provas_df["nome"].tolist(), key="prova_lote")
-        prova_row_lote = provas_df[provas_df["nome"] == prova_para_auto].iloc[0]
-        prova_id_lote = prova_row_lote["id"]
-        apostas_df = get_apostas_df()
-        apostas_prova_lote = apostas_df[apostas_df["prova_id"] == prova_id_lote]
-        participantes_sem_manual = participantes[
-            ~participantes["id"].isin(
-                apostas_prova_lote[
-                    (apostas_prova_lote["automatica"].isnull()) | (apostas_prova_lote["automatica"] == 0)
-                ]["usuario_id"].tolist()
-            )
-        ]
-        if participantes_sem_manual.empty:
-            st.success("Todos os participantes já têm apostas manuais para esta prova.")
-        else:
-            if st.button("Gerar apostas automáticas para todos sem aposta manual", key="auto_lote_btn"):
-                for _, part in participantes_sem_manual.iterrows():
-                    ok, msg = gerar_aposta_automatica(part["id"], prova_id_lote, prova_row_lote["nome"], apostas_df, provas_df)
-                st.cache_data.clear()
-                st.success("Apostas automáticas geradas para todos os participantes sem aposta manual.")
-                st.rerun()
 
 if __name__ == "__main__":
     main()
