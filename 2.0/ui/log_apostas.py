@@ -17,7 +17,7 @@ def get_nome_from_cookie():
     nome_do_cookie = None
     if token:
         try:
-            JWT_SECRET = st.secrets["JWT_SECRET"]
+            JWT_SECRET = st.secrets["JWT_SECRET"] or os.environ.get("JWT_SECRET")
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             nome_do_cookie = payload.get("nome")
         except Exception:

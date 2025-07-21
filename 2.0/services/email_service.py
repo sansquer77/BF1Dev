@@ -3,9 +3,9 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-EMAIL_REMETENTE = st.secrets["EMAIL_REMETENTE"]
-SENHA_REMETENTE = st.secrets["SENHA_EMAIL"]
-EMAIL_ADMIN = st.secrets.get("EMAIL_ADMIN", "")
+EMAIL_REMETENTE = st.secrets["EMAIL_REMETENTE"] or os.environ.get("EMAIL_REMETENTE", "")
+SENHA_REMETENTE = st.secrets["SENHA_EMAIL"] or os.environ.get("SENHA_EMAIL", "")
+EMAIL_ADMIN = st.secrets.get("EMAIL_ADMIN", "") or os.environ.get("EMAIL_ADMIN", "")
 
 def enviar_email(destinatario: str, assunto: str, corpo_html: str) -> bool:
     """Envia um e-mail HTML para o destinatário informado."""
