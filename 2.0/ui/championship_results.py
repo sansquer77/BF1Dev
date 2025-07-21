@@ -6,6 +6,7 @@ from services.championship_service import (
     get_final_results, save_final_results
 )
 
+st.logo("assets/logo.png")
 def main():
     st.title("Cadastrar/Atualizar Resultado Oficial do Campeonato")
 

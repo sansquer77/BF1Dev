@@ -1,6 +1,7 @@
 import streamlit as st
 from db.backup_utils import download_db, upload_db, download_tabela, upload_tabela
 
+st.logo("assets/logo.png")
 def main():
     st.set_page_config(
         page_title="💾 Backup do Banco de Dados BF1",

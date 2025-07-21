@@ -10,6 +10,7 @@ from db.db_utils import (
 from services.bets_service import salvar_aposta
 from services.auth_service import check_password, hash_password
 
+st.logo("assets/logo.png")
 def participante_view():
     if 'token' not in st.session_state or 'user_id' not in st.session_state:
         st.warning("Você precisa estar logado para acessar essa página.")
