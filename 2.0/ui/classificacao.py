@@ -136,10 +136,37 @@ def main():
 
     # 5. Pontuação por Prova (detalhe)
     st.subheader("Pontuação por Prova")
+    import streamlit as st
+import pandas as pd
+
+# Supondo que provas_df, participantes, apostas_df, tabela_detalhada e resultados_df já existam e calcular_pontuacao_lote seja definido
+
+def destacar_pontuacoes(df):
+    def colorir_prova(row):
+        # Convertemos para float para comparação numérica
+        valores = row.astype(float)
+        max_val = valores.max()
+        min_val = valores.min()
+        estilos = []
+        for val in valores:
+            if val == max_val:
+                estilos.append('background-color: green; font-weight: bold; color: white')
+            elif val == min_val:
+                estilos.append('background-color: red; font-weight: bold; color: white')
+            else:
+                estilos.append('')
+        return estilos
+    return df.style.apply(colorir_prova, axis=1)
+
+    # 5. Pontuação por Prova (detalhe)
+    st.subheader("Pontuação por Prova")
+
     provas_df_ord = provas_df.sort_values('id')
     provas_nomes = provas_df_ord['nome'].tolist()
     provas_ids_ordenados = provas_df_ord['id'].tolist()
+
     dados_cruzados = {prova_nome: {} for prova_nome in provas_nomes}
+
     for part in tabela_detalhada:
         participante = part['Participante']
         pontos_por_prova = {}
@@ -152,10 +179,18 @@ def main():
         for prova_id, prova_nome in zip(provas_ids_ordenados, provas_nomes):
             pontos = pontos_por_prova.get(prova_id, 0)
             dados_cruzados[prova_nome][participante] = pontos if pontos is not None else 0
+
     df_cruzada = pd.DataFrame(dados_cruzados).T
     df_cruzada = df_cruzada.reindex(columns=[p['nome'] for _, p in participantes.iterrows()], fill_value=0)
-    df_cruzada = df_cruzada.applymap(lambda x: f"{x:.2f}")
-    st.dataframe(df_cruzada)
+
+    # Formatando números para string antes de aplicar estilo
+    df_formatado = df_cruzada.applymap(lambda x: f"{float(x):.2f}")
+
+    # Aplicando o destaque das pontuações
+    df_styled = destacar_pontuacoes(df_formatado)
+
+    # Exibindo com estilos no Streamlit
+    st.dataframe(df_styled)
 
     # 6. Gráfico de evolução da pontuação acumulada
     st.subheader("Evolução da Pontuação Acumulada")
