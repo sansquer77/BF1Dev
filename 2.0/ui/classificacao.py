@@ -160,13 +160,10 @@ def destacar_pontuacoes(df):
 
     # 5. Pontuação por Prova (detalhe)
     st.subheader("Pontuação por Prova")
-
     provas_df_ord = provas_df.sort_values('id')
     provas_nomes = provas_df_ord['nome'].tolist()
     provas_ids_ordenados = provas_df_ord['id'].tolist()
-
     dados_cruzados = {prova_nome: {} for prova_nome in provas_nomes}
-
     for part in tabela_detalhada:
         participante = part['Participante']
         pontos_por_prova = {}
