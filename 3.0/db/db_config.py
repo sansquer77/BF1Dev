@@ -1,21 +1,26 @@
 """
 Configurações Centralizadas do Banco de Dados
 Facilita manutenção e padronização
+Suporta variáveis de ambiente para produção
 """
 
 from pathlib import Path
+import os
 
-# Caminho do banco de dados
-DB_PATH = Path("bolao_f1.db")
+# Caminho do banco de dados - suporta variável de ambiente
+DB_PATH = Path(os.environ.get("DATABASE_PATH", "bolao_f1.db"))
+
+# Criar diretório de dados se não existir
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Configurações de Pool
-POOL_SIZE = 5
-DB_TIMEOUT = 30.0
+POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "5"))
+DB_TIMEOUT = float(os.environ.get("DB_TIMEOUT", "30.0"))
 
 # Configurações de Cache
-CACHE_TTL_CURTO = 300  # 5 minutos
-CACHE_TTL_MEDIO = 3600  # 1 hora
-CACHE_TTL_LONGO = 86400  # 24 horas
+CACHE_TTL_CURTO = int(os.environ.get("CACHE_TTL_CURTO", "300"))  # 5 minutos
+CACHE_TTL_MEDIO = int(os.environ.get("CACHE_TTL_MEDIO", "3600"))  # 1 hora
+CACHE_TTL_LONGO = int(os.environ.get("CACHE_TTL_LONGO", "86400"))  # 24 horas
 
 # Índices para otimização (criados em migrations.py)
 INDICES = {
@@ -40,7 +45,7 @@ INDICES = {
 }
 
 # Configurações de Segurança
-BCRYPT_ROUNDS = 12
-SESSION_TIMEOUT = 3600  # 1 hora em segundos
-MAX_LOGIN_ATTEMPTS = 5
-LOCKOUT_DURATION = 900  # 15 minutos
+BCRYPT_ROUNDS = int(os.environ.get("BCRYPT_ROUNDS", "12"))
+SESSION_TIMEOUT = int(os.environ.get("SESSION_TIMEOUT", "3600"))  # 1 hora em segundos
+MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
+LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "900"))  # 15 minutos

@@ -3,7 +3,9 @@ import pandas as pd
 import sqlite3
 import os
 import io  # IMPORTANTE: necessário para exportar Excel em memória
+import shutil
 from pathlib import Path
+from datetime import datetime
 from db.db_utils import db_connect
 
 DB_PATH = Path("bolao_F1.db")
@@ -103,3 +105,44 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ============ FUNÇÕES DE BACKUP E RESTAURAÇÃO ============
+
+def backup_banco(backup_dir: str = "backups") -> str:
+    """
+    Cria um backup do banco de dados
+    
+    Args:
+        backup_dir: Diretório para armazenar backups
+    
+    Returns:
+        Caminho do arquivo de backup criado
+    """
+    backup_path = Path(backup_dir)
+    backup_path.mkdir(exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_file = backup_path / f"backup_{timestamp}.db"
+    
+    shutil.copy2(DB_PATH, backup_file)
+    return str(backup_file)
+
+def restaurar_backup(backup_file: str) -> bool:
+    """
+    Restaura o banco de dados a partir de um backup
+    
+    Args:
+        backup_file: Caminho do arquivo de backup
+    
+    Returns:
+        True se restaurado com sucesso, False caso contrário
+    """
+    try:
+        if not Path(backup_file).exists():
+            return False
+        
+        shutil.copy2(backup_file, DB_PATH)
+        return True
+    except Exception as e:
+        print(f"Erro ao restaurar backup: {e}")
+        return False

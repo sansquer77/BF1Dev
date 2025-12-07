@@ -185,12 +185,12 @@ def login_view():
             # ========== LOGIN SUCESSO ==========
             try:
                 # Gerar JWT Token
-                token = create_token({
-                    'user_id': usuario['id'],
-                    'email': usuario['email'],
-                    'nome': usuario['nome'],
-                    'perfil': usuario['perfil']
-                })
+                token = create_token(
+                    user_id=usuario['id'],
+                    nome=usuario['nome'],
+                    perfil=usuario['perfil'],
+                    status=usuario.get('status', 'Ativo')
+                )
                 
                 # Armazenar no session_state
                 st.session_state['token'] = token

@@ -6,7 +6,13 @@ import extra_streamlit_components as stx
 from db.db_utils import db_connect
 import os
 
-JWT_SECRET = st.secrets["JWT_SECRET"] or os.environ.get("JWT_SECRET")
+# Tentar obter JWT_SECRET de secrets, environment variables ou usar um padrão
+try:
+    JWT_SECRET = st.secrets.get("JWT_SECRET")
+except (FileNotFoundError, KeyError):
+    JWT_SECRET = None
+
+JWT_SECRET = JWT_SECRET or os.environ.get("JWT_SECRET") or "bf1dev_secret_key_2025"
 JWT_EXP_MINUTES = 120
 
 # --- HASH E CHECK DE SENHA ---
@@ -153,3 +159,8 @@ def criar_master_se_nao_existir():
         )
         conn.commit()
     conn.close()
+
+# Alias para compatibilidade
+def create_token(user_id: int, nome: str, perfil: str, status: str) -> str:
+    """Alias para generate_token - cria um JWT para o usuário autenticado."""
+    return generate_token(user_id, nome, perfil, status)

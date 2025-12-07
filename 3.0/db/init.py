@@ -7,7 +7,7 @@ import logging
 import sys
 from pathlib import Path
 
-# Configurar logging
+# ============ CONFIGURAÇÃO DE LOGGING ============
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -108,7 +108,8 @@ def initialize_database():
         else:
             logger.info("   ✓ Usuário Master já existe")
         
-        logger.info("✅ Banco de dados inicializado com sucesso!\n")
+        logger.info("✅ Banco de dados inicializado com sucesso!
+")
         return True
         
     except Exception as e:

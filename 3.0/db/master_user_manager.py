@@ -38,19 +38,23 @@ class MasterUserManager:
             Dict com credenciais ou None se não encontradas
         """
         try:
-            # Tenta st.secrets primeiro (Streamlit Cloud)
-            if hasattr(st, 'secrets'):
-                nome = st.secrets.get(MasterUserManager.ENV_VAR_NOME)
-                email = st.secrets.get(MasterUserManager.ENV_VAR_EMAIL)
-                senha = st.secrets.get(MasterUserManager.ENV_VAR_SENHA)
-                
-                if nome and email and senha:
-                    return {
-                        'nome': nome,
-                        'email': email,
-                        'senha': senha,
-                        'telegram': st.secrets.get(MasterUserManager.ENV_VAR_TELEGRAM)
-                    }
+            # Tenta st.secrets primeiro (Streamlit Cloud) - com try/except
+            try:
+                if hasattr(st, 'secrets') and st.secrets:
+                    nome = st.secrets.get(MasterUserManager.ENV_VAR_NOME)
+                    email = st.secrets.get(MasterUserManager.ENV_VAR_EMAIL)
+                    senha = st.secrets.get(MasterUserManager.ENV_VAR_SENHA)
+                    
+                    if nome and email and senha:
+                        return {
+                            'nome': nome,
+                            'email': email,
+                            'senha': senha,
+                            'telegram': st.secrets.get(MasterUserManager.ENV_VAR_TELEGRAM)
+                        }
+            except:
+                # Se st.secrets falhar, continua com variáveis de ambiente
+                pass
             
             # Fallback para variáveis de ambiente (Digital Ocean App Platform)
             nome = os.environ.get(MasterUserManager.ENV_VAR_NOME)
@@ -75,7 +79,15 @@ class MasterUserManager:
     def _master_exists() -> bool:
         """Verifica se já existe um usuário Master no banco"""
         try:
-            user = get_user_by_email('master@sistema.local')  # Email padrão interno
+            # Obter credenciais para verificar email correto
+            creds = MasterUserManager._get_credentials()
+            if creds:
+                user = get_user_by_email(creds['email'])
+                if user and user.get('perfil') == 'master':
+                    return True
+            
+            # Fallback para email padrão
+            user = get_user_by_email('master@sistema.local')
             return user is not None
         except Exception:
             return False
@@ -114,14 +126,14 @@ class MasterUserManager:
                 # Hash da senha com bcrypt
                 senha_hash = hash_password(creds['senha'])
                 
-                # Insert
+                # Insert com email do ambiente (não o email padrão)
                 cursor.execute('''
                     INSERT INTO usuarios 
                     (nome, email, senha_hash, perfil, status, faltas)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
                     creds['nome'],
-                    'master@sistema.local',  # Email interno único
+                    creds['email'],  # Email da variável de ambiente
                     senha_hash,
                     'master',
                     'Ativo',
@@ -133,7 +145,7 @@ class MasterUserManager:
                 
                 logger.info(f"✓ Usuário Master criado com sucesso (ID: {master_id})")
                 logger.info(f"  Nome: {creds['nome']}")
-                logger.info(f"  Email de acesso: {creds['email']}")
+                logger.info(f"  Email: {creds['email']}")
                 
                 return True
                 

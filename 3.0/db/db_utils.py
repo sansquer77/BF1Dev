@@ -192,3 +192,117 @@ def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "particip
 
 def autenticar_usuario(email: str, senha: str) -> dict:
     """Autentica usuário com bcrypt"""
+    usuario = get_user_by_email(email)
+    if usuario and check_password(senha, usuario.get('senha_hash', '')):
+        return usuario
+    return {}
+
+def get_user_by_id(user_id: int) -> Optional[Dict]:
+    """
+    Retorna usuário pelo ID
+    
+    Args:
+        user_id: ID do usuário
+    
+    Returns:
+        Dict com dados do usuário ou None
+    """
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM usuarios WHERE id = ?', (user_id,))
+        row = c.fetchone()
+        
+        if row:
+            return dict(row)
+        return None
+
+def get_usuarios_df() -> pd.DataFrame:
+    """Retorna todos os usuários como DataFrame"""
+    with db_connect() as conn:
+        return pd.read_sql_query('SELECT * FROM usuarios', conn)
+
+def get_pilotos_df() -> pd.DataFrame:
+    """Retorna todos os pilotos como DataFrame"""
+    with db_connect() as conn:
+        return pd.read_sql_query('SELECT * FROM pilotos', conn)
+
+def get_provas_df() -> pd.DataFrame:
+    """Retorna todas as provas como DataFrame"""
+    with db_connect() as conn:
+        return pd.read_sql_query('SELECT * FROM provas', conn)
+
+def get_apostas_df() -> pd.DataFrame:
+    """Retorna todas as apostas como DataFrame"""
+    with db_connect() as conn:
+        return pd.read_sql_query('SELECT * FROM apostas', conn)
+
+def get_resultados_df() -> pd.DataFrame:
+    """Retorna todos os resultados como DataFrame"""
+    with db_connect() as conn:
+        return pd.read_sql_query('SELECT * FROM resultados', conn)
+
+def registrar_log_aposta(usuario_id: int, prova_id: int, piloto_id: int, pontos: int = 0):
+    """Registra uma aposta no log"""
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            'INSERT INTO apostas (usuario_id, prova_id, piloto_id, pontos) VALUES (?, ?, ?, ?)',
+            (usuario_id, prova_id, piloto_id, pontos)
+        )
+        conn.commit()
+        logger.info(f"✓ Aposta registrada: usuário {usuario_id}, prova {prova_id}, piloto {piloto_id}")
+
+def log_aposta_existe(usuario_id: int, prova_id: int) -> bool:
+    """Verifica se existe aposta para usuário em uma prova"""
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute('SELECT 1 FROM apostas WHERE usuario_id = ? AND prova_id = ?', (usuario_id, prova_id))
+        return c.fetchone() is not None
+
+def update_user_email(user_id: int, novo_email: str) -> bool:
+    """Atualiza o email do usuário"""
+    try:
+        with db_connect() as conn:
+            c = conn.cursor()
+            c.execute('UPDATE usuarios SET email = ? WHERE id = ?', (novo_email, user_id))
+            conn.commit()
+            logger.info(f"✓ Email do usuário {user_id} atualizado")
+            return True
+    except Exception as e:
+        logger.error(f"Erro ao atualizar email: {e}")
+        return False
+
+def update_user_password(user_id: int, nova_senha: str) -> bool:
+    """Atualiza a senha do usuário"""
+    try:
+        senha_hash = hash_password(nova_senha)
+        with db_connect() as conn:
+            c = conn.cursor()
+            c.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', (senha_hash, user_id))
+            conn.commit()
+            logger.info(f"✓ Senha do usuário {user_id} atualizada")
+            return True
+    except Exception as e:
+        logger.error(f"Erro ao atualizar senha: {e}")
+        return False
+
+def get_horario_prova(prova_id: int) -> tuple:
+    """
+    Retorna informações da prova (nome, data, horário)
+    
+    Args:
+        prova_id: ID da prova
+    
+    Returns:
+        Tupla com (nome_prova, data_prova, horario_prova) ou (None, None, None)
+    """
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute('SELECT nome, data FROM provas WHERE id = ?', (prova_id,))
+        row = c.fetchone()
+        
+        if row:
+            nome, data = row
+            # Retorna nome, data e um horário padrão (00:00)
+            return (nome, data, "00:00")
+        return (None, None, None)

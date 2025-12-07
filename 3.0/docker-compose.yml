@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  bf1dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bf1dev_app
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+      - ./logs:/app/logs
+    environment:
+      - DATABASE_PATH=/app/data/bolao_f1.db
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_key_change_me}
+      - EMAIL_REMETENTE=${EMAIL_REMETENTE:-}
+      - SENHA_EMAIL=${SENHA_EMAIL:-}
+      - EMAIL_ADMIN=${EMAIL_ADMIN:-}
+      - usuario_master=${usuario_master:-Administrator}
+      - email_master=${email_master:-master@sistema.local}
+      - senha_master=${senha_master:-change_me}
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_CLIENT_TOOLBARMODE=minimal
+      - STREAMLIT_LOGGER_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  data:
+    driver: local
+  backups:
+    driver: local
+  logs:
+    driver: local
