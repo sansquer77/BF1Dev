@@ -42,20 +42,10 @@ def participante_view():
         temporada = st.session_state.get('temporada', str(datetime.datetime.now().year))
         provas = get_provas_df(temporada)
         pilotos_df = get_pilotos_df()
-        # Filtrar pilotos ativos (com validação de coluna)
-    if not pilotos_df.empty:
-        if 'status' in pilotos_df.columns:
-            pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
-        else:
-            pilotos_ativos_df = pilotos_df
-        
-        pilotos = pilotos_ativos_df['nome'].tolist() if not pilotos_ativos_df.empty else []
-        equipes = pilotos_ativos_df['equipe'].tolist() if not pilotos_ativos_df.empty else []
+        pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
+        pilotos = pilotos_ativos_df['nome'].tolist()
+        equipes = pilotos_ativos_df['equipe'].tolist()
         pilotos_equipe = dict(zip(pilotos, equipes))
-    else:
-        pilotos = []
-        equipes = []
-        pilotos_equipe = {}
 
         if user['status'] == "Ativo":
             if len(provas) > 0 and len(pilotos_df) > 2:

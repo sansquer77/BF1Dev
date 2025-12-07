@@ -84,7 +84,7 @@ def resultados_view():
         if erro:
             st.error(erro)
         else:
-            with db_connect() as conn:
+            conn = db_connect()
             c = conn.cursor()
             c.execute(
                 'REPLACE INTO resultados (prova_id, posicoes) VALUES (?, ?)',

@@ -40,7 +40,7 @@ def main():
 
     with col1:
         if st.button("Atualizar usuário"):
-            with db_connect() as conn:
+            conn = db_connect()
             c = conn.cursor()
             c.execute(
                 "UPDATE usuarios SET nome=?, email=?, perfil=?, status=?, faltas=? WHERE id=?",
@@ -66,7 +66,7 @@ def main():
                     st.error("Digite a nova senha.")
                 else:
                     nova_hash = hash_password(nova_senha)
-                    with db_connect() as conn:
+                    conn = db_connect()
                     c = conn.cursor()
                     c.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (nova_hash, int(user_row["id"])))
                     conn.commit()
@@ -84,7 +84,7 @@ def main():
             if user_row["perfil"] == "master":
                 st.error("Não é possível excluir um usuário master.")
             else:
-                with db_connect() as conn:
+                conn = db_connect()
                 c = conn.cursor()
                 c.execute("DELETE FROM usuarios WHERE id=?", (int(user_row["id"]),))
                 conn.commit()
@@ -111,7 +111,7 @@ def main():
             if sucesso:
                 # Atualiza as faltas manualmente, se não zero
                 if faltas_novo > 0:
-                    with db_connect() as conn:
+                    conn = db_connect()
                     c = conn.cursor()
                     c.execute("UPDATE usuarios SET faltas=? WHERE email=?", (faltas_novo, email_novo))
                     conn.commit()
