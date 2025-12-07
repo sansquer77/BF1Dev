@@ -40,7 +40,7 @@ def participante_view():
         equipes = pilotos_ativos_df['equipe'].tolist()
         pilotos_equipe = dict(zip(pilotos, equipes))
 
-        if user[4] == "Ativo":
+        if user[5] == "Ativo":
             if len(provas) > 0 and len(pilotos_df) > 2:
                 prova_id = st.selectbox(
                     "Escolha a prova",

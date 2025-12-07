@@ -8,10 +8,9 @@ from db.db_utils import init_db, db_connect, hash_password
 init_db()
 
 def criar_master_se_nao_existir():
-    secrets = st.secrets or os.environ.get
-    nome = secrets.get('usuario_master')
-    email = secrets.get('email_master')
-    senha = secrets.get('senha_master')
+    nome = os.environ.get('usuario_master') or st.secrets.get('usuario_master')
+    email = os.environ.get('email_master') or st.secrets.get('email_master')
+    senha = os.environ.get('senha_master') or st.secrets.get('senha_master')
     if not (nome and email and senha):
         return
     conn = db_connect()

@@ -14,6 +14,7 @@ from db.db_utils import (
     get_provas_df,
     get_resultados_df
 )
+from services.email_service import enviar_email
 
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
@@ -48,9 +49,8 @@ def salvar_aposta(
         st.error(f"Usuário não encontrado: id={usuario_id}")
         return False
 
-    if tipo_aposta == 0 and log_aposta_existe(usuario[1], nome_prova_bd, tipo_aposta, automatica, dados_aposta):
-        return True
-
+    #if tipo_aposta == 0:
+    #    return True
     conn = None
     try:
         conn = db_connect()
@@ -72,6 +72,20 @@ def salvar_aposta(
                 )
             )
             conn.commit()
+            corpo_email = f"""
+            <p>Olá {usuario[1]},</p>
+            <p>Sua aposta para a prova <strong>{nome_prova_bd}</strong> foi registrada com sucesso.</p>
+            <p>Detalhes:</p>
+            <ul>
+            <li>Pilotos: {', '.join(pilotos)}</li>
+            <li>Fichas: {', '.join(map(str, fichas))}</li>
+            <li>Palpite para 11º colocado: {piloto_11}</li>
+            </ul>
+            <p>Boa sorte!</p>
+            """
+
+            enviar_email(usuario[2], f"Aposta registrada - {nome_prova_bd}", corpo_email)
+
     except Exception as e:
         st.error(f"Erro ao salvar aposta: {str(e)}")
         if conn:
