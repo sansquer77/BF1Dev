@@ -26,7 +26,7 @@ def participante_view():
     with col2:
         st.title("Painel do Participante")
     
-    st.write(f"Bem-vindo, {user[1]} ({user[2]}) - Status: {user[4]}")
+    st.write(f"Bem-vindo, {user['nome']} ({user['email']}) - Status: {user['perfil']}")
 
     tabs = st.tabs(["Apostas", "Minha Conta"])
 
@@ -40,7 +40,7 @@ def participante_view():
         equipes = pilotos_ativos_df['equipe'].tolist()
         pilotos_equipe = dict(zip(pilotos, equipes))
 
-        if user[5] == "Ativo":
+        if user['status'] == "Ativo":
             if len(provas) > 0 and len(pilotos_df) > 2:
                 prova_id = st.selectbox(
                     "Escolha a prova",
@@ -50,7 +50,7 @@ def participante_view():
                 nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
                 apostas_df = get_apostas_df()
                 aposta_existente = apostas_df[
-                    (apostas_df['usuario_id'] == user[0]) & (apostas_df['prova_id'] == prova_id)
+                    (apostas_df['usuario_id'] == user['id']) & (apostas_df['prova_id'] == prova_id)
                 ]
                 pilotos_apostados_ant, fichas_ant, piloto_11_ant = [], [], ""
                 if not aposta_existente.empty:
@@ -123,7 +123,7 @@ def participante_view():
                         st.error(erro)
                     else:
                         salvar_aposta(
-                            user[0], prova_id, pilotos_validos,
+                            user['id'], prova_id, pilotos_validos,
                             fichas_validas, piloto_11, nome_prova, automatica=0
                         )
                         st.success("Aposta registrada/atualizada!")
@@ -140,7 +140,7 @@ def participante_view():
         resultados_df = get_resultados_df()
         provas_df = get_provas_df()
 
-        apostas_part = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
+        apostas_part = apostas_df[apostas_df['usuario_id'] == user['id']].sort_values('prova_id')
         pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
         pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
         bonus_11 = 25
@@ -203,8 +203,8 @@ def participante_view():
 
         # --------- Gráfico de evolução da posição do participante logado ---------
         st.subheader("Evolução da Posição no Campeonato")
-        user_id_logado = user[0]
-        user_nome_logado = user[1]
+        user_id_logado = user['id']
+        user_nome_logado = user['nome']
         conn = db_connect()
         try:
             df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
@@ -241,8 +241,8 @@ def participante_view():
     # ---------------- Aba: Minha Conta ----------------------
     with tabs[1]:
         st.header("Gestão da Minha Conta")
-        st.write(f"Usuário: **{user[1]}**")
-        novo_email = st.text_input("Email cadastrado", value=user[2])
+        st.write(f"Usuário: **{user['nome']}**")
+        novo_email = st.text_input("Email cadastrado", value=user['email'])
         st.subheader("Alterar Senha")
         senha_atual = st.text_input("Senha Atual", type="password", key="senha_atual")
         nova_senha = st.text_input("Nova Senha", type="password", key="nova_senha")
@@ -252,17 +252,17 @@ def participante_view():
             erros = []
             if not novo_email:
                 erros.append("Email não pode ficar vazio.")
-            elif novo_email != user[2]:
+            elif novo_email != user['email']:
                 # só verifica duplicidade se o email mudou
                 email_cadastrado = get_user_by_email(novo_email)
-                if email_cadastrado and email_cadastrado[0] != user[0]:
+                if email_cadastrado and email_cadastrado['id'] != user['id']:
                     erros.append("O email informado já está em uso por outro usuário.")
 
             # Troca de senha (opcional)
             if senha_atual or nova_senha or confirma_senha:
                 if not senha_atual:
                     erros.append("Informe a senha atual para alterar a senha.")
-                elif not check_password(senha_atual, user[3]):
+                elif not check_password(senha_atual, user['senha_hash']):
                     erros.append("Senha atual incorreta.")
                 elif not nova_senha:
                     erros.append("Informe a nova senha.")
@@ -274,15 +274,15 @@ def participante_view():
                     st.error(erro)
             else:
                 atualizado = False
-                if novo_email != user[2]:
-                    if update_user_email(user[0], novo_email):
+                if novo_email != user['email']:
+                    if update_user_email(user['id'], novo_email):
                         st.success("Email atualizado!")
                         atualizado = True
                     else:
                         st.error("Falha ao atualizar email.")
                 if nova_senha:
                     senha_hash = hash_password(nova_senha)
-                    if update_user_password(user[0], senha_hash):
+                    if update_user_password(user['id'], senha_hash):
                         st.success("Senha alterada!")
                         atualizado = True
                     else:
