@@ -7,7 +7,7 @@ import logging
 import sys
 from pathlib import Path
 
-# Configurar logging
+# ============ CONFIGURAÇÃO DE LOGGING ============
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -76,24 +76,18 @@ from db.backup_utils import backup_banco, restaurar_backup
 # ============ INICIALIZAÇÃO AUTOMÁTICA ============
 
 def initialize_database():
-    """
-    Inicializa o banco de dados completo
-    Executa ordem correta: pool → db → migrations → master user
-    """
+    """Inicializa o banco de dados completo"""
     try:
         logger.info("🚀 Inicializando BF1Dev 3.0 Database Layer...")
         
-        # 1. Inicializar pool de conexões
         logger.info("1️⃣  Inicializando pool de conexões...")
         init_pool(str(DB_PATH), POOL_SIZE)
         logger.info(f"   ✓ Pool criado: {POOL_SIZE} conexões")
         
-        # 2. Criar tabelas base
         logger.info("2️⃣  Criando tabelas do banco de dados...")
         init_db()
         logger.info("   ✓ Tabelas criadas/verificadas")
         
-        # 3. Executar migrations (índices)
         logger.info("3️⃣  Executando migrations (criando índices)...")
         try:
             run_migrations()
@@ -101,7 +95,6 @@ def initialize_database():
         except Exception as e:
             logger.warning(f"   ⚠️  Migrations já foram executadas: {str(e)[:50]}")
         
-        # 4. Criar usuário Master automaticamente
         logger.info("4️⃣  Verificando usuário Master...")
         if MasterUserManager.create_master_user():
             logger.info("   ✓ Usuário Master criado")
@@ -113,7 +106,6 @@ def initialize_database():
         
     except Exception as e:
         logger.error(f"❌ Erro ao inicializar banco de dados: {e}")
-        logger.error("Abortando inicialização...")
         raise
 
 
@@ -135,55 +127,13 @@ atexit.register(cleanup_on_exit)
 # ============ EXPORT PUBLIC API ============
 
 __all__ = [
-    # Pool
-    'init_pool',
-    'get_pool',
-    'close_pool',
-    'ConnectionPool',
-    
-    # Config
-    'DB_PATH',
-    'POOL_SIZE',
-    'DB_TIMEOUT',
-    'CACHE_TTL_CURTO',
-    'CACHE_TTL_MEDIO',
-    'CACHE_TTL_LONGO',
-    'BCRYPT_ROUNDS',
-    'SESSION_TIMEOUT',
-    'MAX_LOGIN_ATTEMPTS',
-    'LOCKOUT_DURATION',
-    'INDICES',
-    
-    # DB Utils
-    'init_db',
-    'db_connect',
-    'hash_password',
-    'check_password',
-    'get_user_by_email',
-    'get_user_by_id',
-    'get_master_user',
-    'cadastrar_usuario',
-    'autenticar_usuario',
-    'get_usuarios_df',
-    'get_pilotos_df',
-    'get_provas_df',
-    'get_apostas_df',
-    'get_resultados_df',
-    'registrar_log_aposta',
-    'log_aposta_existe',
-    
-    # Migrations
-    'run_migrations',
-    
-    # Master Manager
-    'MasterUserManager',
-    
-    # Backup
-    'backup_banco',
-    'restaurar_backup',
-    
-    # Init
-    'initialize_database',
+    'init_pool', 'get_pool', 'close_pool', 'ConnectionPool',
+    'DB_PATH', 'POOL_SIZE', 'DB_TIMEOUT', 'CACHE_TTL_CURTO', 'CACHE_TTL_MEDIO', 'CACHE_TTL_LONGO',
+    'BCRYPT_ROUNDS', 'SESSION_TIMEOUT', 'MAX_LOGIN_ATTEMPTS', 'LOCKOUT_DURATION', 'INDICES',
+    'init_db', 'db_connect', 'hash_password', 'check_password', 'get_user_by_email', 'get_user_by_id',
+    'get_master_user', 'cadastrar_usuario', 'autenticar_usuario', 'get_usuarios_df', 'get_pilotos_df',
+    'get_provas_df', 'get_apostas_df', 'get_resultados_df', 'registrar_log_aposta', 'log_aposta_existe',
+    'run_migrations', 'MasterUserManager', 'backup_banco', 'restaurar_backup', 'initialize_database',
 ]
 
 logger.info("✓ Módulo 'db' carregado com sucesso")
