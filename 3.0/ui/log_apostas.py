@@ -6,9 +6,8 @@ import jwt
 import os
 
 def carregar_logs():
-    conn = db_connect()
-    df = pd.read_sql('SELECT * FROM log_apostas ORDER BY id DESC', conn)
-    conn.close()
+    with db_connect() as conn:
+        df = pd.read_sql('SELECT * FROM log_apostas ORDER BY id DESC', conn)
     return df
 
 def get_nome_from_cookie():

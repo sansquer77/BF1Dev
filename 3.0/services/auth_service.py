@@ -29,11 +29,10 @@ def check_password(password: str, hashed: str) -> bool:
 # --- AUTENTICAÇÃO ---
 def autenticar_usuario(email: str, senha: str):
     """Retorna o usuário autenticado (tupla de dados) ou None."""
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute("SELECT id, nome, email, senha_hash, perfil, status FROM usuarios WHERE email=?", (email,))
-    user = c.fetchone()
-    conn.close()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, nome, email, senha_hash, perfil, status FROM usuarios WHERE email=?", (email,))
+        user = c.fetchone()
     if user and check_password(senha, user[3]):
         return user
     return None
@@ -66,42 +65,38 @@ def decode_token(token: str):
 # --- REGISTRO DE USUÁRIO ---
 def cadastrar_usuario(nome: str, email: str, senha: str, perfil="participante", status="Ativo") -> bool:
     """Cria novo usuário, garantindo unicidade de email."""
-    conn = db_connect()
-    c = conn.cursor()
     try:
         senha_hash = hash_password(senha)
-        c.execute(
-            'INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, ?, ?, ?)',
-            (nome, email, senha_hash, perfil, status, 0)
-        )
-        conn.commit()
+        with db_connect() as conn:
+            c = conn.cursor()
+            c.execute(
+                'INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, ?, ?, ?)',
+                (nome, email, senha_hash, perfil, status, 0)
+            )
+            conn.commit()
         return True
     except Exception:
         return False
-    finally:
-        conn.close()
 
 # --- BUSCA DE USUÁRIOS ---
 def get_user_by_email(email: str):
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, nome, email, senha_hash, perfil, status, faltas FROM usuarios WHERE email=?",
-        (email,)
-    )
-    user = c.fetchone()
-    conn.close()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, nome, email, senha_hash, perfil, status, faltas FROM usuarios WHERE email=?",
+            (email,)
+        )
+        user = c.fetchone()
     return user
 
 def get_user_by_id(user_id):
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, nome, email, perfil, status, faltas FROM usuarios WHERE id=?",
-        (user_id,)
-    )
-    user = c.fetchone()
-    conn.close()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, nome, email, perfil, status, faltas FROM usuarios WHERE id=?",
+            (user_id,)
+        )
+        user = c.fetchone()
     return user
 
 # --- GESTÃO DE COOKIES (para login) ---
@@ -133,11 +128,10 @@ def redefinir_senha_usuario(email: str):
     nova_senha = gerar_senha_temporaria()
     senha_hash = hash_password(nova_senha)
     # Atualiza a senha no banco
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute("UPDATE usuarios SET senha_hash=? WHERE email=?", (senha_hash, email))
-    conn.commit()
-    conn.close()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute("UPDATE usuarios SET senha_hash=? WHERE email=?", (senha_hash, email))
+        conn.commit()
     return True, (usuario[1], nova_senha)  # nome, nova_senha
 
 # --- CRIAÇÃO AUTOMÁTICA DO MASTER ---
@@ -147,18 +141,17 @@ def criar_master_se_nao_existir():
     senha = st.secrets.get('senha_master') or os.environ.get('senha_master')
     if not (nome and email and senha):
         return
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute('SELECT COUNT(*) FROM usuarios WHERE perfil="master"')
-    existe = c.fetchone()[0] > 0
-    if not existe:
-        senha_hash = hash_password(senha)
-        c.execute(
-            'INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, "master", "Ativo", 0)',
-            (nome, email, senha_hash)
-        )
-        conn.commit()
-    conn.close()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM usuarios WHERE perfil="master"')
+        existe = c.fetchone()[0] > 0
+        if not existe:
+            senha_hash = hash_password(senha)
+            c.execute(
+                'INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, "master", "Ativo", 0)',
+                (nome, email, senha_hash)
+            )
+            conn.commit()
 
 # Alias para compatibilidade
 def create_token(user_id: int, nome: str, perfil: str, status: str) -> str:

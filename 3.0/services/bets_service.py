@@ -51,10 +51,9 @@ def salvar_aposta(
 
     #if tipo_aposta == 0:
     #    return True
-    conn = None
     try:
-        conn = db_connect()
-        c = conn.cursor()
+        with db_connect() as conn:
+            c = conn.cursor()
         # Detect if temporada column exists and include it in queries when present
         c.execute("PRAGMA table_info('apostas')")
         aposta_cols = [r[1] for r in c.fetchall()]
@@ -95,7 +94,7 @@ def salvar_aposta(
                         piloto_11, nome_prova_bd, automatica
                     )
                 )
-            conn.commit()
+                conn.commit()
             corpo_email = f"""
             <p>Olá {usuario[1]},</p>
             <p>Sua aposta para a prova <strong>{nome_prova_bd}</strong> foi registrada com sucesso.</p>
@@ -112,12 +111,8 @@ def salvar_aposta(
 
     except Exception as e:
         st.error(f"Erro ao salvar aposta: {str(e)}")
-        if conn:
-            conn.rollback()
+        # rollback handled by context manager when exception propagates; return False
         return False
-    finally:
-        if conn:
-            conn.close()
 
     registrar_log_aposta(
         apostador=usuario[1],
@@ -129,11 +124,10 @@ def salvar_aposta(
         horario=agora_sp
     )
     if automatica:
-        conn = db_connect()
-        c = conn.cursor()
-        c.execute('UPDATE usuarios SET faltas = faltas + 1 WHERE id=?', (usuario_id,))
-        conn.commit()
-        conn.close()
+        with db_connect() as conn:
+            c = conn.cursor()
+            c.execute('UPDATE usuarios SET faltas = faltas + 1 WHERE id=?', (usuario_id,))
+            conn.commit()
     return True
 
 def gerar_aposta_aleatoria(pilotos_df):
@@ -205,11 +199,10 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
     if not pilotos_ant or not fichas_ant or not piloto_11_ant:
         return False, "Não há dados válidos para gerar aposta automática."
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute('SELECT MAX(automatica) FROM apostas WHERE usuario_id=?', (usuario_id,))
-    max_automatica = c.fetchone()[0]
-    conn.close()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute('SELECT MAX(automatica) FROM apostas WHERE usuario_id=?', (usuario_id,))
+        max_automatica = c.fetchone()[0]
     nova_automatica = 1 if max_automatica is None else max_automatica + 1
     sucesso = salvar_aposta(
         usuario_id, prova_id, pilotos_ant, fichas_ant,
@@ -261,28 +254,26 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     return pontos
 
 def salvar_classificacao_prova(prova_id, df_classificacao):
-    conn = db_connect()
-    cursor = conn.cursor()
-    for _, row in df_classificacao.iterrows():
-        usuario_id = int(row['usuario_id'])
-        posicao = int(row['posicao'])
-        pontos_val = float(row['pontos'])
-        data_registro = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
-        cursor.execute('''
-            INSERT OR REPLACE INTO posicoes_participantes 
-            (prova_id, usuario_id, posicao, pontos, data_registro)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (prova_id, usuario_id, posicao, pontos_val, data_registro))
-    conn.commit()
-    conn.close()
+    with db_connect() as conn:
+        cursor = conn.cursor()
+        for _, row in df_classificacao.iterrows():
+            usuario_id = int(row['usuario_id'])
+            posicao = int(row['posicao'])
+            pontos_val = float(row['pontos'])
+            data_registro = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+            cursor.execute('''
+                INSERT OR REPLACE INTO posicoes_participantes 
+                (prova_id, usuario_id, posicao, pontos, data_registro)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (prova_id, usuario_id, posicao, pontos_val, data_registro))
+        conn.commit()
 
 def atualizar_classificacoes_todas_as_provas():
-    conn = db_connect()
-    usuarios_df = pd.read_sql('SELECT * FROM usuarios WHERE status = "Ativo"', conn)
-    provas_df = pd.read_sql('SELECT * FROM provas', conn)
-    apostas_df = pd.read_sql('SELECT * FROM apostas', conn)
-    resultados_df = pd.read_sql('SELECT * FROM resultados', conn)
-    conn.close()
+    with db_connect() as conn:
+        usuarios_df = pd.read_sql('SELECT * FROM usuarios WHERE status = "Ativo"', conn)
+        provas_df = pd.read_sql('SELECT * FROM provas', conn)
+        apostas_df = pd.read_sql('SELECT * FROM apostas', conn)
+        resultados_df = pd.read_sql('SELECT * FROM resultados', conn)
     for _, prova in provas_df.iterrows():
         prova_id = prova['id']
         if prova_id not in resultados_df['prova_id'].values:

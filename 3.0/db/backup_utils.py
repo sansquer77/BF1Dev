@@ -45,9 +45,8 @@ def listar_tabelas():
 
 def exportar_tabela_excel(tabela):
     """Exporta os dados da tabela como arquivo Excel em buffer de memória."""
-    conn = db_connect()
-    df = pd.read_sql(f"SELECT * FROM {tabela}", conn)
-    conn.close()
+    with db_connect() as conn:
+        df = pd.read_sql(f"SELECT * FROM {tabela}", conn)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)

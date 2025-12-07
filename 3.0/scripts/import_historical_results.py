@@ -30,7 +30,8 @@ def import_historical_results(db_path, data_file=None):
     ...
     """
     
-    conn = db_connect(db_path)
+    # Use a direct sqlite3 connection here (script-runner), not the pool context manager
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # Dados de exemplo: 20 temporadas (2005-2024) com rankings fictícios

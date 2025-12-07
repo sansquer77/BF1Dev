@@ -85,13 +85,12 @@ def resultados_view():
             st.error(erro)
         else:
             with db_connect() as conn:
-            c = conn.cursor()
-            c.execute(
-                'REPLACE INTO resultados (prova_id, posicoes) VALUES (?, ?)',
-                (prova_id, str(posicoes))
-            )
-            conn.commit()
-            conn.close()
+                c = conn.cursor()
+                c.execute(
+                    'REPLACE INTO resultados (prova_id, posicoes) VALUES (?, ?)',
+                    (prova_id, str(posicoes))
+                )
+                conn.commit()
             st.success("Resultado salvo!")
             st.cache_data.clear()
             # Atualiza todas as classificações após editar resultados

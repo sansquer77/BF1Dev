@@ -61,86 +61,88 @@ def check_password(senha: str, hash_senha: str) -> bool:
 
 def init_db():
     """Inicializa o banco de dados com todas as tabelas necessárias"""
+    # Cria o esquema compatível com o dump histórico (pilotos com 'equipe', provas com 'horario_prova' e 'tipo', resultados com 'posicoes')
     with db_connect() as conn:
         c = conn.cursor()
-        
-        # Tabela de usuários
+
+        # Tabela de usuários (compatível)
         c.execute('''
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                senha_hash TEXT NOT NULL,
-                perfil TEXT NOT NULL,
+                nome TEXT,
+                email TEXT UNIQUE,
+                senha_hash TEXT,
+                perfil TEXT,
                 status TEXT DEFAULT 'Ativo',
                 faltas INTEGER DEFAULT 0,
                 criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
-        # Tabela de pilotos
+
+        # Tabela de pilotos (legacy format: equipe, status)
         c.execute('''
             CREATE TABLE IF NOT EXISTS pilotos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT UNIQUE NOT NULL,
-                numero INTEGER UNIQUE NOT NULL,
-                equipe_id INTEGER,
-                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(equipe_id) REFERENCES equipes(id)
+                nome TEXT,
+                equipe TEXT,
+                status TEXT DEFAULT 'Ativo'
             )
         ''')
-        
-        # Tabela de equipes
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS equipes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT UNIQUE NOT NULL,
-                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Tabela de provas
+
+        # Tabela de provas (with horario_prova and tipo)
         c.execute('''
             CREATE TABLE IF NOT EXISTS provas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT NOT NULL,
-                data DATE NOT NULL,
-                status TEXT DEFAULT 'Aberta',
-                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                nome TEXT,
+                data TEXT,
+                horario_prova TEXT,
+                status TEXT DEFAULT 'Ativo',
+                tipo TEXT DEFAULT 'Normal'
             )
         ''')
-        
-        # Tabela de apostas
+
+        # Tabela de apostas (legacy structure used across the UI)
         c.execute('''
             CREATE TABLE IF NOT EXISTS apostas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                usuario_id INTEGER NOT NULL,
-                prova_id INTEGER NOT NULL,
-                piloto_id INTEGER NOT NULL,
-                pontos INTEGER DEFAULT 0,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                usuario_id INTEGER,
+                prova_id INTEGER,
+                data_envio TEXT,
+                pilotos TEXT,
+                fichas TEXT,
+                piloto_11 TEXT,
+                nome_prova TEXT,
+                automatica INTEGER DEFAULT 0,
                 FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-                FOREIGN KEY(prova_id) REFERENCES provas(id),
-                FOREIGN KEY(piloto_id) REFERENCES pilotos(id)
+                FOREIGN KEY(prova_id) REFERENCES provas(id)
             )
         ''')
-        
-        # Tabela de resultados
+
+        # Tabela de resultados (posicoes como texto serializado)
         c.execute('''
             CREATE TABLE IF NOT EXISTS resultados (
+                prova_id INTEGER PRIMARY KEY,
+                posicoes TEXT,
+                FOREIGN KEY(prova_id) REFERENCES provas(id)
+            )
+        ''')
+
+        # Tabela de posições por participante (Hall da Fama / histórico)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS posicoes_participantes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 prova_id INTEGER NOT NULL,
                 usuario_id INTEGER NOT NULL,
-                piloto_id INTEGER NOT NULL,
-                posicao INTEGER,
-                pontos_ganhos INTEGER DEFAULT 0,
-                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(prova_id) REFERENCES provas(id),
-                FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
-                FOREIGN KEY(piloto_id) REFERENCES pilotos(id)
+                posicao INTEGER NOT NULL,
+                pontos REAL NOT NULL,
+                data_registro TEXT DEFAULT (datetime('now')),
+                temporada TEXT,
+                UNIQUE(prova_id, usuario_id),
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+                FOREIGN KEY (prova_id) REFERENCES provas(id)
             )
         ''')
-        
+
         # Tabela de log de tentativas de login (para rate limiting)
         c.execute('''
             CREATE TABLE IF NOT EXISTS login_attempts (
@@ -151,7 +153,7 @@ def init_db():
                 ip_address TEXT
             )
         ''')
-        
+
         conn.commit()
         logger.info("✓ Banco de dados inicializado com sucesso")
 
@@ -232,6 +234,7 @@ def _read_table_df(table: str, temporada: Optional[str] = None) -> pd.DataFrame:
     """Helper: read table into DataFrame, filtering by `temporada` when column exists.
 
     If `temporada` is None, defaults to current year as string.
+    Includes NULL temporada rows for backward compatibility with existing data.
     """
     if temporada is None:
         temporada = str(datetime.datetime.now().year)
@@ -240,7 +243,8 @@ def _read_table_df(table: str, temporada: Optional[str] = None) -> pd.DataFrame:
         c.execute(f"PRAGMA table_info('{table}')")
         cols = [r[1] for r in c.fetchall()]
         if 'temporada' in cols:
-            return pd.read_sql_query(f"SELECT * FROM {table} WHERE temporada = ?", conn, params=(temporada,))
+            # Include rows where temporada matches OR temporada is NULL (backward compat)
+            return pd.read_sql_query(f"SELECT * FROM {table} WHERE temporada = ? OR temporada IS NULL", conn, params=(temporada,))
         else:
             return pd.read_sql_query(f"SELECT * FROM {table}", conn)
 

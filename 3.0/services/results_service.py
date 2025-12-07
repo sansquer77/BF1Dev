@@ -8,19 +8,17 @@ def salvar_resultado_prova(prova_id: int, posicoes: dict) -> bool:
     posicoes: dicionário {posição (int): nome_piloto (str)}, sendo 1 ao 11.
     """
     try:
-        conn = db_connect()
-        c = conn.cursor()
-        c.execute(
-            'REPLACE INTO resultados (prova_id, posicoes) VALUES (?, ?)',
-            (prova_id, str(posicoes))
-        )
-        conn.commit()
-        return True
+        with db_connect() as conn:
+            c = conn.cursor()
+            c.execute(
+                'REPLACE INTO resultados (prova_id, posicoes) VALUES (?, ?)',
+                (prova_id, str(posicoes))
+            )
+            conn.commit()
+            return True
     except Exception as e:
         print(f"Erro ao salvar resultado: {e}")
         return False
-    finally:
-        conn.close()
 
 def obter_resultados():
     """Retorna todos os resultados de todas as provas como DataFrame pandas."""
@@ -28,11 +26,10 @@ def obter_resultados():
 
 def obter_resultado_prova(prova_id: int):
     """Retorna o resultado de uma prova específica (dict) ou None."""
-    conn = db_connect()
-    c = conn.cursor()
-    c.execute("SELECT posicoes FROM resultados WHERE prova_id = ?", (prova_id,))
-    row = c.fetchone()
-    conn.close()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute("SELECT posicoes FROM resultados WHERE prova_id = ?", (prova_id,))
+        row = c.fetchone()
     if row and row[0]:
         try:
             return eval(row[0])

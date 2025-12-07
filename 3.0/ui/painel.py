@@ -29,13 +29,14 @@ def participante_view():
         # Season selector (temporada) for plurianual support
         current_year = datetime.datetime.now().year
         season_options = [str(y) for y in range(current_year - 2, current_year + 2)]
-        season = st.selectbox("Temporada", season_options, index=season_options.index(str(current_year)))
+        # Default to current year
+        current_year_index = season_options.index(str(current_year)) if str(current_year) in season_options else 0
+        season = st.selectbox("Temporada", season_options, index=current_year_index)
         st.session_state['temporada'] = season
     
     st.write(f"Bem-vindo, {user['nome']} ({user['email']}) - Status: {user['perfil']}")
 
     tabs = st.tabs(["Apostas", "Minha Conta"])
-
     # ------------------ Aba: Apostas ----------------------
     with tabs[0]:
         st.cache_data.clear()
@@ -43,19 +44,19 @@ def participante_view():
         provas = get_provas_df(temporada)
         pilotos_df = get_pilotos_df()
         # Filtrar pilotos ativos (com validação de coluna)
-    if not pilotos_df.empty:
-        if 'status' in pilotos_df.columns:
-            pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
+        if not pilotos_df.empty:
+            if 'status' in pilotos_df.columns:
+                pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
+            else:
+                pilotos_ativos_df = pilotos_df
+            
+            pilotos = pilotos_ativos_df['nome'].tolist() if not pilotos_ativos_df.empty else []
+            equipes = pilotos_ativos_df['equipe'].tolist() if not pilotos_ativos_df.empty else []
+            pilotos_equipe = dict(zip(pilotos, equipes))
         else:
-            pilotos_ativos_df = pilotos_df
-        
-        pilotos = pilotos_ativos_df['nome'].tolist() if not pilotos_ativos_df.empty else []
-        equipes = pilotos_ativos_df['equipe'].tolist() if not pilotos_ativos_df.empty else []
-        pilotos_equipe = dict(zip(pilotos, equipes))
-    else:
-        pilotos = []
-        equipes = []
-        pilotos_equipe = {}
+            pilotos = []
+            equipes = []
+            pilotos_equipe = {}
 
         if user['status'] == "Ativo":
             if len(provas) > 0 and len(pilotos_df) > 2:
@@ -65,7 +66,7 @@ def participante_view():
                     format_func=lambda x: provas[provas['id'] == x]['nome'].values[0]
                 )
                 nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
-                apostas_df = get_apostas_df()
+                apostas_df = get_apostas_df(temporada)
                 aposta_existente = apostas_df[
                     (apostas_df['usuario_id'] == user['id']) & (apostas_df['prova_id'] == prova_id)
                 ]

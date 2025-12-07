@@ -41,13 +41,12 @@ def main():
     with col1:
         if st.button("Atualizar usuário"):
             with db_connect() as conn:
-            c = conn.cursor()
-            c.execute(
-                "UPDATE usuarios SET nome=?, email=?, perfil=?, status=?, faltas=? WHERE id=?",
-                (novo_nome, novo_email, novo_perfil, novo_status, novas_faltas, int(user_row["id"]))
-            )
-            conn.commit()
-            conn.close()
+                c = conn.cursor()
+                c.execute(
+                    "UPDATE usuarios SET nome=?, email=?, perfil=?, status=?, faltas=? WHERE id=?",
+                    (novo_nome, novo_email, novo_perfil, novo_status, novas_faltas, int(user_row["id"]))
+                )
+                conn.commit()
             st.success("Usuário atualizado!")
             st.cache_data.clear()
             st.rerun()
@@ -67,10 +66,9 @@ def main():
                 else:
                     nova_hash = hash_password(nova_senha)
                     with db_connect() as conn:
-                    c = conn.cursor()
-                    c.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (nova_hash, int(user_row["id"])))
-                    conn.commit()
-                    conn.close()
+                        c = conn.cursor()
+                        c.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (nova_hash, int(user_row["id"])))
+                        conn.commit()
                     st.success("Senha atualizada com sucesso!")
                     st.session_state["alterar_senha"] = False
                     st.cache_data.clear()
@@ -84,14 +82,13 @@ def main():
             if user_row["perfil"] == "master":
                 st.error("Não é possível excluir um usuário master.")
             else:
-                with db_connect() as conn:
-                c = conn.cursor()
-                c.execute("DELETE FROM usuarios WHERE id=?", (int(user_row["id"]),))
-                conn.commit()
-                conn.close()
-                st.success("Usuário excluído com sucesso!")
-                st.cache_data.clear()
-                st.rerun()
+                    with db_connect() as conn:
+                        c = conn.cursor()
+                        c.execute("DELETE FROM usuarios WHERE id=?", (int(user_row["id"]),))
+                        conn.commit()
+                    st.success("Usuário excluído com sucesso!")
+                    st.cache_data.clear()
+                    st.rerun()
 
     st.markdown("---")
     st.markdown("### Adicionar Novo Usuário")
@@ -111,11 +108,10 @@ def main():
             if sucesso:
                 # Atualiza as faltas manualmente, se não zero
                 if faltas_novo > 0:
-                    with db_connect() as conn:
-                    c = conn.cursor()
-                    c.execute("UPDATE usuarios SET faltas=? WHERE email=?", (faltas_novo, email_novo))
-                    conn.commit()
-                    conn.close()
+                        with db_connect() as conn:
+                            c = conn.cursor()
+                            c.execute("UPDATE usuarios SET faltas=? WHERE email=?", (faltas_novo, email_novo))
+                            conn.commit()
                 st.success("Usuário adicionado com sucesso!")
                 st.cache_data.clear()
                 st.rerun()

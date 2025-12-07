@@ -148,7 +148,113 @@ def hall_da_fama():
         # Admin panel for importing historical data (Master only)
         if st.session_state.get('user_role') == 'master':
             st.markdown("---")
-            st.subheader("⚙️ Administração - Importar Dados Históricos")
+            st.subheader("⚙️ Administração - Adicionar Resultados Históricos")
+            
+            # Manual entry section
+            with st.expander("➕ Adicionar Resultado Manual"):
+                st.write("Adicione manualmente um resultado de classificação para um usuário em uma temporada específica.")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    selected_user = st.selectbox(
+                        "Selecione o Participante",
+                        options=usuarios['nome'].values,
+                        key="manual_user"
+                    )
+                    user_id = usuarios[usuarios['nome'] == selected_user]['id'].values[0]
+                
+                with col2:
+                    season_year = st.number_input(
+                        "Ano/Temporada",
+                        min_value=1990,
+                        max_value=dt_datetime.now().year,
+                        value=dt_datetime.now().year,
+                        key="manual_season"
+                    )
+                
+                with col3:
+                    position = st.number_input(
+                        "Posição",
+                        min_value=1,
+                        max_value=100,
+                        value=1,
+                        key="manual_position"
+                    )
+                
+                col_btn1, col_btn2 = st.columns(2)
+                
+                with col_btn1:
+                    if st.button("✅ Adicionar Resultado", key="btn_add_manual"):
+                        try:
+                            # Check if record already exists
+                            c.execute(
+                                "SELECT id FROM posicoes_participantes WHERE usuario_id = ? AND temporada = ?",
+                                (user_id, str(season_year))
+                            )
+                            if c.fetchone():
+                                st.warning(f"⚠️ {selected_user} já possui um registro para {season_year}")
+                            else:
+                                # Insert new record
+                                c.execute(
+                                    """INSERT INTO posicoes_participantes 
+                                       (usuario_id, posicao, temporada, data_atualizacao) 
+                                       VALUES (?, ?, ?, ?)""",
+                                    (user_id, int(position), str(season_year), dt_datetime.now().isoformat())
+                                )
+                                conn.commit()
+                                st.success(f"✅ {selected_user} adicionado em {season_year}º lugar na temporada {season_year}")
+                                st.cache_data.clear()
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Erro ao adicionar resultado: {e}")
+                
+                with col_btn2:
+                    if st.button("🔄 Limpar Formulário", key="btn_clear_manual"):
+                        st.cache_data.clear()
+                        st.rerun()
+            
+            # Edit/Delete existing records
+            with st.expander("✏️ Editar/Deletar Registros"):
+                st.write("Gerenciar registros existentes do Hall da Fama.")
+                
+                # Fetch all existing records
+                c.execute("""
+                    SELECT pp.id, u.nome, pp.posicao, pp.temporada 
+                    FROM posicoes_participantes pp
+                    JOIN usuarios u ON pp.usuario_id = u.id
+                    ORDER BY pp.temporada DESC, pp.posicao ASC
+                """)
+                records = c.fetchall()
+                
+                if records:
+                    # Display records in a table format with delete option
+                    st.write(f"Total de registros: **{len(records)}**")
+                    
+                    for record_id, name, position, season in records:
+                        col_name, col_pos, col_season, col_delete = st.columns([2, 1, 1, 1])
+                        
+                        with col_name:
+                            st.write(f"{name}")
+                        with col_pos:
+                            st.write(f"{position}º")
+                        with col_season:
+                            st.write(f"{season}")
+                        with col_delete:
+                            if st.button("🗑️ Deletar", key=f"delete_{record_id}"):
+                                try:
+                                    c.execute("DELETE FROM posicoes_participantes WHERE id = ?", (record_id,))
+                                    conn.commit()
+                                    st.success(f"✅ Registro deletado")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao deletar: {e}")
+                else:
+                    st.info("Nenhum registro encontrado.")
+            
+            # Bulk import section
+            st.subheader("📥 Importação em Lote")
             
             with st.expander("📥 Importar 20 anos de resultados"):
                 st.write("""

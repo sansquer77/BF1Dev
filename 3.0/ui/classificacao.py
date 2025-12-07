@@ -328,9 +328,8 @@ def main():
         st.info("Sem dados para exibir o gráfico de evolução.")
 
     st.subheader("Classificação de Cada Participante ao Longo do Campeonato")
-    conn = db_connect()
-    df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
-    conn.close()
+    with db_connect() as conn:
+        df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
     fig_all = go.Figure()
     for part in participantes['nome']:
         usuario_id = participantes[participantes['nome'] == part].iloc[0]['id']
