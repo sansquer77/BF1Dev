@@ -145,8 +145,8 @@ def hall_da_fama():
                 medal = medals[idx] if idx < 3 else f"{idx + 1}."
                 st.write(f"{medal} **{name}** - Melhor posição: {best_pos}º (em {seasons_count} temporadas)")
         
-        # Admin panel for importing historical data
-        if st.session_state.get('user_role') in ('admin', 'master'):
+        # Admin panel for importing historical data (Master only)
+        if st.session_state.get('user_role') == 'master':
             st.markdown("---")
             st.subheader("⚙️ Administração - Importar Dados Históricos")
             
