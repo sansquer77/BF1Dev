@@ -14,6 +14,8 @@ from db.db_config import BCRYPT_ROUNDS, DB_PATH
 
 logger = logging.getLogger(__name__)
 
+import datetime
+
 # Inicializar pool ao importar
 init_pool(str(DB_PATH))
 
@@ -226,37 +228,142 @@ def get_pilotos_df() -> pd.DataFrame:
     with db_connect() as conn:
         return pd.read_sql_query('SELECT * FROM pilotos', conn)
 
-def get_provas_df() -> pd.DataFrame:
-    """Retorna todas as provas como DataFrame"""
-    with db_connect() as conn:
-        return pd.read_sql_query('SELECT * FROM provas', conn)
+def _read_table_df(table: str, temporada: Optional[str] = None) -> pd.DataFrame:
+    """Helper: read table into DataFrame, filtering by `temporada` when column exists.
 
-def get_apostas_df() -> pd.DataFrame:
-    """Retorna todas as apostas como DataFrame"""
-    with db_connect() as conn:
-        return pd.read_sql_query('SELECT * FROM apostas', conn)
-
-def get_resultados_df() -> pd.DataFrame:
-    """Retorna todos os resultados como DataFrame"""
-    with db_connect() as conn:
-        return pd.read_sql_query('SELECT * FROM resultados', conn)
-
-def registrar_log_aposta(usuario_id: int, prova_id: int, piloto_id: int, pontos: int = 0):
-    """Registra uma aposta no log"""
+    If `temporada` is None, defaults to current year as string.
+    """
+    if temporada is None:
+        temporada = str(datetime.datetime.now().year)
     with db_connect() as conn:
         c = conn.cursor()
-        c.execute(
-            'INSERT INTO apostas (usuario_id, prova_id, piloto_id, pontos) VALUES (?, ?, ?, ?)',
-            (usuario_id, prova_id, piloto_id, pontos)
-        )
+        c.execute(f"PRAGMA table_info('{table}')")
+        cols = [r[1] for r in c.fetchall()]
+        if 'temporada' in cols:
+            return pd.read_sql_query(f"SELECT * FROM {table} WHERE temporada = ?", conn, params=(temporada,))
+        else:
+            return pd.read_sql_query(f"SELECT * FROM {table}", conn)
+
+
+def get_provas_df(temporada: Optional[str] = None) -> pd.DataFrame:
+    """Retorna todas as provas como DataFrame (filtra por `temporada` quando disponível)."""
+    return _read_table_df('provas', temporada)
+
+
+def get_apostas_df(temporada: Optional[str] = None) -> pd.DataFrame:
+    """Retorna todas as apostas como DataFrame (filtra por `temporada` quando disponível)."""
+    return _read_table_df('apostas', temporada)
+
+
+def get_resultados_df(temporada: Optional[str] = None) -> pd.DataFrame:
+    """Retorna todos os resultados como DataFrame (filtra por `temporada` quando disponível)."""
+    return _read_table_df('resultados', temporada)
+
+
+def registrar_log_aposta(*args, **kwargs):
+    """Registro flexível de log de apostas.
+
+    Supports two call patterns for backward compatibility:
+    1) registrar_log_aposta(usuario_id, prova_id, piloto_id, pontos=0, temporada=None)
+    2) registrar_log_aposta(apostador=..., aposta=..., nome_prova=..., piloto_11=..., tipo_aposta=..., automatica=..., horario=...)
+
+    If pattern (2) is used, entries are stored in an `apostas_log` table (created on demand).
+    If pattern (1) is used, an entry is inserted into `apostas` (respecting `temporada` column when present).
+    """
+    # Pattern 2: verbose logging via kwargs
+    if kwargs and ('apostador' in kwargs or 'aposta' in kwargs):
+        apostador = kwargs.get('apostador')
+        aposta = kwargs.get('aposta')
+        nome_prova = kwargs.get('nome_prova')
+        piloto_11 = kwargs.get('piloto_11')
+        tipo_aposta = kwargs.get('tipo_aposta')
+        automatica = kwargs.get('automatica')
+        horario = kwargs.get('horario')
+        with db_connect() as conn:
+            c = conn.cursor()
+            # create log table if not exists
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS apostas_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    apostador TEXT,
+                    aposta TEXT,
+                    nome_prova TEXT,
+                    piloto_11 TEXT,
+                    tipo_aposta INTEGER,
+                    automatica INTEGER,
+                    horario TIMESTAMP,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            c.execute(
+                'INSERT INTO apostas_log (apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario)
+            )
+            conn.commit()
+            logger.info(f"✓ Aposta log registrada (apostas_log): {apostador} - {nome_prova}")
+        return
+
+    # Pattern 1: positional insert into apostas
+    # Normalize args
+    usuario_id = None
+    prova_id = None
+    piloto_id = None
+    pontos = 0
+    temporada = None
+    if len(args) >= 1:
+        usuario_id = args[0]
+    if len(args) >= 2:
+        prova_id = args[1]
+    if len(args) >= 3:
+        piloto_id = args[2]
+    if len(args) >= 4:
+        pontos = args[3]
+    # kwargs override
+    if 'usuario_id' in kwargs:
+        usuario_id = kwargs.get('usuario_id')
+    if 'prova_id' in kwargs:
+        prova_id = kwargs.get('prova_id')
+    if 'piloto_id' in kwargs:
+        piloto_id = kwargs.get('piloto_id')
+    if 'pontos' in kwargs:
+        pontos = kwargs.get('pontos')
+    if 'temporada' in kwargs:
+        temporada = kwargs.get('temporada')
+
+    if temporada is None:
+        temporada = str(datetime.datetime.now().year)
+
+    with db_connect() as conn:
+        c = conn.cursor()
+        # Detect if temporada column exists
+        c.execute("PRAGMA table_info('apostas')")
+        cols = [r[1] for r in c.fetchall()]
+        if 'temporada' in cols:
+            c.execute(
+                'INSERT INTO apostas (usuario_id, prova_id, piloto_id, pontos, temporada) VALUES (?, ?, ?, ?, ?)',
+                (usuario_id, prova_id, piloto_id, pontos, temporada)
+            )
+        else:
+            c.execute(
+                'INSERT INTO apostas (usuario_id, prova_id, piloto_id, pontos) VALUES (?, ?, ?, ?)',
+                (usuario_id, prova_id, piloto_id, pontos)
+            )
         conn.commit()
         logger.info(f"✓ Aposta registrada: usuário {usuario_id}, prova {prova_id}, piloto {piloto_id}")
 
-def log_aposta_existe(usuario_id: int, prova_id: int) -> bool:
-    """Verifica se existe aposta para usuário em uma prova"""
+
+def log_aposta_existe(usuario_id: int, prova_id: int, temporada: Optional[str] = None) -> bool:
+    """Verifica se existe aposta para usuário em uma prova (opcionalmente filtrando por temporada)."""
+    if temporada is None:
+        temporada = str(datetime.datetime.now().year)
     with db_connect() as conn:
         c = conn.cursor()
-        c.execute('SELECT 1 FROM apostas WHERE usuario_id = ? AND prova_id = ?', (usuario_id, prova_id))
+        c.execute("PRAGMA table_info('apostas')")
+        cols = [r[1] for r in c.fetchall()]
+        if 'temporada' in cols:
+            c.execute('SELECT 1 FROM apostas WHERE usuario_id = ? AND prova_id = ? AND temporada = ?', (usuario_id, prova_id, temporada))
+        else:
+            c.execute('SELECT 1 FROM apostas WHERE usuario_id = ? AND prova_id = ?', (usuario_id, prova_id))
         return c.fetchone() is not None
 
 def update_user_email(user_id: int, novo_email: str) -> bool:

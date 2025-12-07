@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import ast
+import datetime
 
 from db.db_utils import (
     db_connect, get_user_by_id, get_provas_df, get_pilotos_df, get_apostas_df, get_resultados_df,
@@ -25,6 +26,11 @@ def participante_view():
         st.image("BF1.jpg", width=75)
     with col2:
         st.title("Painel do Participante")
+        # Season selector (temporada) for plurianual support
+        current_year = datetime.datetime.now().year
+        season_options = [str(y) for y in range(current_year - 2, current_year + 2)]
+        season = st.selectbox("Temporada", season_options, index=season_options.index(str(current_year)))
+        st.session_state['temporada'] = season
     
     st.write(f"Bem-vindo, {user['nome']} ({user['email']}) - Status: {user['perfil']}")
 
@@ -33,7 +39,8 @@ def participante_view():
     # ------------------ Aba: Apostas ----------------------
     with tabs[0]:
         st.cache_data.clear()
-        provas = get_provas_df()
+        temporada = st.session_state.get('temporada', str(datetime.datetime.now().year))
+        provas = get_provas_df(temporada)
         pilotos_df = get_pilotos_df()
         pilotos_ativos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
         pilotos = pilotos_ativos_df['nome'].tolist()
@@ -124,7 +131,7 @@ def participante_view():
                     else:
                         salvar_aposta(
                             user['id'], prova_id, pilotos_validos,
-                            fichas_validas, piloto_11, nome_prova, automatica=0
+                            fichas_validas, piloto_11, nome_prova, automatica=0, temporada=temporada
                         )
                         st.success("Aposta registrada/atualizada!")
                         st.cache_data.clear()
@@ -136,9 +143,9 @@ def participante_view():
 
         # --- Exibição detalhada das apostas do participante ---
         st.subheader("Minhas apostas detalhadas")
-        apostas_df = get_apostas_df()
-        resultados_df = get_resultados_df()
-        provas_df = get_provas_df()
+        apostas_df = get_apostas_df(temporada)
+        resultados_df = get_resultados_df(temporada)
+        provas_df = get_provas_df(temporada)
 
         apostas_part = apostas_df[apostas_df['usuario_id'] == user['id']].sort_values('prova_id')
         pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]

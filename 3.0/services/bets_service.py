@@ -18,7 +18,7 @@ from services.email_service import enviar_email
 
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
-    automatica=0, horario_forcado=None
+    automatica=0, horario_forcado=None, temporada: str = None
 ):
     # Garante tipo correto para os argumentos IDs (resolve erro de usuário não encontrado)
     try:
@@ -55,22 +55,46 @@ def salvar_aposta(
     try:
         conn = db_connect()
         c = conn.cursor()
-        c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+        # Detect if temporada column exists and include it in queries when present
+        c.execute("PRAGMA table_info('apostas')")
+        aposta_cols = [r[1] for r in c.fetchall()]
+        if temporada is None:
+            temporada = str(datetime.now().year)
+
+        if 'temporada' in aposta_cols:
+            c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=? AND temporada=?', (usuario_id, prova_id, temporada))
+        else:
+            c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
         if tipo_aposta == 0:
             data_envio = agora_sp.isoformat()
-            c.execute(
-                '''
-                INSERT INTO apostas
-                (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''',
-                (
-                    usuario_id, prova_id, data_envio,
-                    ','.join(pilotos),
-                    ','.join(map(str, fichas)),
-                    piloto_11, nome_prova_bd, automatica
+            if 'temporada' in aposta_cols:
+                c.execute(
+                    '''
+                    INSERT INTO apostas
+                    (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica, temporada)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''',
+                    (
+                        usuario_id, prova_id, data_envio,
+                        ','.join(pilotos),
+                        ','.join(map(str, fichas)),
+                        piloto_11, nome_prova_bd, automatica, temporada
+                    )
                 )
-            )
+            else:
+                c.execute(
+                    '''
+                    INSERT INTO apostas
+                    (usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, nome_prova, automatica)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''',
+                    (
+                        usuario_id, prova_id, data_envio,
+                        ','.join(pilotos),
+                        ','.join(map(str, fichas)),
+                        piloto_11, nome_prova_bd, automatica
+                    )
+                )
             conn.commit()
             corpo_email = f"""
             <p>Olá {usuario[1]},</p>
