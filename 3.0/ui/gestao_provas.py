@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from db.db_utils import get_provas_df, db_connect
 from datetime import datetime
+import datetime as dt
 
 def main():
     st.title("🏁 Gestão de Provas")
@@ -11,7 +12,13 @@ def main():
         st.warning("Acesso restrito a administradores.")
         return
 
-    df = get_provas_df().sort_values(by="data")
+    # Season selector
+    current_year = dt.datetime.now().year
+    season_options = [str(y) for y in range(current_year - 2, current_year + 2)]
+    season = st.selectbox("Temporada", season_options, index=season_options.index(str(current_year)), key="gestao_provas_season")
+    st.session_state['temporada'] = season
+
+    df = get_provas_df(season).sort_values(by="data")
     if df.empty:
         st.info("Nenhuma prova cadastrada.")
     else:

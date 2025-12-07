@@ -55,6 +55,7 @@ from ui.gestao_pilotos import main as gestao_pilotos_view
 from ui.backup import main as backup_view
 from ui.dashboard import main as dashboard_view
 from ui.sobre import main as sobre_view
+from ui.hall_da_fama import hall_da_fama
 from services.auth_service import decode_token
 
 # ============ ESTADO INICIAL DA SESSÃO ============
@@ -78,6 +79,7 @@ def menu_master():
         "Resultado Campeonato",
         "Log de Apostas",
         "Classificação",
+        "Hall da Fama",
         "Dashboard F1",
         "Backup dos Bancos de Dados",
         "Regulamento",
@@ -98,6 +100,7 @@ def menu_admin():
         "Resultado Campeonato",
         "Log de Apostas",
         "Classificação",
+        "Hall da Fama",
         "Dashboard F1",
         "Regulamento",
         "Sobre",
@@ -111,6 +114,7 @@ def menu_participante():
         "Análise de Apostas",
         "Log de Apostas",
         "Classificação",
+        "Hall da Fama",
         "Dashboard F1",
         "Regulamento",
         "Sobre",
@@ -144,6 +148,7 @@ PAGES = {
     "Resultado Campeonato": championship_results_view,
     "Log de Apostas": log_apostas_view,
     "Classificação": classificacao_view,
+    "Hall da Fama": hall_da_fama,
     "Dashboard F1": dashboard_view,
     "Backup dos Bancos de Dados": backup_view,
     "Regulamento": regulamento_view,

@@ -1,4 +1,5 @@
 import streamlit as st
+import datetime as dt
 from db.db_utils import get_usuarios_df, get_provas_df, get_apostas_df
 from services.bets_service import gerar_aposta_automatica
 
@@ -10,9 +11,15 @@ def main():
         st.warning("Acesso restrito a administradores.")
         return
 
+    # Season selector
+    current_year = dt.datetime.now().year
+    season_options = [str(y) for y in range(current_year - 2, current_year + 2)]
+    season = st.selectbox("Temporada", season_options, index=season_options.index(str(current_year)), key="gestao_apostas_season")
+    st.session_state['temporada'] = season
+
     usuarios_df = get_usuarios_df()
-    provas_df = get_provas_df()
-    apostas_df = get_apostas_df()
+    provas_df = get_provas_df(season)
+    apostas_df = get_apostas_df(season)
     participantes = usuarios_df[usuarios_df['status'] == "Ativo"].copy()
     provas_df = provas_df.sort_values("data")
 

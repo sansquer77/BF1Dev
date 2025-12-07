@@ -108,8 +108,7 @@ def initialize_database():
         else:
             logger.info("   ✓ Usuário Master já existe")
         
-        logger.info("✅ Banco de dados inicializado com sucesso!
-")
+        logger.info("✅ Banco de dados inicializado com sucesso!")
         return True
         
     except Exception as e:

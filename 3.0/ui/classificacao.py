@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from io import BytesIO
 import matplotlib.image as mpimg
+import datetime as dt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 from db.db_utils import db_connect, get_usuarios_df, get_provas_df, get_apostas_df, get_resultados_df
@@ -122,10 +123,16 @@ def main():
     with col2:
         st.title("Classificação Geral do Bolão")
 
+    # Season selector
+    current_year = dt.datetime.now().year
+    season_options = [str(y) for y in range(current_year - 2, current_year + 2)]
+    season = st.selectbox("Temporada", season_options, index=season_options.index(str(current_year)), key="classificacao_season")
+    st.session_state['temporada'] = season
+
     usuarios_df = get_usuarios_df()
-    provas_df = get_provas_df()
-    apostas_df = get_apostas_df()
-    resultados_df = get_resultados_df()
+    provas_df = get_provas_df(season)
+    apostas_df = get_apostas_df(season)
+    resultados_df = get_resultados_df(season)
 
     participantes = usuarios_df[(usuarios_df['status'] == 'Ativo') & (usuarios_df['nome'] != 'Master')]
     provas_df = provas_df.sort_values('data')
