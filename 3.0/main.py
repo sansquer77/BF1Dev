@@ -144,7 +144,7 @@ from ui.regulamento import main as regulamento_view
 from ui.classificacao import main as classificacao_view
 from ui.log_apostas import main as log_apostas_view
 from ui.gestao_provas import main as gestao_provas_view
-    from ui.gestao_regras import gestao_regras_view
+    from ui.gestao_regras import main as gestao_regras_view
 from ui.gestao_pilotos import main as gestao_pilotos_view
 from ui.backup import main as backup_view
 from ui.dashboard import main as dashboard_view
