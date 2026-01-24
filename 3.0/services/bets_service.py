@@ -16,9 +16,46 @@ from db.db_utils import (
 )
 from services.email_service import enviar_email
 
+
+def pode_fazer_aposta(data_prova_str, horario_prova_str, horario_usuario=None):
+    """
+    Verifica se o usuário pode fazer aposta comparando horário local com horário de São Paulo.
+    
+    Args:
+        data_prova_str: Data da prova (YYYY-MM-DD)
+        horario_prova_str: Horário da prova em SP (HH:MM:SS)
+        horario_usuario: DateTime do usuário (se None, usa agora em SP)
+    
+    Returns:
+        tuple: (pode_fazer: bool, mensagem: str, horario_limite_sp: datetime)
+    """
+    try:
+        # Horário limite em São Paulo
+        horario_limite_sp = datetime.strptime(
+            f"{data_prova_str} {horario_prova_str}", '%Y-%m-%d %H:%M:%S'
+        ).replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+        
+        # Horário do usuário (padrão: agora em SP)
+        if horario_usuario is None:
+            horario_usuario = datetime.now(ZoneInfo("America/Sao_Paulo"))
+        elif not horario_usuario.tzinfo:
+            # Se sem timezone, assume SP
+            horario_usuario = horario_usuario.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+        
+        # Converte para UTC para comparar
+        horario_usuario_utc = horario_usuario.astimezone(ZoneInfo("UTC"))
+        horario_limite_utc = horario_limite_sp.astimezone(ZoneInfo("UTC"))
+        
+        pode = horario_usuario_utc <= horario_limite_utc
+        mensagem = f"Aposta {'permitida' if pode else 'bloqueada'} (Horário limite SP: {horario_limite_sp.strftime('%d/%m/%Y %H:%M:%S')})"
+        
+        return pode, mensagem, horario_limite_sp
+    except Exception as e:
+        return False, f"Erro ao validar horário: {str(e)}", None
+
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
-    automatica=0, horario_forcado=None, temporada: str = None
+    automatica=0, horario_forcado=None, temporada: str | None = None
 ):
     # Garante tipo correto para os argumentos IDs (resolve erro de usuário não encontrado)
     try:
@@ -42,7 +79,8 @@ def salvar_aposta(
     ).replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
     agora_sp = horario_forcado or datetime.now(ZoneInfo("America/Sao_Paulo"))
     tipo_aposta = 0 if agora_sp <= horario_limite else 1
-    dados_aposta = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
+    dados_pilotos = ', '.join(pilotos)
+    dados_fichas = ', '.join(map(str, fichas))
 
     usuario = get_user_by_id(usuario_id)
     if not usuario:
@@ -116,18 +154,15 @@ def salvar_aposta(
 
     registrar_log_aposta(
         apostador=usuario[1],
-        aposta=dados_aposta,
+        pilotos=dados_pilotos,
+        aposta=dados_fichas,
         nome_prova=nome_prova_bd,
         piloto_11=piloto_11,
         tipo_aposta=tipo_aposta,
         automatica=automatica,
-        horario=agora_sp
+        horario=agora_sp,
+        temporada=temporada
     )
-    if automatica:
-        with db_connect() as conn:
-            c = conn.cursor()
-            c.execute('UPDATE usuarios SET faltas = faltas + 1 WHERE id=?', (usuario_id,))
-            conn.commit()
     return True
 
 def gerar_aposta_aleatoria(pilotos_df):
@@ -162,7 +197,7 @@ def gerar_aposta_aleatoria(pilotos_df):
     piloto_11 = random.choice(candidatos_11) if candidatos_11 else random.choice(todos_pilotos)
     return pilotos_sel, fichas, piloto_11
 
-def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas_df):
+def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas_df, temporada=None):
     try:
         usuario_id = int(usuario_id)
         prova_id = int(prova_id)
@@ -206,7 +241,7 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     nova_automatica = 1 if max_automatica is None else max_automatica + 1
     sucesso = salvar_aposta(
         usuario_id, prova_id, pilotos_ant, fichas_ant,
-        piloto_11_ant, nome_prova, automatica=nova_automatica, horario_forcado=horario_limite
+        piloto_11_ant, nome_prova, automatica=nova_automatica, horario_forcado=horario_limite, temporada=temporada
     )
     return (True, "Aposta automática gerada com sucesso!") if sucesso else (False, "Falha ao salvar aposta automática.")
 
@@ -248,12 +283,25 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
         piloto_11_real = res.get(11, "")
         if piloto_11 == piloto_11_real:
             pt += bonus_11
+        # Penalidade de 25% (0.75x) a partir da segunda aposta automática (automatica >= 2)
         if automatica and int(automatica) >= 2:
             pt = round(pt * 0.75, 2)
         pontos.append(pt)
     return pontos
 
-def salvar_classificacao_prova(prova_id, df_classificacao):
+def salvar_classificacao_prova(prova_id, df_classificacao, temporada=None):
+    """
+    Salva classificação de uma prova na tabela posicoes_participantes.
+    
+    Args:
+        prova_id: ID da prova
+        df_classificacao: DataFrame com colunas usuario_id, posicao, pontos
+        temporada: Ano da temporada (opcional, usa ano atual se não fornecido)
+    """
+    if temporada is None:
+        import datetime
+        temporada = str(datetime.datetime.now().year)
+    
     with db_connect() as conn:
         cursor = conn.cursor()
         for _, row in df_classificacao.iterrows():
@@ -263,9 +311,9 @@ def salvar_classificacao_prova(prova_id, df_classificacao):
             data_registro = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
             cursor.execute('''
                 INSERT OR REPLACE INTO posicoes_participantes 
-                (prova_id, usuario_id, posicao, pontos, data_registro)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (prova_id, usuario_id, posicao, pontos_val, data_registro))
+                (prova_id, usuario_id, posicao, pontos, data_registro, temporada)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (prova_id, usuario_id, posicao, pontos_val, data_registro, temporada))
         conn.commit()
 
 def atualizar_classificacoes_todas_as_provas():
@@ -276,6 +324,8 @@ def atualizar_classificacoes_todas_as_provas():
         resultados_df = pd.read_sql('SELECT * FROM resultados', conn)
     for _, prova in provas_df.iterrows():
         prova_id = prova['id']
+        # Get temporada from prova if available, otherwise use current year
+        temporada = prova.get('temporada', str(pd.Timestamp.now().year))
         if prova_id not in resultados_df['prova_id'].values:
             continue
         apostas_prova = apostas_df[apostas_df['prova_id'] == prova_id]
@@ -315,4 +365,4 @@ def atualizar_classificacoes_todas_as_provas():
             ascending=[False, False, True]
         ).reset_index(drop=True)
         df_classificacao['posicao'] = df_classificacao.index + 1
-        salvar_classificacao_prova(prova_id, df_classificacao)
+        salvar_classificacao_prova(prova_id, df_classificacao, temporada)

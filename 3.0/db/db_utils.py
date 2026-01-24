@@ -8,6 +8,7 @@ import pandas as pd
 from pathlib import Path
 import bcrypt
 import logging
+import os
 from typing import Optional, Dict
 from db.connection_pool import get_pool, init_pool
 from db.db_config import BCRYPT_ROUNDS, DB_PATH
@@ -16,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 import datetime
 
-# Inicializar pool ao importar
-init_pool(str(DB_PATH))
+# NÃO inicializar pool aqui - será lazy-initialized em get_pool()
+# Isso evita criar pool com arquivo antigo antes da importação substituir
 
 # ============ FUNÇÕES DE CONEXÃO ============
 
@@ -61,6 +62,24 @@ def check_password(senha: str, hash_senha: str) -> bool:
 
 def init_db():
     """Inicializa o banco de dados com todas as tabelas necessárias"""
+    # Verificar integridade e recuperar se necessário
+    try:
+        with sqlite3.connect(str(DB_PATH), timeout=10) as test_conn:
+            test_conn.execute("PRAGMA integrity_check")
+            test_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.DatabaseError as e:
+        logger.error(f"Banco corrompido detectado: {e}. Tentando recuperação...")
+        try:
+            # Tentar recuperação via dump
+            import os
+            backup_path = str(DB_PATH) + ".corrupted_backup"
+            if Path(DB_PATH).exists():
+                os.rename(str(DB_PATH), backup_path)
+                logger.info(f"Banco corrompido movido para {backup_path}")
+            # O banco será recriado abaixo
+        except Exception as recovery_error:
+            logger.error(f"Erro na recuperação: {recovery_error}")
+    
     # Cria o esquema compatível com o dump histórico (pilotos com 'equipe', provas com 'horario_prova' e 'tipo', resultados com 'posicoes')
     with db_connect() as conn:
         c = conn.cursor()
@@ -269,42 +288,85 @@ def registrar_log_aposta(*args, **kwargs):
 
     Supports two call patterns for backward compatibility:
     1) registrar_log_aposta(usuario_id, prova_id, piloto_id, pontos=0, temporada=None)
-    2) registrar_log_aposta(apostador=..., aposta=..., nome_prova=..., piloto_11=..., tipo_aposta=..., automatica=..., horario=...)
+    2) registrar_log_aposta(apostador=..., pilotos=..., aposta=..., nome_prova=..., piloto_11=..., tipo_aposta=..., automatica=..., horario=...)
 
-    If pattern (2) is used, entries are stored in an `apostas_log` table (created on demand).
+    If pattern (2) is used, entries are stored in an `log_apostas` table (created on demand).
     If pattern (1) is used, an entry is inserted into `apostas` (respecting `temporada` column when present).
+    
+    Pattern (2) fields:
+    - apostador: username/name of bettor
+    - pilotos: comma-separated list of pilot names (e.g., "Oscar Piastri, Max Verstappen, George Russell")
+    - aposta: comma-separated list of chips/fichas (e.g., "7, 7, 1")
+    - nome_prova: race name
+    - piloto_11: predicted 11th place finisher
+    - tipo_aposta: 0=on-time, 1=late
+    - automatica: 0=manual, 1+=automatic (with penalty if >=2)
+    - horario: timestamp of bet registration
+    - temporada: season/year (optional, defaults to current year)
     """
     # Pattern 2: verbose logging via kwargs
     if kwargs and ('apostador' in kwargs or 'aposta' in kwargs):
         apostador = kwargs.get('apostador')
         aposta = kwargs.get('aposta')
+        pilotos = kwargs.get('pilotos')
         nome_prova = kwargs.get('nome_prova')
         piloto_11 = kwargs.get('piloto_11')
         tipo_aposta = kwargs.get('tipo_aposta')
         automatica = kwargs.get('automatica')
         horario = kwargs.get('horario')
+        temporada = kwargs.get('temporada', str(datetime.datetime.now().year))
+
+        # Derivar data/horario strings
+        data_str = None
+        horario_str = None
+        try:
+            if horario:
+                data_str = getattr(horario, 'date', lambda: None)()
+                data_str = data_str.isoformat() if data_str else None
+                horario_str = horario.isoformat() if hasattr(horario, 'isoformat') else str(horario)
+        except Exception:
+            data_str = None
+            horario_str = None
+
         with db_connect() as conn:
             c = conn.cursor()
-            # create log table if not exists
-            c.execute('''
-                CREATE TABLE IF NOT EXISTS apostas_log (
+            # create log table if not exists (using log_apostas name for consistency)
+            c.execute(f'''
+                CREATE TABLE IF NOT EXISTS log_apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usuario_id INTEGER,
+                    prova_id INTEGER,
                     apostador TEXT,
                     aposta TEXT,
                     nome_prova TEXT,
+                    pilotos TEXT,
                     piloto_11 TEXT,
                     tipo_aposta INTEGER,
                     automatica INTEGER,
+                    data TEXT,
                     horario TIMESTAMP,
-                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    temporada TEXT DEFAULT '{datetime.datetime.now().year}',
+                    status TEXT DEFAULT 'Registrada',
+                    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+                    FOREIGN KEY (prova_id) REFERENCES provas(id)
                 )
             ''')
-            c.execute(
-                'INSERT INTO apostas_log (apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                (apostador, aposta, nome_prova, piloto_11, tipo_aposta, automatica, horario)
-            )
+            # Check if temporada column exists
+            c.execute("PRAGMA table_info('log_apostas')")
+            cols = [r[1] for r in c.fetchall()]
+            if 'temporada' in cols:
+                c.execute(
+                    'INSERT INTO log_apostas (apostador, aposta, nome_prova, pilotos, piloto_11, tipo_aposta, automatica, data, horario, temporada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (apostador, aposta, nome_prova, pilotos, piloto_11, tipo_aposta, automatica, data_str, horario_str, temporada)
+                )
+            else:
+                c.execute(
+                    'INSERT INTO log_apostas (apostador, aposta, nome_prova, pilotos, piloto_11, tipo_aposta, automatica, horario) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    (apostador, aposta, nome_prova, pilotos, piloto_11, tipo_aposta, automatica, horario_str)
+                )
             conn.commit()
-            logger.info(f"✓ Aposta log registrada (apostas_log): {apostador} - {nome_prova}")
+            logger.info(f"✓ Aposta log registrada (log_apostas): {apostador} - {nome_prova}")
         return
 
     # Pattern 1: positional insert into apostas

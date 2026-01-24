@@ -53,7 +53,7 @@ def add_temporada_columns_if_missing():
 def add_legacy_columns_if_missing():
     """
     Adiciona colunas presentes no schema legado mas que podem faltar em bancos antigos:
-    - `equipe` e `status` em `pilotos`
+    - `equipe`, `status` e `numero` em `pilotos`
     - `horario_prova` e `tipo` em `provas`
     Idempotent: não faz nada se a coluna já existe.
     """
@@ -70,6 +70,9 @@ def add_legacy_columns_if_missing():
             if 'status' not in cols:
                 cursor.execute("ALTER TABLE pilotos ADD COLUMN status TEXT DEFAULT 'Ativo'")
                 logger.info("✓ Coluna `status` adicionada a `pilotos`")
+            if 'numero' not in cols:
+                cursor.execute("ALTER TABLE pilotos ADD COLUMN numero INTEGER DEFAULT 0")
+                logger.info("✓ Coluna `numero` adicionada a `pilotos`")
 
             # Provas
             cursor.execute("PRAGMA table_info('provas')")
@@ -92,24 +95,81 @@ def create_missing_tables_if_needed():
     Idempotent: usa CREATE TABLE IF NOT EXISTS.
     """
     pool = get_pool()
+    current_year = datetime.datetime.now().year
     with pool.get_connection() as conn:
         cursor = conn.cursor()
         try:
-            # Tabela championship_bets
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS championship_bets (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    user_nome TEXT NOT NULL,
-                    champion TEXT NOT NULL,
-                    vice TEXT NOT NULL,
-                    team TEXT NOT NULL,
-                    bet_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES usuarios(id),
-                    UNIQUE(user_id)
-                )
-            ''')
-            logger.info("✓ Tabela `championship_bets` criada ou já existe")
+            # Tabela championship_bets (agora com coluna season e UNIQUE por usuário+season)
+            cursor.execute("PRAGMA table_info('championship_bets')")
+            bets_cols = cursor.fetchall()
+            has_bets = bool(bets_cols)
+            bets_has_season = any(col[1] == 'season' for col in bets_cols)
+            cursor.execute("PRAGMA index_list('championship_bets')")
+            idx_list = cursor.fetchall()
+            has_user_season_unique = False
+            has_old_user_unique = False
+            for idx in idx_list:
+                idx_name = idx[1]
+                is_unique = bool(idx[2])
+                if not is_unique:
+                    continue
+                cursor.execute(f"PRAGMA index_info('{idx_name}')")
+                cols_for_idx = [r[2] for r in cursor.fetchall()]
+                if cols_for_idx == ['user_id']:
+                    has_old_user_unique = True
+                if cols_for_idx == ['user_id', 'season']:
+                    has_user_season_unique = True
+
+            if not has_bets:
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS championship_bets (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        user_nome TEXT NOT NULL,
+                        champion TEXT NOT NULL,
+                        vice TEXT NOT NULL,
+                        team TEXT NOT NULL,
+                        season INTEGER NOT NULL,
+                        bet_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES usuarios(id),
+                        UNIQUE(user_id, season)
+                    )
+                ''')
+                logger.info("✓ Tabela `championship_bets` criada com coluna season")
+            else:
+                # Se não tiver season ou a UNIQUE antiga (apenas user_id), recria com o novo esquema
+                needs_rebuild = (not bets_has_season) or (not has_user_season_unique) or has_old_user_unique
+                if needs_rebuild:
+                    logger.info("↻ Atualizando `championship_bets` para suportar temporadas...")
+                    cursor.execute("PRAGMA foreign_keys=OFF")
+                    cursor.execute("BEGIN")
+                    cursor.execute('''
+                        CREATE TABLE IF NOT EXISTS championship_bets__new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            user_nome TEXT NOT NULL,
+                            champion TEXT NOT NULL,
+                            vice TEXT NOT NULL,
+                            team TEXT NOT NULL,
+                            season INTEGER NOT NULL,
+                            bet_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (user_id) REFERENCES usuarios(id),
+                            UNIQUE(user_id, season)
+                        )
+                    ''')
+                    # Copia dados antigos colocando season padrão no ano atual
+                    cursor.execute('''
+                        INSERT INTO championship_bets__new (user_id, user_nome, champion, vice, team, season, bet_time)
+                        SELECT user_id, user_nome, champion, vice, team, ?, bet_time
+                        FROM championship_bets
+                    ''', (current_year,))
+                    cursor.execute("DROP TABLE championship_bets")
+                    cursor.execute("ALTER TABLE championship_bets__new RENAME TO championship_bets")
+                    cursor.execute("COMMIT")
+                    cursor.execute("PRAGMA foreign_keys=ON")
+                    logger.info("✓ `championship_bets` agora tem coluna season e UNIQUE(user_id, season)")
+                else:
+                    logger.debug("  `championship_bets` já compatível com temporadas")
 
             # Tabela championship_results
             cursor.execute('''
@@ -125,7 +185,10 @@ def create_missing_tables_if_needed():
             logger.info("✓ Tabela `championship_results` criada ou já existe")
 
             # Tabela championship_bets_log
-            cursor.execute('''
+            cursor.execute("PRAGMA table_info('championship_bets_log')")
+            log_cols = cursor.fetchall()
+            log_has_season = any(col[1] == 'season' for col in log_cols)
+            cursor.execute(f'''
                 CREATE TABLE IF NOT EXISTS championship_bets_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -133,20 +196,36 @@ def create_missing_tables_if_needed():
                     champion TEXT NOT NULL,
                     vice TEXT NOT NULL,
                     team TEXT NOT NULL,
+                    season INTEGER NOT NULL DEFAULT {current_year},
                     bet_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES usuarios(id)
                 )
             ''')
             logger.info("✓ Tabela `championship_bets_log` criada ou já existe")
+            if log_cols and not log_has_season:
+                try:
+                    cursor.execute(f"ALTER TABLE championship_bets_log ADD COLUMN season INTEGER NOT NULL DEFAULT {current_year}")
+                    cursor.execute(f"UPDATE championship_bets_log SET season = {current_year} WHERE season IS NULL")
+                    logger.info("✓ Coluna season adicionada a `championship_bets_log`")
+                except Exception as e:
+                    logger.debug(f"  Falha ao adicionar season em championship_bets_log: {e}")
 
-            # Tabela log_apostas
-            cursor.execute('''
+            # Tabela log_apostas (garante colunas compatíveis com UI de log)
+            cursor.execute(f'''
                 CREATE TABLE IF NOT EXISTS log_apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    usuario_id INTEGER NOT NULL,
-                    prova_id INTEGER NOT NULL,
+                    usuario_id INTEGER,
+                    prova_id INTEGER,
+                    apostador TEXT,
+                    aposta TEXT,
+                    nome_prova TEXT,
                     pilotos TEXT,
                     piloto_11 TEXT,
+                    tipo_aposta INTEGER,
+                    automatica INTEGER,
+                    data TEXT,
+                    horario TIMESTAMP,
+                    temporada TEXT DEFAULT '{current_year}',
                     status TEXT DEFAULT 'Registrada',
                     data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
@@ -154,6 +233,71 @@ def create_missing_tables_if_needed():
                 )
             ''')
             logger.info("✓ Tabela `log_apostas` criada ou já existe")
+
+            # Rebuild log_apostas if legacy columns missing
+            cursor.execute("PRAGMA table_info('log_apostas')")
+            log_cols = [r[1] for r in cursor.fetchall()]
+            required_cols = {"apostador", "aposta", "nome_prova", "tipo_aposta", "automatica", "data", "horario", "temporada"}
+            has_required = required_cols.issubset(set(log_cols))
+            if not has_required:
+                logger.info("↻ Atualizando `log_apostas` para incluir colunas de temporada e metadados de aposta...")
+                cursor.execute("PRAGMA foreign_keys=OFF")
+                cursor.execute("BEGIN")
+                cursor.execute(f'''
+                    CREATE TABLE IF NOT EXISTS log_apostas__new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        usuario_id INTEGER,
+                        prova_id INTEGER,
+                        apostador TEXT,
+                        aposta TEXT,
+                        nome_prova TEXT,
+                        pilotos TEXT,
+                        piloto_11 TEXT,
+                        tipo_aposta INTEGER,
+                        automatica INTEGER,
+                        data TEXT,
+                        horario TIMESTAMP,
+                        temporada TEXT DEFAULT '{current_year}',
+                        status TEXT DEFAULT 'Registrada',
+                        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+                        FOREIGN KEY (prova_id) REFERENCES provas(id)
+                    )
+                ''')
+                # Copia dados legados, mapeando o que existir
+                cursor.execute("PRAGMA table_info('log_apostas')")
+                legacy_cols = [r[1] for r in cursor.fetchall()]
+                has_col = lambda name: name in legacy_cols
+                insert_sql = '''
+                    INSERT INTO log_apostas__new (usuario_id, prova_id, apostador, aposta, nome_prova, pilotos, piloto_11, tipo_aposta, automatica, data, horario, temporada, status, data_criacao)
+                    SELECT 
+                        usuario_id,
+                        prova_id,
+                        NULL,
+                        CASE WHEN {has_pilotos} THEN pilotos ELSE NULL END,
+                        NULL,
+                        CASE WHEN {has_pilotos} THEN pilotos ELSE NULL END,
+                        CASE WHEN {has_piloto11} THEN piloto_11 ELSE NULL END,
+                        0,
+                        0,
+                        DATE(CASE WHEN {has_data_criacao} THEN data_criacao ELSE CURRENT_TIMESTAMP END),
+                        CASE WHEN {has_data_criacao} THEN data_criacao ELSE CURRENT_TIMESTAMP END,
+                        '{current_year}',
+                        CASE WHEN {has_status} THEN status ELSE 'Registrada' END,
+                        CASE WHEN {has_data_criacao} THEN data_criacao ELSE CURRENT_TIMESTAMP END
+                    FROM log_apostas
+                '''.format(
+                    has_pilotos='1' if has_col('pilotos') else '0',
+                    has_piloto11='1' if has_col('piloto_11') else '0',
+                    has_data_criacao='1' if has_col('data_criacao') else '0',
+                    has_status='1' if has_col('status') else '0'
+                )
+                cursor.execute(insert_sql)
+                cursor.execute("DROP TABLE log_apostas")
+                cursor.execute("ALTER TABLE log_apostas__new RENAME TO log_apostas")
+                cursor.execute("COMMIT")
+                cursor.execute("PRAGMA foreign_keys=ON")
+                logger.info("✓ `log_apostas` atualizada para estrutura completa")
 
             conn.commit()
         except Exception as e:
@@ -209,3 +353,33 @@ def run_migrations():
             logger.error(f"✗ Erro ao executar migrations: {e}")
             conn.rollback()
             raise
+
+def create_hall_da_fama_table():
+    """
+    Cria a tabela hall_da_fama para armazenar resultados anuais independentes
+    """
+    try:
+        with get_pool().get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS hall_da_fama (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usuario_id INTEGER NOT NULL,
+                    temporada TEXT NOT NULL,
+                    posicao_final INTEGER NOT NULL,
+                    pontos REAL DEFAULT 0,
+                    UNIQUE(usuario_id, temporada),
+                    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+                )
+            ''')
+            conn.commit()
+            logger.info("✓ Tabela hall_da_fama criada com sucesso")
+    except Exception as e:
+        logger.error(f"Erro ao criar tabela hall_da_fama: {e}")
+        raise
+
+# Executar quando o módulo é importado
+try:
+    create_hall_da_fama_table()
+except:
+    pass
