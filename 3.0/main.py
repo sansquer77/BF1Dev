@@ -96,6 +96,7 @@ def load_pwa_meta_tags():
     
     # Meta tags básicas que funcionam no body também
     st.markdown("""
+    
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="theme-color" content="#0a0a0f">
     """, unsafe_allow_html=True)
@@ -143,6 +144,7 @@ from ui.regulamento import main as regulamento_view
 from ui.classificacao import main as classificacao_view
 from ui.log_apostas import main as log_apostas_view
 from ui.gestao_provas import main as gestao_provas_view
+    from ui.gestao_regras import gestao_regras_view
 from ui.gestao_pilotos import main as gestao_pilotos_view
 from ui.backup import main as backup_view
 from ui.dashboard import main as dashboard_view
@@ -163,6 +165,7 @@ def menu_master():
         "Gestão de Usuários",
         "Gestão de Pilotos",
         "Gestão de Provas",
+                        "Gestão de Regras",
         "Gestão de Apostas",
         "Gestão de Resultados",
         "Análise de Apostas",
@@ -234,6 +237,7 @@ PAGES = {
     "Gestão de Provas": gestao_provas_view,
     "Gestão de Apostas": gestao_apostas_view,
     "Gestão de Resultados": resultados_view,
+            "Gestão de Regras": gestao_regras_view,
     "Análise de Apostas": analysis_view,
     "Atualização de resultados": resultados_view,
     "Apostas Campeonato": championship_bets_view,
