@@ -69,9 +69,15 @@ def salvar_aposta(
     if not horario_prova or not nome_prova_bd or not data_prova:
         st.error("Prova não encontrada ou horário/nome/data não cadastrados.")
         return False
+    # Obter regras para validação
+    nome_prova_bd, data_prova, horario_prova = get_horario_prova(prova_id)
+    tipo_prova_regra = "Sprint" if "Sprint" in (nome_prova_bd or "") else "Normal"
+    regras = get_regras_aplicaveis(str(temporada or datetime.now().year), tipo_prova_regra)
+    limite_fichas = regras.get('limite_fichas', 15)
+    min_pilotos = regras.get('min_pilotos', 3)
 
-    if not pilotos or not fichas or not piloto_11 or len(pilotos) < 3 or sum(fichas) != 15:
-        st.error("Dados insuficientes para gerar aposta automática. Revise cadastro de pilotos e equipes.")
+        if not pilotos or not fichas or not piloto_11 or len(pilotos) < min_pilotos or sum(fichas) != limite_fichas:
+                st.error(f"Dados insuficientes para gerar aposta. Regra: {min_pilotos} pilotos e {limite_fichas} fichas.")
         return False
 
     horario_limite = datetime.strptime(
