@@ -1,7 +1,6 @@
 """
 Interface de Gestão de Regras de Temporada
 """
-
 import streamlit as st
 import pandas as pd
 import datetime
@@ -20,8 +19,10 @@ from db.backup_utils import list_temporadas
 def main():
     """View principal de Gestão de Regras"""
     col1, col2 = st.columns([1, 16])
+    
     with col1:
         st.image("BF1.jpg", width=75)
+    
     with col2:
         st.title("Gestão de Regras")
     
@@ -57,16 +58,14 @@ def main():
                 "Temporada": temp,
                 "Regra Aplicada": regra_atual['nome_regra'] if regra_atual else "Nenhuma"
             })
-            
+        
         df_config = pd.DataFrame(dados_config)
         st.table(df_config)
         
         st.write("### Associar Nova Regra")
         col_temp, col_regra = st.columns(2)
-        
         with col_temp:
             temporada_selecionada = st.selectbox("Selecione a Temporada", temporadas, key="temp_associar")
-            
         with col_regra:
             regra_selecionada = st.selectbox(
                 "Selecione a Regra", 
@@ -85,8 +84,8 @@ def main():
     # ========== ABA: Criar/Editar Regras ==========
     with tabs[1]:
         st.subheader("Gerenciar Regras")
-        
         regras_existentes = listar_regras()
+        
         modo = st.radio("Modo", ["Criar Nova Regra", "Editar Regra Existente", "Excluir Regra"], horizontal=True)
         
         if modo == "Criar Nova Regra":
@@ -96,7 +95,7 @@ def main():
                 st.warning("Nenhuma regra cadastrada para editar.")
             else:
                 regras_dict = {r['nome_regra']: r['id'] for r in regras_existentes}
-                regra_nome = st.selectbox("Selecione a Regra para Editar", list(regras_dict.keys()))
+                regra_nome = st.selectbox("Selecione a Rule para Editar", list(regras_dict.keys()))
                 regra_atual = get_regra_by_id(regras_dict[regra_nome])
                 regra_form(regra_atual)
         else:
@@ -111,7 +110,6 @@ def regra_form(regra_atual=None):
         nome_regra = st.text_input("Nome da Regra *", value=regra_atual['nome_regra'] if is_edit else "", placeholder="Ex: Regra 2025")
         
         col_pts1, col_pts2 = st.columns(2)
-        
         with col_pts1:
             st.markdown("#### Configurações de Apostas")
             quantidade_fichas = st.number_input("Quantidade Total de Fichas", min_value=1, value=regra_atual['quantidade_fichas'] if is_edit else 15)
@@ -135,23 +133,26 @@ def regra_form(regra_atual=None):
             bonus_podio_exato = st.number_input("Bônus Pódio Completo (Ordem Exata)", value=regra_atual['bonus_podio_completo'] if is_edit else 0)
             bonus_podio_qualquer = st.number_input("Bônus Pódio (Qualquer Ordem)", value=regra_atual['bonus_podio_qualquer'] if is_edit else 0)
             pontos_dobrada = st.checkbox("Habilitar Pontuação Dobrada (Ex: Corrida Final)", value=bool(regra_atual['pontos_dobrada']) if is_edit else False)
-
+            
         st.markdown("---")
+        
         with st.expander("#### Pontuação por Posição (P1 a P20)"):
             pts_pos = regra_atual['pontos_posicoes'] if is_edit and regra_atual.get('pontos_posicoes') else []
-            if not pts_pos: pts_pos = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] + [0]*10
-            
+            if not pts_pos:
+                pts_pos = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] + [0]*10
+                
             cols = st.columns(5)
             novos_pts_pos = []
             for i in range(20):
                 with cols[i % 5]:
                     val = st.number_input(f"P{i+1}", value=pts_pos[i] if i < len(pts_pos) else 0, key=f"p{i+1}")
                     novos_pts_pos.append(val)
-
+                    
         with st.expander("#### Pontuação Sprint (P1 a P8)"):
             pts_sp = regra_atual['pontos_sprint_posicoes'] if is_edit and regra_atual.get('pontos_sprint_posicoes') else []
-            if not pts_sp: pts_sp = [8, 7, 6, 5, 4, 3, 2, 1]
-            
+            if not pts_sp:
+                pts_sp = [8, 7, 6, 5, 4, 3, 2, 1]
+                
             cols_sp = st.columns(4)
             novos_pts_sp = []
             for i in range(8):
@@ -159,12 +160,24 @@ def regra_form(regra_atual=None):
                     val = st.number_input(f"Sprint P{i+1}", value=pts_sp[i] if i < len(pts_sp) else 0, key=f"sp{i+1}")
                     novos_pts_sp.append(val)
 
+        with st.expander("#### Campeonato e Penalidades"):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                qto_minima_pilotos = st.number_input("Qtd Mínima de Pilotos", min_value=1, value=regra_atual['qto_minima_pilotos'] if is_edit else 3)
+                penalidade_abandono = st.checkbox("Penalidade por Abandono", value=bool(regra_atual['penalidade_abandono']) if is_edit else False)
+                pontos_penalidade = st.number_input("Pontos de Penalidade", value=regra_atual['pontos_penalidade'] if is_edit else 0)
+            with col_c2:
+                pontos_campeao = st.number_input("Pontos Campeão", value=regra_atual['pontos_campeao'] if is_edit else 150)
+                pontos_vice = st.number_input("Pontos Vice", value=regra_atual['pontos_vice'] if is_edit else 100)
+                pontos_equipe = st.number_input("Pontos Equipe", value=regra_atual['pontos_equipe'] if is_edit else 80)
+                    
         submitted = st.form_submit_button("Salvar Regra")
+        
         if submitted:
             if not nome_regra:
                 st.error("Nome da regra é obrigatório!")
                 return
-            
+                
             params = {
                 "nome_regra": nome_regra,
                 "quantidade_fichas": quantidade_fichas,
@@ -183,12 +196,12 @@ def regra_form(regra_atual=None):
                 "bonus_vencedor": bonus_vencedor,
                 "bonus_podio_completo": bonus_podio_exato,
                 "bonus_podio_qualquer": bonus_podio_qualquer,
-                "qtd_minima_pilotos": regra_atual['qtd_minima_pilotos'] if is_edit else 3,
-                "penalidade_abandono": regra_atual['penalidade_abandono'] if is_edit else False,
-                "pontos_penalidade": regra_atual['pontos_penalidade'] if is_edit else 0,
-                "pontos_campeao": regra_atual['pontos_campeao'] if is_edit else 150,
-                "pontos_vice": regra_atual['pontos_vice'] if is_edit else 100,
-                "pontos_equipe": regra_atual['pontos_equipe'] if is_edit else 80
+                "qto_minima_pilotos": qto_minima_pilotos,
+                "penalidade_abandono": penalidade_abandono,
+                "pontos_penalidade": pontos_penalidade,
+                "pontos_campeao": pontos_campeao,
+                "pontos_vice": pontos_vice,
+                "pontos_equipe": pontos_equipe
             }
             
             if is_edit:
@@ -205,11 +218,13 @@ def regra_form(regra_atual=None):
 def excluir_regra_form(regras_existentes):
     """Formulário de exclusão de regra"""
     st.write("### Excluir Regra")
-    if not regras_existentes:
+    if not reglas_existentes:
         st.warning("Nenhuma regra cadastrada.")
         return
-    regras_dict = {r['nome_regra']: r['id'] for r in regras_existentes}
+        
+    regras_dict = {r['nome_regra']: r['id'] for r in reglas_existentes}
     regra_nome = st.selectbox("Selecione a Regra para Excluir", list(regras_dict.keys()), key="excluir_regra_select")
+    
     st.warning(f"⚠️ Confirmar exclusão da regra '{regra_nome}'?")
     if st.button("Confirmar Exclusão", type="primary"):
         if excluir_regra(regras_dict[regra_nome]):
