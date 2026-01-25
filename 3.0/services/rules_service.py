@@ -1,7 +1,6 @@
 """
 Serviço de Gestão de Regras
 """
-
 import logging
 from typing import Optional, Dict
 from db.rules_utils import (
@@ -33,11 +32,12 @@ def get_regras_aplicaveis(temporada: str, tipo_prova: str = "Normal") -> Dict:
             "pontos_posicoes": [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] + [0]*10,
             "pontos_pole": 0,
             "pontos_vr": 0,
-            "pontos_11": 25,
+            "pontos_11_colocado": 25,
             "bonus_vencedor": 0,
             "bonus_podio_completo": 0,
             "bonus_podio_qualquer": 0,
-            "dobrada": False
+            "dobrada": False,
+            "min_pilotos": 3
         }
 
     # Ajustar parâmetros com base no tipo de prova
@@ -54,7 +54,8 @@ def get_regras_aplicaveis(temporada: str, tipo_prova: str = "Normal") -> Dict:
         "bonus_vencedor": regra['bonus_vencedor'],
         "bonus_podio_completo": regra['bonus_podio_completo'],
         "bonus_podio_qualquer": regra['bonus_podio_qualquer'],
-        "pontos_11": regra['pontos_11_colocado']
+        "pontos_11_colocado": regra['pontos_11_colocado'],
+        "min_pilotos": regra.get('qtd_minima_pilotos', 3)
     }
     
     if is_sprint and regra['regra_sprint']:
@@ -65,7 +66,7 @@ def get_regras_aplicaveis(temporada: str, tipo_prova: str = "Normal") -> Dict:
         config["pontos_posicoes"] = regra['pontos_posicoes']
         config["pontos_pole"] = regra['pontos_pole']
         config["pontos_vr"] = regra['pontos_vr']
-        
+    
     return config
 
 def validar_aposta(aposta: Dict, regras: Dict) -> tuple:
@@ -73,8 +74,8 @@ def validar_aposta(aposta: Dict, regras: Dict) -> tuple:
     Valida se uma aposta respeita as regras vigentes
     """
     total_fichas = sum(aposta.get('fichas', []))
-    if total_fichas > regras['quantidade_fichas']:
-        return False, f"Total de fichas ({total_fichas}) excede o permitido ({regras['quantidade_fichas']})"
+    if total_fichas != regras['quantidade_fichas']:
+        return False, f"Total de fichas ({total_fichas}) deve ser exatamente {regras['quantidade_fichas']}"
     
     fichas_lista = aposta.get('fichas', [])
     if fichas_lista and max(fichas_lista) > regras['fichas_por_piloto']:
@@ -84,5 +85,5 @@ def validar_aposta(aposta: Dict, regras: Dict) -> tuple:
         equipes = aposta.get('equipes', [])
         if len(equipes) != len(set(equipes)):
             return False, "Não é permitido apostar em pilotos da mesma equipe"
-            
+    
     return True, "Aposta válida"
