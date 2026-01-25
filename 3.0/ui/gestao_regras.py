@@ -75,7 +75,9 @@ def main():
             )
             
         if st.button("Associar Regra à Temporada"):
-            if associar_regra_temporada(temporada_selecionada, regra_selecionada):
+            if regra_selecionada is None:
+                st.error("Selecione uma regra válida.")
+            elif associar_regra_temporada(temporada_selecionada, regra_selecionada):
                 st.success(f"Regra '{regras_nomes[regra_selecionada]}' associada à temporada {temporada_selecionada}!")
                 st.rerun()
             else:
@@ -95,7 +97,7 @@ def main():
                 st.warning("Nenhuma regra cadastrada para editar.")
             else:
                 regras_dict = {r['nome_regra']: r['id'] for r in regras_existentes}
-                regra_nome = st.selectbox("Selecione a Rule para Editar", list(regras_dict.keys()))
+                regra_nome = st.selectbox("Selecione a Regra para Editar", list(regras_dict.keys()))
                 regra_atual = get_regra_by_id(regras_dict[regra_nome])
                 regra_form(regra_atual)
         else:
@@ -218,11 +220,11 @@ def regra_form(regra_atual=None):
 def excluir_regra_form(regras_existentes):
     """Formulário de exclusão de regra"""
     st.write("### Excluir Regra")
-    if not reglas_existentes:
+    if not regras_existentes:
         st.warning("Nenhuma regra cadastrada.")
         return
         
-    regras_dict = {r['nome_regra']: r['id'] for r in reglas_existentes}
+    regras_dict = {r['nome_regra']: r['id'] for r in regras_existentes}
     regra_nome = st.selectbox("Selecione a Regra para Excluir", list(regras_dict.keys()), key="excluir_regra_select")
     
     st.warning(f"⚠️ Confirmar exclusão da regra '{regra_nome}'?")
