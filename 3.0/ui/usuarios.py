@@ -1,17 +1,108 @@
 import streamlit as st
 import pandas as pd
-from db.db_utils import get_usuarios_df, db_connect
+from db.db_utils import get_usuarios_df, db_connect, registrar_historico_status_usuario
 from services.auth_service import hash_password
+from db.db_utils import get_participantes_temporada_df, usuarios_status_historico_disponivel
+from services.email_service import enviar_email
+from datetime import datetime
+from utils.season_utils import get_default_season_index, get_season_options
 
-def main():
-    st.title("👥 Gestão de Usuários")
 
-    # Definir permissões necessárias: apenas master pode editar tudo, admin pode ver; participante não acessa
-    perfil = st.session_state.get("user_role", "participante")
-    if perfil not in ("admin", "master"):
-        st.warning("Acesso restrito a administradores.")
-        return
+def _ensure_gestao_financeira_table() -> None:
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS financeiro_participantes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id INTEGER NOT NULL,
+                temporada TEXT NOT NULL,
+                pago INTEGER NOT NULL DEFAULT 0,
+                atualizado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(usuario_id, temporada),
+                FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS financeiro_config_temporada (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                temporada TEXT NOT NULL UNIQUE,
+                valor_taxa REAL NOT NULL DEFAULT 0,
+                atualizado_em TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
 
+
+def _get_pagamentos_temporada(temporada: str) -> dict[int, bool]:
+    _ensure_gestao_financeira_table()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT usuario_id, pago FROM financeiro_participantes WHERE temporada = ?",
+            (str(temporada),)
+        )
+        rows = c.fetchall()
+    return {int(r[0]): bool(int(r[1])) for r in rows}
+
+
+def _salvar_pagamentos_temporada(temporada: str, pagamentos: dict[int, bool]) -> None:
+    _ensure_gestao_financeira_table()
+    with db_connect() as conn:
+        c = conn.cursor()
+        for usuario_id, pago in pagamentos.items():
+            c.execute(
+                '''
+                INSERT INTO financeiro_participantes (usuario_id, temporada, pago, atualizado_em)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(usuario_id, temporada)
+                DO UPDATE SET pago = excluded.pago, atualizado_em = CURRENT_TIMESTAMP
+                ''',
+                (int(usuario_id), str(temporada), 1 if pago else 0)
+            )
+        conn.commit()
+
+
+def _get_valor_taxa_temporada(temporada: str) -> float:
+    _ensure_gestao_financeira_table()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT valor_taxa FROM financeiro_config_temporada WHERE temporada = ? LIMIT 1",
+            (str(temporada),),
+        )
+        row = c.fetchone()
+    if not row:
+        return 0.0
+    try:
+        return float(row[0])
+    except Exception:
+        return 0.0
+
+
+def _salvar_valor_taxa_temporada(temporada: str, valor_taxa: float) -> None:
+    _ensure_gestao_financeira_table()
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            '''
+            INSERT INTO financeiro_config_temporada (temporada, valor_taxa, atualizado_em)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(temporada)
+            DO UPDATE SET valor_taxa = excluded.valor_taxa, atualizado_em = CURRENT_TIMESTAMP
+            ''',
+            (str(temporada), float(valor_taxa)),
+        )
+        conn.commit()
+
+
+def _fmt_brl(valor: float) -> str:
+    try:
+        return f"R$ {float(valor):,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+    except Exception:
+        return "R$ 0,00"
+
+
+def _render_gestao_usuarios_tab(perfil: str):
     df = get_usuarios_df()
     if df.empty:
         st.info("Nenhum usuário cadastrado.")
@@ -39,6 +130,7 @@ def main():
 
     with col1:
         if st.button("Atualizar usuário"):
+            status_anterior = str(user_row["status"]).strip()
             with db_connect() as conn:
                 c = conn.cursor()
                 c.execute(
@@ -46,6 +138,19 @@ def main():
                     (novo_nome, novo_email, novo_perfil, novo_status, int(user_row["id"]))
                 )
                 conn.commit()
+            if status_anterior != novo_status:
+                alterado_por = st.session_state.get("user_id")
+                data_referencia_status = None
+                if str(novo_status).strip().lower() == "inativo":
+                    ano_anterior = datetime.now().year - 1
+                    data_referencia_status = f"{ano_anterior}-12-31 23:59:59"
+                registrar_historico_status_usuario(
+                    int(user_row["id"]),
+                    novo_status,
+                    alterado_por=alterado_por,
+                    motivo="gestao_usuarios",
+                    data_referencia=data_referencia_status,
+                )
             st.success("Usuário atualizado!")
             st.cache_data.clear()
             st.rerun()
@@ -113,6 +218,174 @@ def main():
                 st.rerun()
             else:
                 st.error("Email já cadastrado.")
+
+
+def _render_gestao_financeira_tab():
+    st.subheader("Gestão financeira")
+
+    if not usuarios_status_historico_disponivel():
+        st.warning(
+            "⚠️ Aviso técnico: a tabela de histórico de status de usuários não foi encontrada. "
+            "Para temporadas anteriores, a lista pode refletir o status atual em vez do status histórico da temporada."
+        )
+
+    current_year = str(datetime.now().year)
+    season_options = get_season_options()
+    temporada = st.selectbox(
+        "Temporada",
+        season_options,
+        index=get_default_season_index(season_options, current_year=current_year),
+        key="usuarios_finance_temporada",
+    )
+
+    valor_taxa_atual = _get_valor_taxa_temporada(temporada)
+    valor_taxa = st.number_input(
+        "Valor da taxa",
+        min_value=0.0,
+        value=float(valor_taxa_atual),
+        step=5.0,
+        format="%.2f",
+        key=f"finance_taxa_{temporada}",
+    )
+    if st.button("Salvar valor da taxa", key=f"finance_save_taxa_{temporada}"):
+        _salvar_valor_taxa_temporada(temporada, valor_taxa)
+        st.success("Valor da taxa salvo com sucesso!")
+
+    participantes = get_participantes_temporada_df(temporada)
+    if not participantes.empty and "perfil" in participantes.columns:
+        participantes = participantes[
+            participantes["perfil"].astype(str).str.strip().str.lower() != "master"
+        ]
+    participantes = participantes.sort_values("nome") if not participantes.empty else participantes
+
+    if participantes.empty:
+        st.info("Não há participantes ativos nesta temporada.")
+        return
+
+    pagamentos_db = _get_pagamentos_temporada(temporada)
+    pagamentos_tela: dict[int, bool] = {}
+    destinatarios_pendentes = []
+
+    st.markdown("### Participantes ativos")
+    mostrar_apenas_devendo = st.checkbox(
+        "Mostrar apenas devendo",
+        value=False,
+        key=f"finance_show_only_pending_{temporada}",
+    )
+
+    for _, part in participantes.iterrows():
+        try:
+            usuario_id = int(str(part.get("id", "")).strip())
+        except Exception:
+            continue
+        email = str(part.get("email", "") or "").strip()
+        pago_default = bool(pagamentos_db.get(usuario_id, False))
+        checkbox_key = f"finance_pago_{temporada}_{usuario_id}"
+        if checkbox_key not in st.session_state:
+            st.session_state[checkbox_key] = pago_default
+        pago_atual = bool(st.session_state.get(checkbox_key, pago_default))
+
+        if not (mostrar_apenas_devendo and pago_atual):
+            st.checkbox(
+                f"{part.get('nome', 'Participante')} ({email if email else 'sem e-mail'})",
+                value=pago_atual,
+                key=checkbox_key,
+            )
+            pago_atual = bool(st.session_state.get(checkbox_key, pago_atual))
+
+        pagamentos_tela[usuario_id] = pago_atual
+        if not pago_atual:
+            destinatarios_pendentes.append({
+                "Nome": str(part.get("nome", "Participante")),
+                "E-mail": email,
+            })
+
+    total_ativos = len(participantes)
+    total_pagos = sum(1 for v in pagamentos_tela.values() if v)
+    total_devendo = total_ativos - total_pagos
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Ativos na temporada", total_ativos)
+    c2.metric("Pagaram", total_pagos)
+    c3.metric("Devendo", total_devendo)
+
+    total_arrecadado = total_pagos * float(valor_taxa)
+    total_geral = total_ativos * float(valor_taxa)
+    saldo_receber = total_geral - total_arrecadado
+    premio_vencedor = total_geral * 0.40
+    premio_vice = total_geral * 0.30
+    premio_terceiro = total_geral * 0.20
+    taxa_admin = total_geral * 0.10
+
+    col_save, col_mail = st.columns(2)
+    with col_save:
+        if st.button("Salvar status de pagamento", key="finance_save"):
+            _salvar_pagamentos_temporada(temporada, pagamentos_tela)
+            st.success("Status financeiro salvo com sucesso!")
+
+    st.markdown("### Resumo financeiro")
+    r1, r2, r3 = st.columns(3)
+    r1.metric("Total arrecadado (pagantes)", _fmt_brl(total_arrecadado))
+    r2.metric("Saldo a receber", _fmt_brl(saldo_receber))
+    r3.metric("Total geral", _fmt_brl(total_geral))
+
+    resumo_premios = pd.DataFrame(
+        [
+            {"Destino": "1º colocado (40%)", "Valor": _fmt_brl(premio_vencedor)},
+            {"Destino": "2º colocado (30%)", "Valor": _fmt_brl(premio_vice)},
+            {"Destino": "3º colocado (20%)", "Valor": _fmt_brl(premio_terceiro)},
+            {"Destino": "Taxa de administração (10%)", "Valor": _fmt_brl(taxa_admin)},
+        ]
+    )
+    st.markdown("### Resumo dos prêmios")
+    st.dataframe(resumo_premios, width="stretch", hide_index=True)
+
+    pendentes_preview = [d for d in destinatarios_pendentes if d["E-mail"]]
+    st.markdown("### Pendentes para lembrete")
+    if destinatarios_pendentes:
+        st.dataframe(destinatarios_pendentes, width="stretch", hide_index=True)
+    else:
+        st.info("Nenhum participante está devendo nesta temporada.")
+
+    with col_mail:
+        if st.button(
+            "Enviar lembrete financeiro (CCO)",
+            key="finance_email",
+            disabled=not bool(pendentes_preview),
+        ):
+            assunto = f"Lembrete cordial - taxa da temporada {temporada}"
+            corpo = (
+                "<p>Olá, participante!</p>"
+                f"<p>Este é um lembrete cordial sobre a taxa da temporada <b>{temporada}</b>.</p>"
+                "<p>Se o pagamento já foi realizado recentemente, por favor desconsidere esta mensagem.</p>"
+                "<p>Em caso de dúvida, entre em contato com a administração.</p>"
+                "<p>Obrigado!</p>"
+            )
+            ok = enviar_email(
+                destinatario="",
+                assunto=assunto,
+                corpo_html=corpo,
+                cco=[d["E-mail"] for d in pendentes_preview],
+            )
+            if ok:
+                st.success(f"Lembrete enviado em CCO para {len(pendentes_preview)} participante(s).")
+            else:
+                st.error("Falha ao enviar lembrete financeiro.")
+
+def main():
+    st.title("👥 Gestão de Usuários")
+
+    # Definir permissões necessárias: apenas master pode editar tudo, admin pode ver; participante não acessa
+    perfil = st.session_state.get("user_role", "participante")
+    if perfil not in ("admin", "master"):
+        st.warning("Acesso restrito a administradores.")
+        return
+
+    aba_usuarios, aba_financeira = st.tabs(["Gestão de Usuários", "Gestão financeira"])
+    with aba_usuarios:
+        _render_gestao_usuarios_tab(perfil)
+    with aba_financeira:
+        _render_gestao_financeira_tab()
 
 if __name__ == "__main__":
     main()

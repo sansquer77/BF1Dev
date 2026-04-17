@@ -108,7 +108,18 @@ def cadastrar_usuario(nome: str, email: str, senha: str, perfil="participante", 
                 'INSERT INTO usuarios (nome, email, senha_hash, perfil, status, faltas) VALUES (?, ?, ?, ?, ?, ?)',
                 (nome, email, senha_hash, perfil, status, 0)
             )
+            user_id = c.lastrowid
             conn.commit()
+        try:
+            from db.db_utils import registrar_historico_status_usuario
+            registrar_historico_status_usuario(
+                user_id,
+                status,
+                alterado_por=None,
+                motivo="cadastrar_usuario"
+            )
+        except Exception:
+            pass
         return True
     except Exception:
         return False
@@ -139,11 +150,24 @@ def set_auth_cookies(token, expires_minutes=JWT_EXP_MINUTES):
     """Salva o token JWT em cookie para restaurar a sessão."""
     cookie_manager = stx.CookieManager()
     expires_at = datetime.now() + timedelta(minutes=expires_minutes)
-    cookie_manager.set(
-        "session_token",
-        token,
-        expires_at=expires_at
-    )
+    try:
+        cookie_manager.set(
+            "session_token",
+            token,
+            expires_at=expires_at,
+            options={
+                "path": "/",
+                "secure": True,
+                "httponly": True,
+                "samesite": "Lax"
+            }
+        )
+    except TypeError:
+        cookie_manager.set(
+            "session_token",
+            token,
+            expires_at=expires_at
+        )
 
 def clear_auth_cookies():
     cookie_manager = stx.CookieManager()

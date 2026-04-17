@@ -4,11 +4,11 @@ from services.championship_service import (
     save_championship_bet,
     get_championship_bet,
     get_championship_bet_log,
-    get_championship_bets_df
+    get_championship_bets_df,
+    can_place_championship_bet
 )
 from db.db_utils import get_pilotos_df, get_usuarios_df
-from db.backup_utils import list_temporadas
-from datetime import datetime
+from utils.season_utils import get_default_season_index, get_season_options
 
 def main():
     st.title("📣 Apostas do Campeonato")
@@ -31,15 +31,11 @@ def main():
     equipes = sorted(pilotos_df['equipe'].unique().tolist())
 
     # Temporada selecionada
-    temporadas = list_temporadas()
-    current_year = datetime.now().year
-    if str(current_year) not in temporadas:
-        temporadas.append(str(current_year))
-    temporadas = sorted(temporadas)
+    temporadas = get_season_options()
     temporada_sel = st.selectbox(
         "Temporada",
         temporadas,
-        index=temporadas.index(str(current_year)) if str(current_year) in temporadas else 0,
+        index=get_default_season_index(temporadas),
         help="As apostas e logs são salvos por temporada"
     )
     if temporada_sel is None:
@@ -51,6 +47,14 @@ def main():
     aposta_atual = get_championship_bet(user_id, temporada_int)
 
     st.subheader(f"Faça sua aposta para o Campeonato {temporada_int}")
+
+    pode_apostar, msg_prazo, deadline = can_place_championship_bet(temporada_int)
+    if deadline is not None:
+        st.caption(f"Prazo: {deadline.strftime('%d/%m/%Y %H:%M:%S')} (SP)")
+    if not pode_apostar:
+        st.error(msg_prazo)
+    else:
+        st.info(msg_prazo)
 
     with st.form("form_aposta_campeonato"):
         champion = st.selectbox(
@@ -68,7 +72,7 @@ def main():
             equipes,
             index=equipes.index(aposta_atual["team"]) if aposta_atual else 0
         )
-        submitted = st.form_submit_button("Salvar aposta")
+        submitted = st.form_submit_button("Salvar aposta", disabled=not pode_apostar)
 
         if submitted:
             if not champion or not vice or not team:
@@ -110,11 +114,24 @@ def main():
     perfil = st.session_state.get("user_role", "participante")
     if perfil in ("master", "admin"):
         st.markdown(f"## 📑 Todas as apostas do campeonato ({temporada_int}) (admin)")
-        apostas_df = get_championship_bets_df(temporada_int)
+        apostas_raw = get_championship_bets_df(temporada_int)
+        if not isinstance(apostas_raw, pd.DataFrame):
+            st.error("Formato de dados inválido para apostas do campeonato.")
+            return
+
+        apostas_df = apostas_raw
         if not apostas_df.empty:
-            apostas_df = apostas_df[["user_nome", "champion", "vice", "team", "season", "bet_time"]]
-            apostas_df.columns = ["Participante", "Campeão", "Vice", "Equipe", "Temporada", "Data/Hora"]
-            st.dataframe(apostas_df, width="stretch")
+            apostas_exibicao = pd.DataFrame(
+                {
+                    "Participante": apostas_df["user_nome"],
+                    "Campeão": apostas_df["champion"],
+                    "Vice": apostas_df["vice"],
+                    "Equipe": apostas_df["team"],
+                    "Temporada": apostas_df["season"],
+                    "Data/Hora": apostas_df["bet_time"],
+                }
+            )
+            st.dataframe(apostas_exibicao, width="stretch")
         else:
             st.info("Nenhuma aposta registrada por nenhum participante.")
 

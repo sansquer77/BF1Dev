@@ -164,6 +164,56 @@ def add_penalidade_auto_percent_if_missing():
             logger.debug(f"Erro ao adicionar coluna penalidade_auto_percent: {e}")
             conn.rollback()
 
+
+def create_usuarios_status_historico_if_missing():
+    """Cria tabela de historico de status e faz backfill inicial se necessario."""
+    pool = get_pool()
+    with pool.get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS usuarios_status_historico (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usuario_id INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    inicio_em TIMESTAMP NOT NULL,
+                    fim_em TIMESTAMP,
+                    alterado_por INTEGER,
+                    motivo TEXT,
+                    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+                )
+            ''')
+
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ush_usuario_id ON usuarios_status_historico(usuario_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ush_status ON usuarios_status_historico(status)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ush_periodo ON usuarios_status_historico(inicio_em, fim_em)"
+            )
+
+            # Backfill inicial para usuarios sem historico
+            cursor.execute("PRAGMA table_info('usuarios')")
+            user_cols = [r[1] for r in cursor.fetchall()]
+            created_col = 'criado_em' if 'criado_em' in user_cols else None
+            created_expr = 'criado_em' if created_col else 'CURRENT_TIMESTAMP'
+
+            cursor.execute('''
+                INSERT INTO usuarios_status_historico (usuario_id, status, inicio_em, fim_em, alterado_por, motivo)
+                SELECT u.id, u.status, {created_expr}, NULL, NULL, 'backfill'
+                FROM usuarios u
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM usuarios_status_historico h WHERE h.usuario_id = u.id
+                )
+            '''.format(created_expr=created_expr))
+
+            conn.commit()
+        except Exception as e:
+            logger.debug(f"Erro ao criar historico de status de usuarios: {e}")
+            conn.rollback()
+
 def create_missing_tables_if_needed():
     """
     Cria tabelas faltando se necessário (championship_bets, championship_results, log_apostas).
@@ -300,6 +350,7 @@ def create_missing_tables_if_needed():
                     automatica INTEGER,
                     data TEXT,
                     horario TIMESTAMP,
+                    ip_address TEXT,
                     temporada TEXT DEFAULT '{current_year}',
                     status TEXT DEFAULT 'Registrada',
                     data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -312,7 +363,7 @@ def create_missing_tables_if_needed():
             # Rebuild log_apostas if legacy columns missing
             cursor.execute("PRAGMA table_info('log_apostas')")
             log_cols = [r[1] for r in cursor.fetchall()]
-            required_cols = {"apostador", "aposta", "nome_prova", "tipo_aposta", "automatica", "data", "horario", "temporada"}
+            required_cols = {"apostador", "aposta", "nome_prova", "tipo_aposta", "automatica", "data", "horario", "ip_address", "temporada"}
             has_required = required_cols.issubset(set(log_cols))
             if not has_required:
                 logger.info("↻ Atualizando `log_apostas` para incluir colunas de temporada e metadados de aposta...")
@@ -332,6 +383,7 @@ def create_missing_tables_if_needed():
                         automatica INTEGER,
                         data TEXT,
                         horario TIMESTAMP,
+                        ip_address TEXT,
                         temporada TEXT DEFAULT '{current_year}',
                         status TEXT DEFAULT 'Registrada',
                         data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -344,7 +396,7 @@ def create_missing_tables_if_needed():
                 legacy_cols = [r[1] for r in cursor.fetchall()]
                 has_col = lambda name: name in legacy_cols
                 insert_sql = '''
-                    INSERT INTO log_apostas__new (usuario_id, prova_id, apostador, aposta, nome_prova, pilotos, piloto_11, tipo_aposta, automatica, data, horario, temporada, status, data_criacao)
+                    INSERT INTO log_apostas__new (usuario_id, prova_id, apostador, aposta, nome_prova, pilotos, piloto_11, tipo_aposta, automatica, data, horario, ip_address, temporada, status, data_criacao)
                     SELECT 
                         usuario_id,
                         prova_id,
@@ -357,6 +409,7 @@ def create_missing_tables_if_needed():
                         0,
                         DATE(CASE WHEN {has_data_criacao} THEN data_criacao ELSE CURRENT_TIMESTAMP END),
                         CASE WHEN {has_data_criacao} THEN data_criacao ELSE CURRENT_TIMESTAMP END,
+                        CASE WHEN {has_ip_address} THEN ip_address ELSE NULL END,
                         '{current_year}',
                         CASE WHEN {has_status} THEN status ELSE 'Registrada' END,
                         CASE WHEN {has_data_criacao} THEN data_criacao ELSE CURRENT_TIMESTAMP END
@@ -365,6 +418,7 @@ def create_missing_tables_if_needed():
                     has_pilotos='1' if has_col('pilotos') else '0',
                     has_piloto11='1' if has_col('piloto_11') else '0',
                     has_data_criacao='1' if has_col('data_criacao') else '0',
+                    has_ip_address='1' if has_col('ip_address') else '0',
                     has_status='1' if has_col('status') else '0'
                 )
                 cursor.execute(insert_sql)
@@ -408,6 +462,8 @@ def run_migrations():
             add_login_attempts_action_if_missing()
             # Adicionar penalidade automática percentual nas regras
             add_penalidade_auto_percent_if_missing()
+            # Criar historico de status de usuarios
+            create_usuarios_status_historico_if_missing()
             
             # Criar índices para usuários
             for idx in INDICES.get("usuarios", []):

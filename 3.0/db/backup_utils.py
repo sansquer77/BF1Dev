@@ -10,8 +10,16 @@ from datetime import datetime
 from db.db_utils import db_connect
 from db.db_config import DB_PATH  # Importar caminho correto do banco
 
+
+def _require_master_access():
+    perfil = st.session_state.get("user_role", "participante")
+    if perfil != "master":
+        st.warning("Acesso restrito ao usuário master.")
+        st.stop()
+
 def download_db():
     """Permite fazer o download do arquivo inteiro do banco de dados SQLite (versão limpa e consolidada)."""
+    _require_master_access()
     if DB_PATH.exists():
         import tempfile
         
@@ -82,6 +90,7 @@ def download_db():
 
 def upload_db():
     """Permite upload de um novo arquivo .db ou .sql, substituindo o banco atual."""
+    _require_master_access()
     
     # Mostrar mensagem de sucesso se houver importação recente
     if 'import_success' in st.session_state:
@@ -488,6 +497,7 @@ def exportar_tabela_excel(tabela):
 
 def download_tabela():
     """Interface para download de tabela específica."""
+    _require_master_access()
     tabelas = listar_tabelas()
     
     if not tabelas:
@@ -514,6 +524,7 @@ def download_tabela():
 
 def upload_tabela():
     """Interface para upload/importação de tabela específica."""
+    _require_master_access()
     tabelas = listar_tabelas()
     
     if not tabelas:
@@ -563,6 +574,7 @@ def upload_tabela():
                     conn.close()
                     raise ValueError(f"Tabela '{tabela}' não encontrada no banco.")
                 db_cols = [r[1] for r in cols_info]
+                db_col_types = {r[1]: (r[2] or '').upper() for r in cols_info}
 
                 missing_cols = [c for c in db_cols if c not in df.columns]
                 extra_cols = [c for c in df.columns if c not in db_cols]
@@ -571,7 +583,28 @@ def upload_tabela():
                     raise ValueError(f"Colunas faltantes no Excel: {missing_cols}")
                 if extra_cols:
                     st.info(f"ℹ️ Colunas extras no Excel serão ignoradas: {extra_cols}")
-                df_alinhado = df[db_cols]
+                df_alinhado = df[db_cols].copy()
+
+                # Coerce types to avoid SQLite datatype mismatch
+                for col_name in db_cols:
+                    col_type = db_col_types.get(col_name, '')
+                    series = df_alinhado[col_name]
+
+                    if "INT" in col_type or "BOOL" in col_type:
+                        coerced = pd.to_numeric(series, errors='coerce').astype('Int64')
+                        df_alinhado[col_name] = coerced.where(~coerced.isna(), None)
+                        continue
+                    if any(t in col_type for t in ["REAL", "FLOA", "DOUB", "NUM", "DEC"]):
+                        coerced = pd.to_numeric(series, errors='coerce')
+                        df_alinhado[col_name] = coerced.where(~coerced.isna(), None)
+                        continue
+                    if any(t in col_type for t in ["DATE", "TIME"]):
+                        coerced = pd.to_datetime(series, errors='coerce', dayfirst=True)
+                        formatted = coerced.dt.strftime('%Y-%m-%d %H:%M:%S')
+                        df_alinhado[col_name] = formatted.where(coerced.notna(), None)
+                        continue
+
+                df_alinhado = df_alinhado.where(pd.notnull(df_alinhado), None)
 
                 # Contar registros atuais antes de deletar
                 count_before = cursor.execute(f'SELECT COUNT(*) FROM "{tabela}"').fetchone()[0]
@@ -585,7 +618,14 @@ def upload_tabela():
                 
                 # Inserir novos dados
                 cursor.execute("BEGIN IMMEDIATE")
-                df_alinhado.to_sql(tabela, conn, if_exists='append', index=False, method='multi')
+                df_alinhado.to_sql(
+                    tabela,
+                    conn,
+                    if_exists='append',
+                    index=False,
+                    method='multi',
+                    chunksize=500
+                )
                 conn.commit()  # Commit do INSERT
                 
                 count_after_insert = cursor.execute(f'SELECT COUNT(*) FROM "{tabela}"').fetchone()[0]

@@ -1,0 +1,1419 @@
+import io
+import ast
+import json
+import os
+import re
+import shutil
+import subprocess
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
+
+import pandas as pd
+import streamlit as st
+from openpyxl.utils import get_column_letter
+
+from db.db_config import DATABASE_URL
+from db.db_schema import db_connect
+
+
+def _sanitize_identifier(identifier: str) -> str:
+    value = (identifier or "").strip()
+    if not value.replace("_", "").isalnum() or not (value[0].isalpha() or value[0] == "_"):
+        raise ValueError(f"Invalid identifier: {identifier}")
+    return value
+
+
+def _quote_identifier(identifier: str) -> str:
+    return f'"{_sanitize_identifier(identifier)}"'
+
+
+def _run_command(
+    args: list[str],
+    sql_input: str | None = None,
+    env_overrides: dict[str, str] | None = None,
+) -> tuple[bool, str, str]:
+    try:
+        env = os.environ.copy()
+        if env_overrides:
+            env.update({k: v for k, v in env_overrides.items() if v})
+        result = subprocess.run(
+            args,
+            input=sql_input,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError:
+        return False, "", f"Command not found: {args[0]}"
+
+    return result.returncode == 0, result.stdout or "", result.stderr or ""
+
+
+def _detect_cmd(candidates: tuple[str, ...]) -> str | None:
+    for cmd in candidates:
+        if shutil.which(cmd):
+            return cmd
+    return None
+
+
+def _build_pg_env_from_database_url(database_url: str) -> tuple[dict[str, str], str]:
+    """Build PG* env vars from DATABASE_URL to avoid exposing credentials in argv."""
+    parsed = urlparse(database_url)
+    env: dict[str, str] = {}
+
+    dbname = (parsed.path or "").lstrip("/") or "postgres"
+    env["PGDATABASE"] = dbname
+
+    if parsed.hostname:
+        env["PGHOST"] = parsed.hostname
+    if parsed.port:
+        env["PGPORT"] = str(parsed.port)
+    if parsed.username:
+        env["PGUSER"] = unquote(parsed.username)
+    if parsed.password:
+        env["PGPASSWORD"] = unquote(parsed.password)
+
+    query_params = parse_qs(parsed.query or "")
+    for key, env_key in {
+        "sslmode": "PGSSLMODE",
+        "sslrootcert": "PGSSLROOTCERT",
+        "sslcert": "PGSSLCERT",
+        "sslkey": "PGSSLKEY",
+        "sslcrl": "PGSSLCRL",
+        "target_session_attrs": "PGTARGETSESSIONATTRS",
+    }.items():
+        value = (query_params.get(key) or [""])[0]
+        if value:
+            env[env_key] = value
+
+    return env, dbname
+
+
+def _list_tables() -> list[str]:
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """
+        )
+        return [str(r['table_name']) for r in (c.fetchall() or []) if r and r['table_name']]
+
+
+def _order_tables_for_dump(tables: list[str]) -> list[str]:
+    """Order tables to reduce FK dependency issues during statement-based restores."""
+    preferred = [
+        # Bases sem dependências fortes
+        "usuarios",
+        "temporadas",
+        "circuitos_f1",
+        "pilotos",
+        "provas",
+        # Dependentes de provas
+        "resultados",
+        # Dependentes de usuarios + provas
+        "apostas",
+        "log_apostas",
+        "posicoes_participantes",
+        # Dependentes de usuarios
+        "usuarios_status_historico",
+        "hall_da_fama",
+        "championship_bets",
+        "championship_bets_log",
+        # Independentes / configuracões
+        "championship_results",
+        "regras",
+        "temporadas_regras",
+        "login_attempts",
+        "access_logs",
+        "financeiro_config_temporada",
+        "financeiro_participantes",
+        "password_reset_tokens",
+    ]
+    lower_map = {t.lower(): t for t in tables}
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for key in preferred:
+        table_name = lower_map.get(key)
+        if table_name and table_name not in seen:
+            ordered.append(table_name)
+            seen.add(table_name)
+
+    for table_name in sorted(tables, key=str.lower):
+        if table_name not in seen:
+            ordered.append(table_name)
+            seen.add(table_name)
+
+    return ordered
+
+
+def _sql_literal(value: Any) -> str:
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (dict, list, tuple)):
+        text = json.dumps(value, ensure_ascii=False).replace("'", "''")
+        return f"'{text}'"
+    text = str(value).replace("'", "''")
+    return f"'{text}'"
+
+
+def _sql_literal_typed(value: Any, data_type: str) -> str:
+    dtype = (data_type or "").lower()
+
+    if value is None:
+        return "NULL"
+
+    if dtype in {"json", "jsonb"}:
+        if isinstance(value, (dict, list, tuple)):
+            text = json.dumps(value, ensure_ascii=False).replace("'", "''")
+            return f"'{text}'"
+        text = str(value).replace("'", "''")
+        return f"'{text}'"
+
+    if dtype == "array":
+        if isinstance(value, (list, tuple)):
+            return _python_to_sql_expression(list(value))
+        text = str(value).replace("'", "''")
+        return f"'{text}'"
+
+    return _sql_literal(value)
+
+
+def _get_serial_columns(conn, table: str) -> list[str]:
+    """Retorna colunas com sequence associada (SERIAL / GENERATED ALWAYS AS IDENTITY)."""
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = %s
+          AND column_default LIKE 'nextval%%'
+        ORDER BY ordinal_position
+        """,
+        (table,),
+    )
+    rows = c.fetchall() or []
+    c.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = %s
+          AND is_identity = 'YES'
+        ORDER BY ordinal_position
+        """,
+        (table,),
+    )
+    identity_rows = c.fetchall() or []
+    seen: set[str] = set()
+    result: list[str] = []
+    for r in rows + identity_rows:
+        col = str(r['column_name'])
+        if col not in seen:
+            seen.add(col)
+            result.append(col)
+    return result
+
+
+def _get_pk_columns(conn, table: str) -> list[str]:
+    """Retorna as colunas que compõem a PRIMARY KEY da tabela."""
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+         AND tc.table_schema    = kcu.table_schema
+        WHERE tc.table_schema  = current_schema()
+          AND tc.table_name    = %s
+          AND tc.constraint_type = 'PRIMARY KEY'
+        ORDER BY kcu.ordinal_position
+        """,
+        (table,),
+    )
+    return [str(r['column_name']) for r in (c.fetchall() or []) if r and r['column_name']]
+
+
+def _get_tables_with_fk_children(conn) -> set[str]:
+    """
+    Retorna o conjunto de tabelas que são referenciadas por FK de outras tabelas
+    (i.e. tabelas "pai" que têm ao menos um filho). Essas tabelas não podem ser
+    truncadas com CASCADE sem apagar seus filhos.
+    """
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT DISTINCT ccu.table_name AS parent_table
+        FROM information_schema.referential_constraints rc
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = rc.unique_constraint_name
+         AND ccu.table_schema    = rc.constraint_schema
+        WHERE rc.constraint_schema = current_schema()
+        """
+    )
+    return {str(r['parent_table']) for r in (c.fetchall() or []) if r and r['parent_table']}
+
+
+def _get_fk_constraints(conn, table: str) -> list[dict[str, Any]]:
+    """Retorna constraints FK da tabela destino para validação prévia opcional."""
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT
+            tc.constraint_name,
+            kcu.column_name AS local_column,
+            ccu.table_name AS parent_table,
+            ccu.column_name AS parent_column,
+            kcu.ordinal_position
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+         AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name
+         AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = current_schema()
+          AND tc.table_name = %s
+        ORDER BY tc.constraint_name, kcu.ordinal_position
+        """,
+        (table,),
+    )
+
+    grouped: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"local_columns": [], "parent_columns": [], "parent_table": ""}
+    )
+    for row in c.fetchall() or []:
+        name = str(row["constraint_name"])
+        grouped[name]["parent_table"] = str(row["parent_table"])
+        grouped[name]["local_columns"].append(str(row["local_column"]))
+        grouped[name]["parent_columns"].append(str(row["parent_column"]))
+
+    constraints: list[dict[str, Any]] = []
+    for name, data in grouped.items():
+        constraints.append(
+            {
+                "constraint_name": name,
+                "parent_table": data["parent_table"],
+                "local_columns": data["local_columns"],
+                "parent_columns": data["parent_columns"],
+            }
+        )
+    return constraints
+
+
+def _prevalidate_fk_values(
+    conn,
+    selected: str,
+    use_cols: list[str],
+    rows: list[tuple[Any, ...]],
+) -> list[str]:
+    """Valida FKs do payload antes de gravar para erro amigável pré-transação de escrita."""
+    if not rows:
+        return []
+
+    constraints = _get_fk_constraints(conn, selected)
+    if not constraints:
+        return []
+
+    col_idx = {col: idx for idx, col in enumerate(use_cols)}
+    errors: list[str] = []
+    c = conn.cursor()
+
+    for fk in constraints:
+        local_cols = fk["local_columns"]
+        parent_cols = fk["parent_columns"]
+        parent_table = fk["parent_table"]
+        fk_name = fk["constraint_name"]
+
+        # Só valida FKs cujas colunas estão presentes no arquivo importado.
+        if any(col not in col_idx for col in local_cols):
+            continue
+
+        distinct_keys: set[tuple[Any, ...]] = set()
+        for row in rows:
+            values = tuple(row[col_idx[col]] for col in local_cols)
+            # FK com qualquer coluna NULL é permitida (sem checar referência).
+            if any(v is None for v in values):
+                continue
+            distinct_keys.add(values)
+
+        for key_values in distinct_keys:
+            where_sql = " AND ".join(f"{_quote_identifier(pc)} = %s" for pc in parent_cols)
+            check_sql = (
+                f"SELECT 1 FROM {_quote_identifier(parent_table)} "
+                f"WHERE {where_sql} LIMIT 1"
+            )
+            c.execute(check_sql, key_values)
+            if c.fetchone() is None:
+                key_map = ", ".join(f"{lc}={val!r}" for lc, val in zip(local_cols, key_values))
+                errors.append(
+                    f"FK {fk_name}: valor não encontrado em {parent_table} ({key_map})"
+                )
+                if len(errors) >= 10:
+                    return errors
+
+    return errors
+
+
+def _run_fix_sequences_after_restore() -> None:
+    """Ressincroniza sequences após restore SQL para evitar colisões de ID."""
+    from db.migrations import fix_sequences
+
+    fix_sequences()
+
+
+def _build_data_only_sql() -> str:
+    lines: list[str] = [
+        "-- BF1 POSTGRES DATA-ONLY DUMP",
+        f"-- generated_at_utc: {datetime.utcnow().isoformat()}Z",
+        "BEGIN;",
+    ]
+
+    tables = _order_tables_for_dump(_list_tables())
+    if tables:
+        trunc = ", ".join(_quote_identifier(t) for t in tables)
+        lines.append(f"TRUNCATE TABLE {trunc} RESTART IDENTITY CASCADE;")
+
+    sequence_reset_lines: list[str] = []
+
+    with db_connect() as conn:
+        c = conn.cursor()
+        for table in tables:
+            c.execute(
+                """
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = %s
+                ORDER BY ordinal_position
+                """,
+                (table,),
+            )
+            col_meta = c.fetchall() or []
+            cols = [str(r['column_name']) for r in col_meta if r and r['column_name']]
+            col_types = {
+                str(r['column_name']): str(r['data_type'])
+                for r in col_meta
+                if r and r['column_name']
+            }
+            if not cols:
+                continue
+
+            col_sql = ", ".join(_quote_identifier(cn) for cn in cols)
+            c.execute(f"SELECT {col_sql} FROM {_quote_identifier(table)}")
+            for row in c.fetchall() or []:
+                values = ", ".join(
+                    _sql_literal_typed(row[col], col_types.get(col, ""))
+                    for col in cols
+                )
+                lines.append(f"INSERT INTO {_quote_identifier(table)} ({col_sql}) VALUES ({values});")
+
+            # Prepara resets de sequence para colunas SERIAL/IDENTITY
+            serial_cols = _get_serial_columns(conn, table)
+            for col in serial_cols:
+                qt = _quote_identifier(table)
+                qc = _quote_identifier(col)
+                sequence_reset_lines.append(
+                    f"SELECT setval("
+                    f"pg_get_serial_sequence('{table}', '{col}'), "
+                    f"COALESCE((SELECT MAX({qc}) FROM {qt}), 1)"
+                    f");"
+                )
+
+    # Aplica resets de sequence após todos os INSERTs para evitar colisão de IDs pós-restore
+    if sequence_reset_lines:
+        lines.append("-- Reajusta sequences para evitar colisão de IDs pós-restore")
+        lines.extend(sequence_reset_lines)
+
+    lines.append("COMMIT;")
+    return "\n".join(lines) + "\n"
+
+
+def _prepare_schema_for_restore() -> None:
+    """Ensure base schema exists before applying data-only dumps."""
+    from db.migrations import run_migrations
+
+    run_migrations()
+
+
+def _extract_truncate_tables(statement: str) -> list[str] | None:
+    match = re.match(
+        r"^\s*TRUNCATE\s+TABLE\s+(.+?)(?:\s+RESTART\s+IDENTITY|\s+CONTINUE\s+IDENTITY|\s+CASCADE|\s+RESTRICT|\s*$)",
+        statement,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return None
+
+    names: list[str] = []
+    for part in (match.group(1) or "").split(","):
+        name = part.strip().strip('"')
+        if not name:
+            continue
+        try:
+            names.append(_sanitize_identifier(name))
+        except ValueError:
+            continue
+    return names
+
+
+def _extract_insert_table(statement: str) -> str | None:
+    match = re.match(r'^\s*INSERT\s+INTO\s+"?([A-Za-z_][A-Za-z0-9_]*)"?', statement, flags=re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return _sanitize_identifier(match.group(1))
+    except ValueError:
+        return None
+
+
+def _extract_insert_columns(statement: str) -> list[str] | None:
+    match = re.match(
+        r'^\s*INSERT\s+INTO\s+"?[A-Za-z_][A-Za-z0-9_]*"?\s*\((.*?)\)\s+VALUES\s*\(',
+        statement,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return None
+
+    raw_cols = match.group(1) or ""
+    cols = _split_sql_csv(raw_cols)
+    out: list[str] = []
+    for col in cols:
+        col_name = (col or "").strip().strip('"')
+        if not col_name:
+            return None
+        try:
+            out.append(_sanitize_identifier(col_name))
+        except ValueError:
+            return None
+    return out
+
+
+def _extract_values_payload(statement: str) -> str | None:
+    match = re.match(
+        r'^\s*INSERT\s+INTO\s+"?[A-Za-z_][A-Za-z0-9_]*"?\s*\(.*?\)\s+VALUES\s*\((.*)\)\s*$',
+        statement,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _split_sql_csv(content: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    in_single = False
+    i = 0
+    while i < len(content):
+        ch = content[i]
+        if ch == "'":
+            if in_single and i + 1 < len(content) and content[i + 1] == "'":
+                current.append("''")
+                i += 2
+                continue
+            in_single = not in_single
+            current.append(ch)
+            i += 1
+            continue
+        if ch == "," and not in_single:
+            parts.append("".join(current).strip())
+            current = []
+            i += 1
+            continue
+
+        current.append(ch)
+        i += 1
+
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _get_json_columns(conn, table_name: str) -> set[str]:
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = %s
+          AND data_type IN ('json', 'jsonb')
+        """,
+        (table_name,),
+    )
+    return {
+        str(r['column_name']).lower()
+        for r in (c.fetchall() or [])
+        if r and r['column_name']
+    }
+
+
+def _get_array_columns(conn, table_name: str) -> set[str]:
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = %s
+          AND data_type = 'ARRAY'
+        """,
+        (table_name,),
+    )
+    return {
+        str(r['column_name']).lower()
+        for r in (c.fetchall() or [])
+        if r and r['column_name']
+    }
+
+
+def _is_json_syntax_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "invalid input syntax for type json" in msg
+
+
+def _is_array_syntax_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "malformed array literal" in msg or "must introduce explicitly-specified array dimensions" in msg
+
+
+def _normalize_legacy_json_sql_literal(value_literal: str) -> str | None:
+    token = (value_literal or "").strip()
+    if len(token) < 2 or not (token.startswith("'") and token.endswith("'")):
+        return None
+
+    inner = token[1:-1].replace("''", "'").strip()
+    if not inner.startswith("{") and not inner.startswith("["):
+        return None
+
+    parsed = None
+    try:
+        parsed = json.loads(inner)
+    except Exception:
+        try:
+            parsed = ast.literal_eval(inner)
+        except Exception:
+            return None
+
+    fixed_json = json.dumps(parsed, ensure_ascii=False)
+    escaped = fixed_json.replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _python_to_sql_expression(value: Any) -> str:
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        return "ARRAY[" + ", ".join(_python_to_sql_expression(v) for v in value) + "]"
+
+    text = str(value).replace("\\", "\\\\").replace("'", "''")
+    return f"'{text}'"
+
+
+def _normalize_legacy_array_sql_literal(value_literal: str) -> str | None:
+    token = (value_literal or "").strip()
+    if len(token) < 2 or not (token.startswith("'") and token.endswith("'")):
+        return None
+
+    inner = token[1:-1].replace("''", "'").strip()
+    # Converte apenas serialização legada em formato Python, ex: "['a', 'b']".
+    if not (inner.startswith("[") or inner.startswith("(")):
+        return None
+
+    try:
+        parsed = ast.literal_eval(inner)
+    except Exception:
+        return None
+
+    if not isinstance(parsed, (list, tuple)):
+        return None
+
+    return _python_to_sql_expression(list(parsed))
+
+
+def _repair_insert_json_literals(conn, statement: str, table_name: str) -> str | None:
+    json_cols = _get_json_columns(conn, table_name)
+    if not json_cols:
+        return None
+
+    cols = _extract_insert_columns(statement)
+    payload = _extract_values_payload(statement)
+    if not cols or payload is None:
+        return None
+
+    values = _split_sql_csv(payload)
+    if len(cols) != len(values):
+        return None
+
+    changed = False
+    for idx, col in enumerate(cols):
+        if col.lower() not in json_cols:
+            continue
+        repaired = _normalize_legacy_json_sql_literal(values[idx])
+        if repaired and repaired != values[idx]:
+            values[idx] = repaired
+            changed = True
+
+    if not changed:
+        return None
+
+    return re.sub(
+        r'(\bVALUES\s*\().*(\)\s*$)',
+        lambda m: f"{m.group(1)}{', '.join(values)}{m.group(2)}",
+        statement,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
+def _repair_insert_array_literals(conn, statement: str, table_name: str) -> str | None:
+    array_cols = _get_array_columns(conn, table_name)
+    if not array_cols:
+        return None
+
+    cols = _extract_insert_columns(statement)
+    payload = _extract_values_payload(statement)
+    if not cols or payload is None:
+        return None
+
+    values = _split_sql_csv(payload)
+    if len(cols) != len(values):
+        return None
+
+    changed = False
+    for idx, col in enumerate(cols):
+        if col.lower() not in array_cols:
+            continue
+        repaired = _normalize_legacy_array_sql_literal(values[idx])
+        if repaired and repaired != values[idx]:
+            values[idx] = repaired
+            changed = True
+
+    if not changed:
+        return None
+
+    return re.sub(
+        r'(\bVALUES\s*\().*(\)\s*$)',
+        lambda m: f"{m.group(1)}{', '.join(values)}{m.group(2)}",
+        statement,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
+def _repair_insert_legacy_literals(conn, statement: str, table_name: str) -> str | None:
+    repaired_stmt = statement
+    changed = False
+
+    json_stmt = _repair_insert_json_literals(conn, repaired_stmt, table_name)
+    if json_stmt and json_stmt != repaired_stmt:
+        repaired_stmt = json_stmt
+        changed = True
+
+    array_stmt = _repair_insert_array_literals(conn, repaired_stmt, table_name)
+    if array_stmt and array_stmt != repaired_stmt:
+        repaired_stmt = array_stmt
+        changed = True
+
+    return repaired_stmt if changed else None
+
+
+def _is_fk_violation_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "violates foreign key constraint" in msg or "foreign key constraint" in msg
+
+
+def _execute_with_savepoint(cursor, statement: str) -> tuple[bool, Exception | None]:
+    cursor.execute("SAVEPOINT bf1_restore_stmt")
+    try:
+        cursor.execute(statement)
+        cursor.execute("RELEASE SAVEPOINT bf1_restore_stmt")
+        return True, None
+    except Exception as exc:
+        cursor.execute("ROLLBACK TO SAVEPOINT bf1_restore_stmt")
+        cursor.execute("RELEASE SAVEPOINT bf1_restore_stmt")
+        return False, exc
+
+
+def get_postgres_backup_mode() -> tuple[str, str]:
+    pg_env, dbname = _build_pg_env_from_database_url(DATABASE_URL)
+    pg_dump = _detect_cmd(("pg_dump", "pg_dump16", "pg_dump15", "pg_dump14"))
+    if not pg_dump:
+        return "fallback", "pg_dump not found; using internal data-only dump"
+
+    ok, _, err = _run_command([pg_dump, "--version"])
+    if not ok:
+        return "fallback", f"pg_dump unavailable: {err.strip() or 'unknown error'}"
+
+    # Validate real compatibility with the target server.
+    probe_ok, _, probe_err = _run_command(
+        [
+            pg_dump,
+            "--dbname",
+            dbname,
+            "--schema-only",
+            "--no-owner",
+            "--no-privileges",
+        ],
+        env_overrides=pg_env,
+    )
+    if not probe_ok:
+        probe_detail = (probe_err or "").strip() or "pg_dump probe failed"
+        if "server version mismatch" in probe_detail.lower():
+            return "fallback", "pg_dump version mismatch with PostgreSQL server"
+        return "fallback", f"pg_dump unavailable: {probe_detail}"
+
+    return "full", f"Compatible with {pg_dump}"
+
+
+def _generate_backup_sql_content() -> tuple[str, str]:
+    pg_env, dbname = _build_pg_env_from_database_url(DATABASE_URL)
+    mode, detail = get_postgres_backup_mode()
+    if mode == "full":
+        pg_dump = _detect_cmd(("pg_dump", "pg_dump16", "pg_dump15", "pg_dump14"))
+        if pg_dump:
+            ok, out, err = _run_command(
+                [
+                    pg_dump,
+                    "--dbname",
+                    dbname,
+                    "--no-owner",
+                    "--no-privileges",
+                    "--format=plain",
+                    "--encoding=UTF8",
+                ],
+                env_overrides=pg_env,
+            )
+            if ok and out.strip():
+                return out, "full"
+            st.warning(f"pg_dump failed, using fallback. Detail: {err.strip()}")
+
+    _ = detail
+    return _build_data_only_sql(), "fallback"
+
+
+def download_db() -> None:
+    sql_content, mode = _generate_backup_sql_content()
+    label = "Download PostgreSQL full backup (.sql)"
+    if mode == "fallback":
+        label = "Download PostgreSQL data-only backup (.sql)"
+
+    st.download_button(
+        label=label,
+        data=sql_content.encode("utf-8"),
+        file_name=f"bf1_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql",
+        mime="application/sql",
+        on_click="ignore",
+        width="stretch",
+    )
+
+
+def restore_backup_from_sql(sql_content: str) -> bool:
+    is_data_only = "BF1 POSTGRES DATA-ONLY DUMP" in (sql_content[:4096] or "")
+    if is_data_only:
+        try:
+            _prepare_schema_for_restore()
+        except Exception as exc:
+            st.error(f"Failed to prepare schema for restore: {exc}")
+            return False
+
+    pg_env, dbname = _build_pg_env_from_database_url(DATABASE_URL)
+    psql = _detect_cmd(("psql", "psql16", "psql15", "psql14"))
+    if psql:
+        ok, _, err = _run_command(
+            [psql, "-d", dbname, "-v", "ON_ERROR_STOP=1"],
+            sql_input=sql_content,
+            env_overrides=pg_env,
+        )
+        if ok:
+            try:
+                _run_fix_sequences_after_restore()
+            except Exception as exc:
+                st.warning(f"Restore concluído, mas falhou ao ressincronizar sequences: {exc}")
+            return True
+        st.warning(f"psql failed, trying statement execution. Detail: {err.strip()}")
+
+    statements = [s.strip() for s in sql_content.split(";") if s.strip()]
+    try:
+        with db_connect() as conn:
+            c = conn.cursor()
+            existing_tables = {t.lower() for t in _list_tables()}
+            pending_fk_inserts: list[tuple[str, str]] = []
+
+            for stmt in statements:
+                upper = stmt.upper()
+                if upper in {"BEGIN", "COMMIT", "ROLLBACK"}:
+                    continue
+
+                # Ignora linhas de comentário SQL geradas no dump
+                if stmt.strip().startswith("--"):
+                    continue
+
+                if upper.startswith("TRUNCATE TABLE"):
+                    tables = _extract_truncate_tables(stmt)
+                    if tables is not None:
+                        valid_tables = [t for t in tables if t.lower() in existing_tables]
+                        if not valid_tables:
+                            continue
+                        stmt = (
+                            "TRUNCATE TABLE "
+                            + ", ".join(_quote_identifier(t) for t in valid_tables)
+                            + " RESTART IDENTITY CASCADE"
+                        )
+
+                insert_table = _extract_insert_table(stmt)
+                if insert_table and insert_table.lower() not in existing_tables:
+                    # Data-only dumps podem referenciar tabelas removidas; ignora para não abortar restore.
+                    continue
+
+                ok_stmt, err_stmt = _execute_with_savepoint(c, stmt)
+                if ok_stmt:
+                    continue
+
+                if insert_table and err_stmt and (
+                    _is_json_syntax_error(err_stmt) or _is_array_syntax_error(err_stmt)
+                ):
+                    repaired_stmt = _repair_insert_legacy_literals(conn, stmt, insert_table)
+                    if repaired_stmt and repaired_stmt != stmt:
+                        ok_repaired, err_repaired = _execute_with_savepoint(c, repaired_stmt)
+                        if ok_repaired:
+                            continue
+                        err_stmt = err_repaired if err_repaired else err_stmt
+
+                if insert_table and err_stmt and _is_fk_violation_error(err_stmt):
+                    pending_fk_inserts.append((stmt, str(err_stmt)))
+                    continue
+
+                raise err_stmt if err_stmt else RuntimeError("Unknown restore statement error")
+
+            max_passes = max(2, len(existing_tables) + 1)
+            for _ in range(max_passes):
+                if not pending_fk_inserts:
+                    break
+
+                next_pending: list[tuple[str, str]] = []
+                progress = 0
+                for stmt, _last_error in pending_fk_inserts:
+                    ok_stmt, err_stmt = _execute_with_savepoint(c, stmt)
+                    if ok_stmt:
+                        progress += 1
+                        continue
+
+                    if err_stmt and _is_fk_violation_error(err_stmt):
+                        next_pending.append((stmt, str(err_stmt)))
+                        continue
+
+                    raise err_stmt if err_stmt else RuntimeError("Unknown restore statement error")
+
+                pending_fk_inserts = next_pending
+                if progress == 0:
+                    break
+
+            if pending_fk_inserts:
+                first_error = pending_fk_inserts[0][1]
+                raise RuntimeError(
+                    "Restore failed: unresolved foreign key dependencies in "
+                    f"{len(pending_fk_inserts)} INSERT statement(s). First error: {first_error}"
+                )
+
+            conn.commit()
+
+        try:
+            _run_fix_sequences_after_restore()
+        except Exception as exc:
+            st.warning(f"Restore concluído, mas falhou ao ressincronizar sequences: {exc}")
+        return True
+    except Exception as exc:
+        st.error(f"Restore failed: {exc}")
+        return False
+
+
+def upload_db() -> None:
+    uploaded = st.file_uploader(
+        "Upload PostgreSQL SQL backup",
+        type=["sql"],
+        help="Only PostgreSQL SQL dumps are accepted.",
+        key="upload_sql_backup",
+    )
+    if not uploaded:
+        return
+
+    if st.button("Restore SQL backup", type="primary", width="stretch"):
+        sql_text = uploaded.getvalue().decode("utf-8", errors="ignore")
+        if restore_backup_from_sql(sql_text):
+            st.success("Backup restored successfully.")
+        else:
+            st.error("Backup restore failed.")
+
+
+def _table_columns(table_name: str) -> list[str]:
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = %s
+            ORDER BY ordinal_position
+            """,
+            (table_name,),
+        )
+        return [str(r['column_name']) for r in (c.fetchall() or []) if r and r['column_name']]
+
+
+def _get_table_column_types(conn, table_name: str) -> dict[str, str]:
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = %s
+        """,
+        (table_name,),
+    )
+    return {
+        str(r['column_name']).lower(): str(r['data_type']).lower()
+        for r in (c.fetchall() or [])
+        if r and r.get('column_name') and r.get('data_type')
+    }
+
+
+def _get_required_columns_for_insert(conn, table_name: str) -> list[str]:
+    """Retorna colunas obrigatórias em INSERT sem valor padrão/identity."""
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = %s
+          AND is_nullable = 'NO'
+          AND column_default IS NULL
+          AND is_identity = 'NO'
+          AND COALESCE(is_generated, 'NEVER') = 'NEVER'
+        ORDER BY ordinal_position
+        """,
+        (table_name,),
+    )
+    return [
+        str(r['column_name'])
+        for r in (c.fetchall() or [])
+        if r and r.get('column_name')
+    ]
+
+
+def _normalize_excel_typed_value(value: Any, data_type: str) -> Any:
+    dtype = (data_type or "").lower()
+    if value is None:
+        return None
+
+    if dtype in {"json", "jsonb"}:
+        if isinstance(value, (dict, list, tuple)):
+            return json.dumps(value, ensure_ascii=False)
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return None
+            try:
+                parsed = json.loads(raw)
+                return json.dumps(parsed, ensure_ascii=False)
+            except Exception:
+                try:
+                    parsed = ast.literal_eval(raw)
+                    if isinstance(parsed, (dict, list, tuple)):
+                        return json.dumps(parsed, ensure_ascii=False)
+                except Exception:
+                    return value
+        return value
+
+    if dtype == "array":
+        if isinstance(value, (list, tuple)):
+            return list(value)
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return None
+            try:
+                parsed = ast.literal_eval(raw)
+                if isinstance(parsed, (list, tuple)):
+                    return list(parsed)
+            except Exception:
+                return value
+        return value
+
+    return value
+
+
+def _prepare_dataframe_for_excel(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    safe_df = df.copy()
+
+    for col in safe_df.columns:
+        series = safe_df[col]
+        if pd.api.types.is_datetime64tz_dtype(series.dtype):
+            safe_df[col] = series.dt.tz_convert("UTC").dt.tz_localize(None)
+            continue
+
+        if pd.api.types.is_object_dtype(series.dtype):
+            def _normalize_obj(value: Any) -> Any:
+                if value is None:
+                    return None
+                if isinstance(value, datetime):
+                    if value.tzinfo is None:
+                        return value
+                    return pd.Timestamp(value).tz_convert("UTC").tz_localize(None).to_pydatetime()
+                return value
+
+            safe_df[col] = series.map(_normalize_obj)
+
+    return safe_df
+
+
+def _apply_excel_datetime_format(
+    writer: pd.ExcelWriter,
+    sheet_name: str,
+    df: pd.DataFrame,
+    col_types: dict[str, str],
+) -> None:
+    """Aplica formato explícito de data/hora para consistência visual no Excel."""
+    if df.empty:
+        return
+
+    ws = writer.sheets.get(sheet_name)
+    if ws is None:
+        return
+
+    datetime_cols: set[str] = set()
+    for col in df.columns:
+        dtype = df[col].dtype
+        db_type = col_types.get(str(col).lower(), "")
+        if pd.api.types.is_datetime64_any_dtype(dtype):
+            datetime_cols.add(str(col))
+            continue
+        if "timestamp" in db_type or db_type in {"date", "time", "timetz"}:
+            datetime_cols.add(str(col))
+
+    if not datetime_cols:
+        return
+
+    excel_dt_format = "yyyy-mm-dd hh:mm:ss"
+    excel_date_format = "yyyy-mm-dd"
+    excel_time_format = "hh:mm:ss"
+
+    for idx, col_name in enumerate(df.columns, start=1):
+        if str(col_name) not in datetime_cols:
+            continue
+
+        db_type = col_types.get(str(col_name).lower(), "")
+        if db_type == "date":
+            number_format = excel_date_format
+        elif db_type in {"time", "timetz"}:
+            number_format = excel_time_format
+        else:
+            number_format = excel_dt_format
+
+        col_letter = get_column_letter(idx)
+        for row_idx in range(2, len(df) + 2):
+            cell = ws[f"{col_letter}{row_idx}"]
+            if cell.value is not None:
+                cell.number_format = number_format
+
+
+def download_tabela() -> None:
+    tables = _list_tables()
+    if not tables:
+        st.info("No tables found for export.")
+        return
+
+    selected = st.selectbox("Table to export", tables, key="export_table_select")
+    if not selected:
+        return
+
+    with db_connect() as conn:
+        col_types = _get_table_column_types(conn, selected)
+        c = conn.cursor()
+        c.execute(f"SELECT * FROM {_quote_identifier(selected)}")
+        rows = c.fetchall() or []
+        col_names = [desc[0] for desc in c.description] if c.description else []
+
+    df = pd.DataFrame(
+        [list(r.values()) for r in rows] if rows else [],
+        columns=col_names,
+    )
+
+    df_excel = _prepare_dataframe_for_excel(df)
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_excel.to_excel(writer, index=False, sheet_name="data")
+        _apply_excel_datetime_format(writer, "data", df_excel, col_types)
+    buffer.seek(0)
+
+    st.download_button(
+        label=f"Download table {selected} (.xlsx)",
+        data=buffer.getvalue(),
+        file_name=f"{selected}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        on_click="ignore",
+        width="stretch",
+    )
+
+
+def upload_tabela() -> None:
+    tables = _list_tables()
+    if not tables:
+        st.info("No tables found for import.")
+        return
+
+    selected = st.selectbox("Destination table", tables, key="import_table_select")
+    uploaded = st.file_uploader("Upload Excel (.xlsx)", type=["xlsx"], key="upload_table_xlsx")
+    validate_fks = st.checkbox(
+        "Pré-validar chaves estrangeiras antes de importar (recomendado)",
+        value=True,
+        key="import_table_validate_fks",
+    )
+    if not selected or not uploaded:
+        return
+
+    if st.button("Import table", type="primary", width="stretch"):
+        df = pd.read_excel(uploaded)
+        df.columns = [str(col).strip() for col in df.columns]
+        db_cols = _table_columns(selected)
+        use_cols = [c for c in df.columns if c in db_cols]
+        if not use_cols:
+            st.error("No compatible columns were found.")
+            return
+
+        with db_connect() as conn:
+            col_types = _get_table_column_types(conn, selected)
+            required_cols = _get_required_columns_for_insert(conn, selected)
+
+            missing_required = [c for c in required_cols if c not in use_cols]
+            if missing_required:
+                st.error(
+                    "Importação bloqueada: o arquivo não contém colunas obrigatórias "
+                    f"da tabela '{selected}'."
+                )
+                st.caption(
+                    "Isso normalmente indica seleção incorreta da tabela de destino "
+                    "ou arquivo Excel de outra tabela."
+                )
+                st.caption(f"Colunas obrigatórias ausentes: {', '.join(missing_required)}")
+                return
+
+            payload = df[use_cols].astype(object)
+            rows = []
+            normalized_cells = 0
+            for row in payload.itertuples(index=False, name=None):
+                normalized_row: list[Any] = []
+                for idx, value in enumerate(row):
+                    col_name = use_cols[idx]
+                    base_value = None if pd.isna(value) else value
+                    typed_value = _normalize_excel_typed_value(
+                        base_value,
+                        col_types.get(col_name.lower(), ""),
+                    )
+                    if typed_value is not base_value:
+                        normalized_cells += 1
+                    normalized_row.append(typed_value)
+                rows.append(tuple(normalized_row))
+
+            col_idx = {col: idx for idx, col in enumerate(use_cols)}
+            for req_col in required_cols:
+                idx = col_idx.get(req_col)
+                if idx is None:
+                    continue
+                for row_number, row in enumerate(rows, start=2):
+                    if row[idx] is None:
+                        st.error(
+                            "Importação bloqueada: coluna obrigatória com valor vazio "
+                            f"na tabela '{selected}'."
+                        )
+                        st.caption(
+                            f"Coluna: {req_col} | Linha Excel: {row_number}"
+                        )
+                        return
+
+            # Detecta em tempo real se esta tabela tem filhos FK no banco.
+            # Se tiver, TRUNCATE ... CASCADE apagaria os filhos — usa UPSERT.
+            # Se não tiver, TRUNCATE + INSERT é seguro e mais simples.
+            fk_parent_tables = _get_tables_with_fk_children(conn)
+            is_fk_parent = selected.lower() in {t.lower() for t in fk_parent_tables}
+
+            if validate_fks:
+                fk_errors = _prevalidate_fk_values(conn, selected, use_cols, rows)
+                if fk_errors:
+                    st.error(
+                        "Importação bloqueada por inconsistência de FK no arquivo Excel. "
+                        "Corrija os valores e tente novamente."
+                    )
+                    for item in fk_errors:
+                        st.caption(f"- {item}")
+                    return
+
+            c = conn.cursor()
+            col_sql = ", ".join(_quote_identifier(col) for col in use_cols)
+            placeholders = ", ".join(["%s"] * len(use_cols))
+
+            if is_fk_parent:
+                # Tabela pai de FK: usa UPSERT para preservar os filhos.
+                # Requer que a tabela tenha PK definida (obrigatório para ON CONFLICT).
+                pk_cols = _get_pk_columns(conn, selected)
+                if not pk_cols:
+                    st.error(
+                        f"Importação bloqueada: a tabela '{selected}' é referenciada por FK "
+                        "e não possui PRIMARY KEY detectada para UPSERT seguro."
+                    )
+                    st.info(
+                        "Para evitar quebra de integridade, esse cenário não executa TRUNCATE CASCADE. "
+                        "Defina uma PK na tabela ou use restore SQL completo."
+                    )
+                    return
+                else:
+                    # UPSERT: insere ou atualiza. Linhas no banco que NÃO estão
+                    # no Excel são mantidas (não apagadas), preservando os filhos FK.
+                    # Colunas de atualização = todas exceto as de PK.
+                    pk_set = {col.lower() for col in pk_cols}
+                    update_cols = [col for col in use_cols if col.lower() not in pk_set]
+                    conflict_target = ", ".join(_quote_identifier(col) for col in pk_cols)
+
+                    if update_cols:
+                        update_clause = ", ".join(
+                            f"{_quote_identifier(col)} = EXCLUDED.{_quote_identifier(col)}"
+                            for col in update_cols
+                        )
+                        upsert_sql = (
+                            f"INSERT INTO {_quote_identifier(selected)} ({col_sql}) "
+                            f"VALUES ({placeholders}) "
+                            f"ON CONFLICT ({conflict_target}) DO UPDATE SET {update_clause}"
+                        )
+                    else:
+                        # Todas as colunas são PK (tabela de chave composta pura): ignora duplicatas.
+                        upsert_sql = (
+                            f"INSERT INTO {_quote_identifier(selected)} ({col_sql}) "
+                            f"VALUES ({placeholders}) "
+                            f"ON CONFLICT ({conflict_target}) DO NOTHING"
+                        )
+
+                    c.executemany(upsert_sql, rows)
+                    st.info(
+                        f"⚠️ '{selected}' é referenciada por outras tabelas: linhas existentes foram "
+                        "atualizadas (UPSERT) e linhas ausentes no Excel foram mantidas. "
+                        "Nenhum dado filho foi apagado."
+                    )
+            else:
+                # Tabela folha: sem filhos FK, TRUNCATE+INSERT é seguro.
+                c.execute(
+                    f"TRUNCATE TABLE {_quote_identifier(selected)} RESTART IDENTITY CASCADE"
+                )
+                c.executemany(
+                    f"INSERT INTO {_quote_identifier(selected)} ({col_sql}) VALUES ({placeholders})",
+                    rows,
+                )
+
+            # Ressincroniza sequences para colunas SERIAL/IDENTITY.
+            serial_cols = _get_serial_columns(conn, selected)
+            for col in serial_cols:
+                qt = _quote_identifier(selected)
+                qc = _quote_identifier(col)
+                c.execute(
+                    f"""
+                    SELECT setval(
+                        pg_get_serial_sequence(%s, %s),
+                        COALESCE((SELECT MAX({qc}) FROM {qt}), 1),
+                        true
+                    )
+                    """,
+                    (selected, col),
+                )
+            conn.commit()
+
+        if normalized_cells > 0:
+            st.info(
+                f"{normalized_cells} valores foram normalizados para tipos PostgreSQL "
+                "(JSON/ARRAY) durante a importação."
+            )
+
+        st.success(f"Table {selected} imported successfully.")
+
+
+def list_temporadas() -> list[str]:
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS temporadas (
+                temporada TEXT PRIMARY KEY,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        c.execute("SELECT temporada FROM temporadas ORDER BY temporada")
+        rows = c.fetchall() or []
+        conn.commit()
+    return [str(r['temporada']) for r in rows if r and r['temporada']]
+
+
+def create_next_temporada() -> str:
+    seasons = list_temporadas()
+    if seasons:
+        try:
+            next_year = str(max(int(t) for t in seasons) + 1)
+        except Exception:
+            next_year = str(datetime.now().year + 1)
+    else:
+        next_year = str(datetime.now().year)
+
+    with db_connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            """
+            INSERT INTO temporadas (temporada)
+            VALUES (%s)
+            ON CONFLICT (temporada) DO NOTHING
+            """,
+            (next_year,),
+        )
+        conn.commit()
+
+    return next_year
+
+def backup_banco(backup_dir: str = "backups") -> str:
+    Path(backup_dir).mkdir(parents=True, exist_ok=True)
+    sql_content, _ = _generate_backup_sql_content()
+    backup_file = Path(backup_dir) / f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+    backup_file.write_text(sql_content, encoding="utf-8")
+    return str(backup_file)
+
+
+def restaurar_backup(backup_file: str) -> bool:
+    try:
+        sql = Path(backup_file).read_text(encoding="utf-8")
+    except Exception:
+        return False
+    return restore_backup_from_sql(sql)

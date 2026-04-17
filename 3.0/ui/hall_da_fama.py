@@ -10,7 +10,9 @@ import plotly.express as px
 from datetime import datetime as dt_datetime
 from db.db_utils import (
     db_connect,
-    get_usuarios_df
+    get_usuarios_df,
+    get_participantes_temporada_df,
+    usuarios_status_historico_disponivel
 )
 
 
@@ -226,9 +228,29 @@ def render_admin_panel(conn, seasons):
     st.markdown("---")
     st.header("⚙️ Administração - Gestão de Resultados")
     st.caption("🔒 Esta área é visível apenas para usuários Master")
+    if not usuarios_status_historico_disponivel():
+        st.warning(
+            "⚠️ Aviso técnico: histórico de status de usuários indisponível. "
+            "A listagem de participantes por temporada pode considerar apenas o status atual."
+        )
     
+    if 'hall_fama_season' not in st.session_state:
+        st.session_state.hall_fama_season = dt_datetime.now().year
+
+    # Season selector (shared by both tabs)
+    col_season = st.columns(1)[0]
+    season_year = st.number_input(
+        "📅 Ano/Temporada *",
+        min_value=1990,
+        max_value=dt_datetime.now().year + 1,
+        value=st.session_state.hall_fama_season,
+        key="hall_fama_season_input",
+        help="Digite o ano da temporada (ex: 2024)"
+    )
+    st.session_state.hall_fama_season = season_year
+
     c = conn.cursor()
-    usuarios = get_usuarios_df()
+    usuarios = get_participantes_temporada_df(str(season_year))
     
     if usuarios.empty:
         st.error("❌ Não há usuários cadastrados no sistema. Cadastre usuários primeiro na seção 'Gestão de Usuários'.")
@@ -245,21 +267,6 @@ def render_admin_panel(conn, seasons):
         # Initialize session state for dynamic rows
         if 'hall_fama_rows' not in st.session_state:
             st.session_state.hall_fama_rows = [{'user': None, 'position': None}] * 3
-        
-        if 'hall_fama_season' not in st.session_state:
-            st.session_state.hall_fama_season = dt_datetime.now().year
-        
-        # Season selector
-        col_season = st.columns(1)[0]
-        season_year = st.number_input(
-            "📅 Ano/Temporada *",
-            min_value=1990,
-            max_value=dt_datetime.now().year + 1,
-            value=st.session_state.hall_fama_season,
-            key="hall_fama_season_input",
-            help="Digite o ano da temporada (ex: 2024)"
-        )
-        st.session_state.hall_fama_season = season_year
         
         st.write("**Participantes e Posições:**")
         st.write("*Preencha quantas linhas forem necessárias. Novas linhas aparecerão automaticamente.*")

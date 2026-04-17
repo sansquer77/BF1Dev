@@ -4,6 +4,9 @@ import os
 import logging
 import html
 import httpx
+import hashlib
+import random
+import json
 from typing import Optional
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -42,32 +45,69 @@ EMAIL_ADMIN: str = EMAIL_ADMIN_RAW or os.environ.get("EMAIL_ADMIN", "")
 PERPLEXITY_API_KEY: str = PERPLEXITY_API_KEY_RAW or os.environ.get("PERPLEXITY_API_KEY", "")
 PERPLEXITY_MODEL: str = PERPLEXITY_MODEL_RAW or os.environ.get("PERPLEXITY_MODEL", "sonar")
 
-def enviar_email(destinatario: str, assunto: str, corpo_html: str) -> bool:
-    """Envia um e-mail HTML para o destinatário informado."""
+
+def _gerar_previsao_fallback(nome_usuario: str, nome_prova: str, pilotos: list[str], fichas: list[int], piloto_11: str) -> str:
+    """Gera previsão local quando a API externa não estiver disponível."""
+    pilotos_fmt = ", ".join([p for p in pilotos if p])
+    fichas_fmt = ", ".join([str(f) for f in fichas])
+    assinatura = f"{nome_usuario}|{nome_prova}|{pilotos_fmt}|{fichas_fmt}|{piloto_11}"
+    seed = int(hashlib.sha256(assinatura.encode("utf-8")).hexdigest()[:8], 16)
+    rng = random.Random(seed)
+
+    modelos = [
+        "{nome}, essa aposta para {prova} está com cara de gênio incompreendido: {pilotos}. Se der certo, vai ter discurso; se der errado, vai culpar a aerodinâmica.",
+        "{nome}, o pacote em {prova} veio ousado: {pilotos}. Com fichas [{fichas}], você escolheu emoção em vez de paz de espírito.",
+        "Em {prova}, {nome} foi full estratégia alternativa: {pilotos}. O palpite de 11º em {p11} é o toque de caos controlado.",
+        "{nome}, sua combinação para {prova} parece laboratório de corrida: {pilotos} com fichas [{fichas}]. Pode virar obra-prima ou meme histórico.",
+        "Previsão para {nome} em {prova}: {pilotos}. Se {p11} bater no 11º, você merece no mínimo um pódio moral.",
+    ]
+    template = modelos[rng.randrange(len(modelos))]
+    return template.format(
+        nome=nome_usuario or "Participante",
+        prova=nome_prova or "a prova",
+        pilotos=pilotos_fmt or "sem pilotos",
+        fichas=fichas_fmt or "sem fichas",
+        p11=piloto_11 or "(sem palpite)",
+    )
+
+def enviar_email(destinatario: str, assunto: str, corpo_html: str, cco: Optional[list[str]] = None) -> bool:
+    """Envia um e-mail HTML para o destinatário informado com opção de CCO."""
     if not EMAIL_REMETENTE or not SENHA_REMETENTE:
         st.error("Credenciais de e-mail não configuradas.")
         return False
+
+    cco = [e.strip() for e in (cco or []) if str(e).strip()]
+    destinatarios_envio = []
+    if destinatario and str(destinatario).strip():
+        destinatarios_envio.append(str(destinatario).strip())
+    destinatarios_envio.extend(cco)
+
+    if not destinatarios_envio:
+        st.error("Nenhum destinatário válido para envio de e-mail.")
+        return False
+
     msg = MIMEMultipart()
     msg['From'] = EMAIL_REMETENTE
-    msg['To'] = destinatario
+    msg['To'] = destinatario if destinatario and str(destinatario).strip() else EMAIL_REMETENTE
     msg['Subject'] = assunto
     msg.attach(MIMEText(corpo_html, 'html'))
     try:
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(EMAIL_REMETENTE, SENHA_REMETENTE)
-            server.send_message(msg)
+            server.sendmail(EMAIL_REMETENTE, destinatarios_envio, msg.as_string())
         return True
     except Exception as e:
-        st.error(f"Erro no envio para {destinatario}: {str(e)}")
+        st.error(f"Erro no envio para {', '.join(destinatarios_envio)}: {str(e)}")
         return False
 
 def gerar_previsao_sarcastica(nome_usuario: str, nome_prova: str, pilotos: list[str], fichas: list[int], piloto_11: str) -> str:
     """Gera um texto divertido e sarcástico usando a API da Perplexity.
 
-    Retorna string vazia quando a API não estiver configurada ou em caso de erro.
+    Faz fallback local quando a API não estiver configurada ou em caso de erro.
     """
     if not PERPLEXITY_API_KEY:
-        return ""
+        logger.warning("PERPLEXITY_API_KEY não configurada. Usando fallback local para previsão sarcástica.")
+        return _gerar_previsao_fallback(nome_usuario, nome_prova, pilotos, fichas, piloto_11)
 
     try:
         pilotos_fmt = ", ".join([html.escape(p) for p in pilotos])
@@ -101,16 +141,143 @@ def gerar_previsao_sarcastica(nome_usuario: str, nome_prova: str, pilotos: list[
             "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
             "Content-Type": "application/json"
         }
-        with httpx.Client(timeout=10.0) as client:
+        data = None
+        last_error = None
+        for _ in range(2):
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post("https://api.perplexity.ai/chat/completions", headers=headers, json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break
+            except Exception as retry_error:
+                last_error = retry_error
+
+        if data is None:
+            raise RuntimeError(str(last_error) if last_error else "Falha sem detalhes da API")
+
+        texto = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        texto = (texto or "").strip()
+        if texto:
+            return texto
+
+        logger.warning("Perplexity retornou resposta vazia. Usando fallback local.")
+        return _gerar_previsao_fallback(nome_usuario, nome_prova, pilotos, fichas, piloto_11)
+    except Exception as e:
+        logger.warning(f"Falha ao gerar previsão sarcástica: {e}")
+        return _gerar_previsao_fallback(nome_usuario, nome_prova, pilotos, fichas, piloto_11)
+
+
+def _extrair_json_texto(raw_text: str) -> dict | None:
+    if not raw_text:
+        return None
+    txt = raw_text.strip()
+    try:
+        return json.loads(txt)
+    except Exception:
+        pass
+    ini = txt.find('{')
+    fim = txt.rfind('}')
+    if ini == -1 or fim == -1 or fim <= ini:
+        return None
+    try:
+        return json.loads(txt[ini:fim + 1])
+    except Exception:
+        return None
+
+
+def _probabilidade_fallback(seed_texto: str) -> int:
+    assinatura = hashlib.sha256(seed_texto.encode("utf-8")).hexdigest()
+    base = int(assinatura[:8], 16)
+    return 20 + (base % 61)  # 20..80
+
+
+def gerar_analise_aposta_com_probabilidade(
+    nome_usuario: str,
+    contexto_aposta: str,
+    detalhes_aposta: str,
+) -> dict:
+    """Gera comentário sarcástico e probabilidade estimada de acerto (0-100).
+
+    Retorna dict com: comentario, probabilidade, resumo.
+    """
+    seed_texto = f"{nome_usuario}|{contexto_aposta}|{detalhes_aposta}"
+    fallback_prob = _probabilidade_fallback(seed_texto)
+    fallback_comment = (
+        f"{nome_usuario or 'Participante'}, sua aposta em {contexto_aposta} está ousada: "
+        "tem potencial de glória ou de virar material de zoeira no grupo."
+    )
+    fallback_resumo = "Análise em fallback local (sem acesso à API de notícias)."
+
+    if not PERPLEXITY_API_KEY:
+        return {
+            "comentario": fallback_comment,
+            "probabilidade": fallback_prob,
+            "resumo": fallback_resumo,
+        }
+
+    payload = {
+        "model": PERPLEXITY_MODEL,
+        "temperature": 0.5,
+        "max_tokens": 260,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Você é analista de F1 com humor sarcástico leve. "
+                    "Use notícias recentes de F1 para estimar chance de acerto de uma aposta de bolão. "
+                    "Responda APENAS JSON válido sem markdown com o formato: "
+                    "{\"comentario\":\"...\",\"probabilidade\":55,\"resumo\":\"...\"}. "
+                    "A probabilidade deve ser número inteiro entre 0 e 100. "
+                    "Não use conteúdo ofensivo, sexual, violento ou discriminatório."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Participante: {nome_usuario}. "
+                    f"Contexto da aposta: {contexto_aposta}. "
+                    f"Detalhes: {detalhes_aposta}. "
+                    "Faça uma estimativa plausível e curta."
+                ),
+            },
+        ],
+    }
+    headers = {
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        with httpx.Client(timeout=12.0) as client:
             resp = client.post("https://api.perplexity.ai/chat/completions", headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        parsed = _extrair_json_texto(content)
+        if not parsed:
+            raise ValueError("Resposta sem JSON válido")
 
-        texto = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        return texto.strip()
+        comentario = str(parsed.get("comentario", "")).strip() or fallback_comment
+        resumo = str(parsed.get("resumo", "")).strip() or "Estimativa baseada em contexto recente de F1."
+        try:
+            prob = int(float(parsed.get("probabilidade", fallback_prob)))
+        except Exception:
+            prob = fallback_prob
+        prob = max(0, min(100, prob))
+
+        return {
+            "comentario": comentario,
+            "probabilidade": prob,
+            "resumo": resumo,
+        }
     except Exception as e:
-        logger.warning(f"Falha ao gerar previsão sarcástica: {e}")
-        return ""
+        logger.warning(f"Falha ao gerar análise com probabilidade via Perplexity: {e}")
+        return {
+            "comentario": fallback_comment,
+            "probabilidade": fallback_prob,
+            "resumo": fallback_resumo,
+        }
 
 def enviar_email_recuperacao_senha(email_usuario: str, nome_usuario: str, nova_senha: str):
     """Envia e-mail com senha temporária para o usuário."""

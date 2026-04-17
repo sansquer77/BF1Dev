@@ -8,10 +8,10 @@ from db.db_utils import (
     db_connect, get_user_by_id, get_provas_df, get_pilotos_df, get_apostas_df, get_resultados_df,
     update_user_email, update_user_password, get_user_by_email
 )
-from services.bets_service import salvar_aposta, calcular_pontuacao_lote
+from services.bets_service import salvar_aposta, calcular_pontuacao_lote, gerar_aposta_sem_ideias
 from services.auth_service import check_password, hash_password
 from services.rules_service import get_regras_aplicaveis
-from db.backup_utils import list_temporadas
+from utils.season_utils import get_default_season_index, get_season_options
 
 def participante_view():
     if 'token' not in st.session_state or 'user_id' not in st.session_state:
@@ -28,24 +28,8 @@ def participante_view():
         st.image("BF1.jpg", width=75)
     with col2:
         st.title("Painel do Participante")
-        # Season selector (temporada) - read temporadas from the backup-managed table when available
-        current_year = datetime.datetime.now().year
-        current_year_str = str(current_year)
-
-        try:
-            season_options = list_temporadas() or []
-        except Exception:
-            season_options = []
-
-        # If the temporadas table is empty or missing, fallback to fixed options
-        if not season_options:
-            season_options = ["2025", "2026"]
-
-        # Default to current year when present, otherwise first option
-        if current_year_str in season_options:
-            default_index = season_options.index(current_year_str)
-        else:
-            default_index = 0
+        season_options = get_season_options(fallback_years=["2025", "2026"])
+        default_index = get_default_season_index(season_options)
 
         season = st.selectbox("Temporada", season_options, index=default_index)
         st.session_state['temporada'] = season
@@ -60,10 +44,7 @@ def participante_view():
         tabs = st.tabs(["Apostas", "Minha Conta"])
 
     def _on_prova_change():
-        keys = [f"piloto_aposta_{i}" for i in range(10)] + [f"fichas_aposta_{i}" for i in range(10)] + ["piloto_11"]
-        for key in keys:
-            if key in st.session_state:
-                del st.session_state[key]
+        st.session_state["aposta_form_force_reload"] = True
         if "aposta_erros" in st.session_state:
             del st.session_state["aposta_erros"]
 
@@ -122,7 +103,7 @@ def participante_view():
 
             if user['status'] == "Ativo":
                 if len(provas) > 0 and len(pilotos_df) > 2:
-                    col_sel, col_btn = st.columns([4, 1])
+                    col_sel, col_btn, col_sem_ideias = st.columns([4, 1, 1])
                     with col_sel:
                         prova_id = st.selectbox(
                             "Escolha a prova",
@@ -132,12 +113,27 @@ def participante_view():
                             on_change=_on_prova_change
                         )
                     with col_btn:
-                        if st.button("Ver regras", use_container_width=True):
+                        if st.button("Ver regras", width="stretch"):
                             prova_nome_sel = provas[provas['id'] == prova_id]['nome'].values[0]
                             tipo_raw = provas[provas['id'] == prova_id]['tipo'].values[0] if not provas[provas['id'] == prova_id].empty else 'Normal'
                             tipo_sel = 'Sprint' if str(tipo_raw).strip().lower() == 'sprint' or 'sprint' in str(prova_nome_sel).lower() else 'Normal'
                             regras_sel = get_regras_aplicaveis(temporada, tipo_sel)
                             _mostrar_regras_dialog(regras_sel, temporada, tipo_sel)
+                    with col_sem_ideias:
+                        if st.button("Sem ideias", width="stretch"):
+                            nome_prova_sem_ideias = provas[provas['id'] == prova_id]['nome'].values[0]
+                            ok_auto, msg_auto = gerar_aposta_sem_ideias(
+                                usuario_id=user['id'],
+                                prova_id=prova_id,
+                                nome_prova=nome_prova_sem_ideias,
+                                temporada=temporada,
+                            )
+                            if ok_auto:
+                                st.success(msg_auto)
+                                st.session_state["aposta_form_force_reload"] = True
+                                st.rerun()
+                            else:
+                                st.error(msg_auto)
                     nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
                     tipo_raw = provas[provas['id'] == prova_id]['tipo'].values[0] if not provas[provas['id'] == prova_id].empty else 'Normal'
                     tipo_prova = 'Sprint' if str(tipo_raw).strip().lower() == 'sprint' or 'sprint' in str(nome_prova).lower() else 'Normal'
@@ -150,6 +146,7 @@ def participante_view():
                     aposta_existente = apostas_df[
                         (apostas_df['usuario_id'] == user['id']) & (apostas_df['prova_id'] == prova_id)
                     ]
+                    max_linhas = 10
                     pilotos_apostados_ant, fichas_ant, piloto_11_ant = [], [], ""
                     if not aposta_existente.empty:
                         aposta_existente = aposta_existente.iloc[0]
@@ -160,6 +157,25 @@ def participante_view():
                         fichas_ant = []
                         piloto_11_ant = ""
 
+                    prova_id_form = st.session_state.get("aposta_form_prova_id")
+                    force_reload_form = bool(st.session_state.get("aposta_form_force_reload", False))
+                    if prova_id_form != prova_id or force_reload_form:
+                        for i in range(max_linhas):
+                            st.session_state[f"piloto_aposta_{i}"] = (
+                                pilotos_apostados_ant[i]
+                                if i < len(pilotos_apostados_ant) and pilotos_apostados_ant[i] in pilotos
+                                else "Nenhum"
+                            )
+                            st.session_state[f"fichas_aposta_{i}"] = int(fichas_ant[i]) if i < len(fichas_ant) else 0
+
+                        if piloto_11_ant in pilotos:
+                            st.session_state["piloto_11"] = piloto_11_ant
+                        elif pilotos:
+                            st.session_state["piloto_11"] = pilotos[0]
+
+                        st.session_state["aposta_form_prova_id"] = prova_id
+                        st.session_state["aposta_form_force_reload"] = False
+
                     erros_box = st.empty()
                     erros_atuais = st.session_state.get("aposta_erros", [])
                     if erros_atuais:
@@ -168,7 +184,6 @@ def participante_view():
                                 st.error(msg)
 
                     st.write("Escolha seus pilotos e distribua suas fichas entre eles de acordo com as regras:")
-                    max_linhas = 10
                     pilotos_aposta, fichas_aposta = [], []
                     for i in range(max_linhas):
                         mostrar = False
@@ -207,9 +222,12 @@ def participante_view():
                     pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
                     if not pilotos_11_opcoes:
                         pilotos_11_opcoes = pilotos
+                    if pilotos_11_opcoes:
+                        if st.session_state.get("piloto_11") not in pilotos_11_opcoes:
+                            st.session_state["piloto_11"] = pilotos_11_opcoes[0]
                     piloto_11 = st.selectbox(
                         "Palpite para 11º colocado", pilotos_11_opcoes,
-                        index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
+                        key="piloto_11"
                     )
 
                     if st.button("Efetivar Aposta"):
@@ -235,12 +253,13 @@ def participante_view():
                         else:
                             if "aposta_erros" in st.session_state:
                                 del st.session_state["aposta_erros"]
-                            salvar_aposta(
+                            ok = salvar_aposta(
                                 user['id'], prova_id, pilotos_validos,
                                 fichas_validas, piloto_11, nome_prova, automatica=0, temporada=temporada
                             )
-                            st.success("Aposta registrada/atualizada!")
-                            st.rerun()
+                            if ok:
+                                st.success("Aposta registrada/atualizada!")
+                                st.rerun()
                 else:
                     st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
             else:
@@ -306,7 +325,7 @@ def participante_view():
                             dados.append({
                                 "Piloto Apostado": aposta_piloto,
                                 "Fichas": ficha,
-                                "Posição Real": pos_real if pos_real is not None else "-",
+                                "Posição Real": str(pos_real) if pos_real is not None else "-",
                                 "Pontos": f"{pontos:.2f}"
                             })
                         piloto_11_real = str(posicoes_dict.get(11, "")).strip()

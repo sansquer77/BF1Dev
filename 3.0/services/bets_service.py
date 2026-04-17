@@ -1,6 +1,10 @@
 import pandas as pd
 import streamlit as st
 import logging
+import os
+import json
+import ast
+import httpx
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from db.db_utils import (
@@ -14,23 +18,461 @@ from db.db_utils import (
     get_provas_df,
     get_resultados_df
 )
-from services.email_service import enviar_email, gerar_previsao_sarcastica
+from services.email_service import enviar_email, gerar_analise_aposta_com_probabilidade
 import html
 from services.rules_service import get_regras_aplicaveis
+from utils.data_utils import (
+    get_current_season,
+    get_driver_standings,
+    get_constructor_standings,
+    get_qualifying_vs_race_delta,
+    get_fastest_lap_times,
+)
+from utils.datetime_utils import SAO_PAULO_TZ, now_sao_paulo, parse_datetime_sao_paulo
+from utils.request_utils import get_client_ip
 
 logger = logging.getLogger(__name__)
+MAX_PERPLEXITY_CONTEXT_CHARS = 5200
+
+
+def _extrair_json_texto(raw_text: str) -> dict | None:
+    if not raw_text:
+        return None
+    txt = raw_text.strip()
+    try:
+        return json.loads(txt)
+    except Exception:
+        pass
+    ini = txt.find('{')
+    fim = txt.rfind('}')
+    if ini == -1 or fim == -1 or fim <= ini:
+        return None
+    try:
+        return json.loads(txt[ini:fim + 1])
+    except Exception:
+        return None
+
+
+def _aposta_valida_regras(pilotos_sel: list[str], fichas_sel: list[int], piloto_11: str, pilotos_df: pd.DataFrame, regras: dict) -> bool:
+    if not pilotos_sel or not fichas_sel or not piloto_11:
+        return False
+
+    min_pilotos = int(regras.get('qtd_minima_pilotos') or regras.get('min_pilotos', 3))
+    qtd_fichas = int(regras.get('quantidade_fichas', 15))
+    fichas_max = int(regras.get('fichas_por_piloto', qtd_fichas))
+    permite_mesma_equipe = bool(regras.get('mesma_equipe', False))
+
+    if len(pilotos_sel) < min_pilotos:
+        return False
+    if len(pilotos_sel) != len(fichas_sel):
+        return False
+    if len(set(pilotos_sel)) != len(pilotos_sel):
+        return False
+    if sum(int(f) for f in fichas_sel) != qtd_fichas:
+        return False
+    if fichas_sel and max(int(f) for f in fichas_sel) > fichas_max:
+        return False
+    if piloto_11 in pilotos_sel:
+        return False
+
+    pilotos_disponiveis = set(pilotos_df['nome'].astype(str).tolist()) if not pilotos_df.empty else set()
+    if pilotos_disponiveis and any(str(p) not in pilotos_disponiveis for p in pilotos_sel):
+        return False
+    if pilotos_disponiveis and str(piloto_11) not in pilotos_disponiveis:
+        return False
+
+    if not permite_mesma_equipe and not pilotos_df.empty and 'equipe' in pilotos_df.columns:
+        mapa_eq = dict(zip(pilotos_df['nome'].astype(str), pilotos_df['equipe'].astype(str)))
+        equipes = [mapa_eq.get(str(p), '') for p in pilotos_sel]
+        equipes_validas = [e for e in equipes if e]
+        if len(set(equipes_validas)) < len(equipes_validas):
+            return False
+
+    return True
+
+
+def _get_resumo_ultimas_apostas(usuario_id: int, apostas_df: pd.DataFrame, provas_df: pd.DataFrame, limite: int = 3) -> list[dict]:
+    if apostas_df.empty:
+        return []
+    ap = apostas_df[apostas_df['usuario_id'] == usuario_id].copy()
+    if ap.empty:
+        return []
+    if 'data_envio' in ap.columns:
+        ap['__envio'] = pd.to_datetime(ap['data_envio'], errors='coerce')
+        ap = ap.sort_values('__envio')
+    ap = ap.drop_duplicates(subset=['prova_id'], keep='last')
+    ap = ap.sort_values('prova_id', ascending=False).head(limite)
+
+    provas_nome = {}
+    if not provas_df.empty and 'id' in provas_df.columns and 'nome' in provas_df.columns:
+        provas_nome = dict(zip(provas_df['id'], provas_df['nome']))
+
+    out = []
+    for _, row in ap.iterrows():
+        try:
+            fichas = [int(x) for x in str(row.get('fichas', '')).split(',') if str(x).strip() != '']
+        except Exception:
+            fichas = []
+        out.append({
+            'pilotos': [p.strip() for p in str(row.get('pilotos', '')).split(',') if p.strip()],
+            'fichas': fichas,
+            'piloto_11': str(row.get('piloto_11', '')).strip()
+        })
+    return out
+
+
+def _get_resumo_cenario_campeonato(resultados_df: pd.DataFrame, provas_df: pd.DataFrame, limite: int = 3) -> list[dict]:
+    if resultados_df.empty:
+        return []
+    res = resultados_df.copy()
+    if 'prova_id' in res.columns:
+        res = res.sort_values('prova_id', ascending=False).head(limite)
+
+    provas_nome = {}
+    if not provas_df.empty and 'id' in provas_df.columns and 'nome' in provas_df.columns:
+        provas_nome = dict(zip(provas_df['id'], provas_df['nome']))
+
+    out = []
+    for _, row in res.iterrows():
+        posicoes = {}
+        try:
+            posicoes = ast.literal_eval(str(row.get('posicoes', '{}')))
+            if not isinstance(posicoes, dict):
+                posicoes = {}
+        except Exception:
+            posicoes = {}
+        top3 = [str(posicoes.get(i, '')).strip() for i in [1, 2, 3]]
+        out.append({
+            'prova': str(provas_nome.get(row.get('prova_id'), f"Prova {row.get('prova_id')}")),
+            'top3': [p for p in top3 if p]
+        })
+    return out
+
+
+def _get_contexto_temporada_atual_ergast() -> dict:
+    """Monta resumo normalizado e compacto da temporada atual com dados da Ergast."""
+    contexto = {
+        "src": "ergast",
+        "s": None,
+        "tp": [],
+        "tc": [],
+        "du": {"top": [], "bot": []},
+        "vr": [],
+    }
+
+    try:
+        temporada = str(get_current_season())
+    except Exception:
+        temporada = "current"
+
+    contexto["s"] = temporada
+
+    try:
+        df_pilotos = get_driver_standings(temporada)
+        if not df_pilotos.empty:
+            top_pilotos = []
+            for _, row in df_pilotos.head(5).iterrows():
+                top_pilotos.append(
+                    {
+                        "p": int(row.get("Position", 0) or 0),
+                        "n": str(row.get("Driver", "")).strip(),
+                        "e": str(row.get("Constructor", "")).strip(),
+                        "pt": int(row.get("Points", 0) or 0),
+                    }
+                )
+            contexto["tp"] = top_pilotos
+    except Exception:
+        pass
+
+    try:
+        df_construtores = get_constructor_standings(temporada)
+        if not df_construtores.empty:
+            top_construtores = []
+            for _, row in df_construtores.head(3).iterrows():
+                top_construtores.append(
+                    {
+                        "p": int(row.get("Position", 0) or 0),
+                        "n": str(row.get("Constructor", "")).strip(),
+                        "pt": int(row.get("Points", 0) or 0),
+                    }
+                )
+            contexto["tc"] = top_construtores
+    except Exception:
+        pass
+
+    try:
+        df_delta = get_qualifying_vs_race_delta(temporada)
+        if not df_delta.empty:
+            top_delta = []
+            bottom_delta = []
+            for _, row in df_delta.sort_values("Delta", ascending=False).head(3).iterrows():
+                top_delta.append(
+                    {
+                        "n": str(row.get("Driver", "")).strip(),
+                        "d": int(row.get("Delta", 0) or 0),
+                    }
+                )
+            for _, row in df_delta.sort_values("Delta", ascending=True).head(2).iterrows():
+                bottom_delta.append(
+                    {
+                        "n": str(row.get("Driver", "")).strip(),
+                        "d": int(row.get("Delta", 0) or 0),
+                    }
+                )
+            contexto["du"] = {"top": top_delta, "bot": bottom_delta}
+    except Exception:
+        pass
+
+    try:
+        df_volta_rapida = get_fastest_lap_times(temporada)
+        if not df_volta_rapida.empty:
+            voltas = []
+            for _, row in df_volta_rapida.head(3).iterrows():
+                voltas.append(
+                    {
+                        "n": str(row.get("Driver", "")).strip(),
+                        "t": str(row.get("Fastest Lap", "")).strip(),
+                    }
+                )
+            contexto["vr"] = voltas
+    except Exception:
+        pass
+
+    return contexto
+
+
+def _canonical_json(data: dict) -> str:
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _build_compact_json_with_meta(payload_data: dict) -> tuple[str, str]:
+    """Retorna JSON compacto e metadata do tipo de fallback aplicado."""
+    compact = _canonical_json(payload_data)
+    if len(compact) <= MAX_PERPLEXITY_CONTEXT_CHARS:
+        return compact, "none"
+
+    reduced = _reduce_context_for_limit(payload_data)
+    compact_reduced = _canonical_json(reduced)
+    if len(compact_reduced) <= MAX_PERPLEXITY_CONTEXT_CHARS:
+        return compact_reduced, "reduced"
+
+    minimal = _minimal_context_for_limit(payload_data)
+    return _canonical_json(minimal), "minimal"
+
+
+def _reduce_context_for_limit(data: dict) -> dict:
+    """Fallback progressivo para manter contexto útil abaixo do limite de tamanho."""
+    d = dict(data)
+
+    # 1) Remove voltas rápidas (sinal útil, mas menos crítico para aposta)
+    erg = dict(d.get("erg", {}))
+    if "vr" in erg:
+        erg = dict(erg)
+        erg["vr"] = []
+        d["erg"] = erg
+
+    # 2) Enxuga histórico local e cenário
+    if "ua" in d:
+        d["ua"] = d.get("ua", [])[:1]
+    if "cz" in d:
+        d["cz"] = d.get("cz", [])[:1]
+
+    # 3) Enxuga ainda mais Ergast
+    erg2 = dict(d.get("erg", {}))
+    if "tp" in erg2:
+        erg2["tp"] = erg2.get("tp", [])[:3]
+    if "tc" in erg2:
+        erg2["tc"] = erg2.get("tc", [])[:2]
+    du = dict(erg2.get("du", {}))
+    if du:
+        du["top"] = du.get("top", [])[:2]
+        du["bot"] = du.get("bot", [])[:1]
+        erg2["du"] = du
+    d["erg"] = erg2
+
+    return d
+
+
+def _minimal_context_for_limit(data: dict) -> dict:
+    """Fallback mínimo que preserva JSON válido e os campos essenciais para decisão."""
+    erg = dict(data.get("erg", {}))
+    du = dict(erg.get("du", {}))
+    return {
+        "v": data.get("v", 1),
+        "alvo": data.get("alvo", {}),
+        "pd": data.get("pd", []),
+        "rg": data.get("rg", {}),
+        "ua": data.get("ua", [])[:1],
+        "cz": data.get("cz", [])[:1],
+        "erg": {
+            "src": erg.get("src", "ergast"),
+            "s": erg.get("s"),
+            "tp": erg.get("tp", [])[:3],
+            "tc": erg.get("tc", [])[:2],
+            "du": {
+                "top": du.get("top", [])[:2],
+                "bot": du.get("bot", [])[:1],
+            },
+            "vr": [],
+        },
+    }
+
+
+def _build_compact_prompt_payload(
+    nome_prova: str,
+    tipo_prova: str,
+    pilotos_disponiveis: list[str],
+    min_pilotos: int,
+    qtd_fichas: int,
+    fichas_max: int,
+    permite_mesma_equipe: bool,
+    ultimas_apostas: list[dict],
+    cenario: list[dict],
+    contexto_ergast: dict,
+) -> tuple[str, str]:
+    payload_data = {
+        "v": 1,
+        "alvo": {"nome": nome_prova, "tipo": tipo_prova},
+        "pd": pilotos_disponiveis,
+        "rg": {
+            "min": min_pilotos,
+            "qf": qtd_fichas,
+            "fmax": fichas_max,
+            "me": permite_mesma_equipe,
+        },
+        "ua": ultimas_apostas,
+        "cz": cenario,
+        "erg": contexto_ergast,
+    }
+
+    return _build_compact_json_with_meta(payload_data)
+
+
+def _validar_formato_json_resposta(parsed: dict) -> bool:
+    """Valida formato exigido: {"pilotos": [...], "fichas": [...], "piloto_11": "..."}."""
+    if not isinstance(parsed, dict):
+        return False
+    expected = {"pilotos", "fichas", "piloto_11"}
+    if set(parsed.keys()) != expected:
+        return False
+    pilotos = parsed.get("pilotos")
+    fichas = parsed.get("fichas")
+    piloto_11 = parsed.get("piloto_11")
+    if not isinstance(pilotos, list) or not isinstance(fichas, list) or not isinstance(piloto_11, str):
+        return False
+    if len(pilotos) == 0 or len(fichas) == 0 or len(pilotos) != len(fichas):
+        return False
+    try:
+        _ = [str(p).strip() for p in pilotos]
+        _ = [int(x) for x in fichas]
+    except Exception:
+        return False
+    return piloto_11.strip() != ""
+
+
+def _gerar_aposta_perplexity(
+    pilotos_df: pd.DataFrame,
+    regras: dict,
+    nome_prova: str,
+    tipo_prova: str,
+    ultimas_apostas: list[dict],
+    cenario: list[dict],
+    contexto_ergast: dict,
+) -> tuple[list[str], list[int], str] | None:
+    api_key = ""
+    model = "sonar"
+    try:
+        api_key = st.secrets.get("PERPLEXITY_API_KEY", "")
+        model = st.secrets.get("PERPLEXITY_MODEL", "sonar")
+    except Exception:
+        api_key = os.environ.get("PERPLEXITY_API_KEY", "")
+        model = os.environ.get("PERPLEXITY_MODEL", "sonar")
+    if not api_key:
+        return None
+
+    pilotos_disponiveis = pilotos_df['nome'].astype(str).tolist() if not pilotos_df.empty else []
+    min_pilotos = int(regras.get('qtd_minima_pilotos') or regras.get('min_pilotos', 3))
+    qtd_fichas = int(regras.get('quantidade_fichas', 15))
+    fichas_max = int(regras.get('fichas_por_piloto', qtd_fichas))
+    permite_mesma_equipe = bool(regras.get('mesma_equipe', False))
+
+    contexto_compacto_json, context_fallback_mode = _build_compact_prompt_payload(
+        nome_prova=nome_prova,
+        tipo_prova=tipo_prova,
+        pilotos_disponiveis=pilotos_disponiveis,
+        min_pilotos=min_pilotos,
+        qtd_fichas=qtd_fichas,
+        fichas_max=fichas_max,
+        permite_mesma_equipe=permite_mesma_equipe,
+        ultimas_apostas=ultimas_apostas,
+        cenario=cenario,
+        contexto_ergast=contexto_ergast,
+    )
+    logger.debug(
+        "Perplexity payload context size=%d fallback=%s limit=%d",
+        len(contexto_compacto_json),
+        context_fallback_mode,
+        MAX_PERPLEXITY_CONTEXT_CHARS,
+    )
+
+    system_prompt = (
+        "Você é um assistente de estratégia de bolão de F1. "
+        "Responda apenas JSON válido, sem markdown. "
+        "Não invente pilotos fora da lista disponível. "
+        "Se houver incerteza, faça uma aposta conservadora e viável. "
+        "Use criatividade controlada: varie escolhas e distribuição entre chamadas quando houver alternativas plausíveis, "
+        "mas evite sugestões irreais. "
+        "Priorize pilotos de melhor desempenho recente/classificação e só assuma risco moderado. "
+        "Evite concentrar muitas fichas em pilotos de baixo desempenho. "
+        "Legenda das chaves do JSON de entrada: "
+        "alvo={nome,tipo}, pd=pilotos_disponiveis, rg={min,qf,fmax,me}, ua=ultimas_apostas, cz=cenario_local, "
+        "erg={src,s,tp,tc,du,vr}, tp={p,n,e,pt}, tc={p,n,pt}, du={top,bot}."
+    )
+    user_prompt = (
+        "Dados de entrada (JSON canônico compacto):\n"
+        f"{contexto_compacto_json}\n"
+        "Gere uma aposta viável com este formato JSON EXATO: "
+        "{\"pilotos\": [\"Nome\"], \"fichas\": [1,2], \"piloto_11\": \"Nome\"}."
+    )
+
+    payload = {
+        "model": model,
+        "temperature": 0.35,
+        "max_tokens": 260,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        with httpx.Client(timeout=12.0) as client:
+            resp = client.post("https://api.perplexity.ai/chat/completions", headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        parsed = _extrair_json_texto(content)
+        if not parsed:
+            return None
+        if not _validar_formato_json_resposta(parsed):
+            return None
+        pilotos = [str(p).strip() for p in parsed.get('pilotos', []) if str(p).strip()]
+        fichas = [int(x) for x in parsed.get('fichas', [])]
+        piloto_11 = str(parsed.get('piloto_11', '')).strip()
+        if not pilotos or not fichas or not piloto_11:
+            return None
+        return pilotos, fichas, piloto_11
+    except Exception as e:
+        logger.warning(f"Falha na geração via Perplexity para aposta estratégica: {e}")
+        return None
 
 def _parse_datetime_sp(date_str: str, time_str: str):
     """Tenta parsear data e hora com ou sem segundos e retorna timezone America/Sao_Paulo."""
-    fmts = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M']
-    for fmt in fmts:
-        try:
-            dt = datetime.strptime(f"{date_str} {time_str}", fmt)
-            return dt.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
-        except ValueError:
-            continue
-    # Se todas falharem, levanta erro explícito
-    raise ValueError(f"Formato de data/hora inválido: '{date_str} {time_str}'")
+    return parse_datetime_sao_paulo(date_str, time_str)
 
 def pode_fazer_aposta(data_prova_str, horario_prova_str, horario_usuario=None):
     """
@@ -40,9 +482,9 @@ def pode_fazer_aposta(data_prova_str, horario_prova_str, horario_usuario=None):
         horario_limite_sp = _parse_datetime_sp(data_prova_str, horario_prova_str)
 
         if horario_usuario is None:
-            horario_usuario = datetime.now(ZoneInfo("America/Sao_Paulo"))
+            horario_usuario = now_sao_paulo()
         elif not horario_usuario.tzinfo:
-            horario_usuario = horario_usuario.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+            horario_usuario = horario_usuario.replace(tzinfo=SAO_PAULO_TZ)
 
         horario_usuario_utc = horario_usuario.astimezone(ZoneInfo("UTC"))
         horario_limite_utc = horario_limite_sp.astimezone(ZoneInfo("UTC"))
@@ -98,16 +540,22 @@ def salvar_aposta(
 
     horario_limite = _parse_datetime_sp(data_prova, horario_prova)
 
-    agora_sp = horario_forcado or datetime.now(ZoneInfo("America/Sao_Paulo"))
+    agora_sp = horario_forcado or now_sao_paulo()
     tipo_aposta = 0 if agora_sp <= horario_limite else 1
 
     dados_pilotos = ', '.join(pilotos)
     dados_fichas = ', '.join(map(str, fichas))
+    ip_apostador = get_client_ip()
 
     usuario = get_user_by_id(usuario_id)
     if not usuario:
         if show_errors:
             st.error(f"Usuário não encontrado: id={usuario_id}")
+        return False
+    status_usuario = str(usuario.get('status', '')).strip().lower()
+    if status_usuario and status_usuario != 'ativo':
+        if show_errors:
+            st.error("Usuário inativo não pode efetuar apostas.")
         return False
 
     try:
@@ -119,12 +567,12 @@ def salvar_aposta(
             if temporada is None:
                 temporada = str(datetime.now().year)
 
-            if 'temporada' in aposta_cols:
-                c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=? AND temporada=?', (usuario_id, prova_id, temporada))
-            else:
-                c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
-
             if tipo_aposta == 0 or permitir_salvar_tardia:
+                if 'temporada' in aposta_cols:
+                    c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=? AND temporada=?', (usuario_id, prova_id, temporada))
+                else:
+                    c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+
                 data_envio = agora_sp.isoformat()
                 if 'temporada' in aposta_cols:
                     c.execute(
@@ -154,20 +602,62 @@ def salvar_aposta(
                 # Aposta tardia não salva quando não permitido
                 if show_errors:
                     st.error("Aposta fora do horário limite.")
+                try:
+                    tentativa_str = agora_sp.strftime('%d/%m/%Y %H:%M:%S')
+                    limite_str = horario_limite.strftime('%d/%m/%Y %H:%M:%S')
+                    corpo_email = (
+                        f"<p>Olá {html.escape(usuario['nome'])},</p>"
+                        f"<p>Sua aposta para a prova <b>{html.escape(nome_prova_bd)}</b> não foi efetivada.</p>"
+                        "<p><b>Motivo:</b> prazo encerrado (aposta fora do horário limite).</p>"
+                        f"<p><b>Horário limite:</b> {limite_str} (America/Sao_Paulo)</p>"
+                        f"<p><b>Horário da tentativa:</b> {tentativa_str} (America/Sao_Paulo)</p>"
+                        "<p>Se precisar de ajuda, fale com a administração.</p>"
+                    )
+                    enviar_email(usuario['email'], f"Aposta não efetivada - {nome_prova_bd}", corpo_email)
+                except Exception as e:
+                    logger.warning(f"Falha ao enviar email de aposta rejeitada para {usuario.get('email')}: {e}")
+                try:
+                    registrar_log_aposta(
+                        usuario_id=usuario_id,
+                        prova_id=prova_id,
+                        apostador=usuario['nome'],
+                        pilotos=dados_pilotos,
+                        aposta=dados_fichas,
+                        nome_prova=nome_prova_bd,
+                        piloto_11=piloto_11,
+                        tipo_aposta=tipo_aposta,
+                        automatica=automatica,
+                        horario=agora_sp,
+                        ip_address=ip_apostador,
+                        temporada=temporada,
+                        status='Rejeitada'
+                    )
+                except Exception as e:
+                    logger.warning(f"Falha ao registrar log de aposta rejeitada para {usuario.get('email')}: {e}")
                 return False
             conn.commit()
 
             try:
-                previsao = gerar_previsao_sarcastica(
-                    usuario.get('nome', ''),
-                    nome_prova_bd,
-                    pilotos,
-                    fichas,
-                    piloto_11
+                analise = gerar_analise_aposta_com_probabilidade(
+                    nome_usuario=usuario.get('nome', ''),
+                    contexto_aposta=f"Prova {nome_prova_bd}",
+                    detalhes_aposta=(
+                        f"Pilotos: {', '.join(pilotos)}; "
+                        f"Fichas: {', '.join(map(str, fichas))}; "
+                        f"11º: {piloto_11}"
+                    ),
                 )
+                comentario = str(analise.get("comentario", "")).strip()
+                probabilidade = analise.get("probabilidade")
+                resumo = str(analise.get("resumo", "")).strip()
+
                 previsao_html = ""
-                if previsao:
-                    previsao_html = "<p><b>Previsão divertida:</b><br>" + "<br>".join(html.escape(previsao).splitlines()) + "</p>"
+                if comentario:
+                    previsao_html += "<p><b>Comentário sarcástico:</b><br>" + "<br>".join(html.escape(comentario).splitlines()) + "</p>"
+                if probabilidade is not None:
+                    previsao_html += f"<p><b>Probabilidade estimada de acerto:</b> {int(probabilidade)}%</p>"
+                if resumo:
+                    previsao_html += "<p><b>Base da estimativa:</b> " + html.escape(resumo) + "</p>"
 
                 corpo_email = (
                     f"<p>Olá {html.escape(usuario['nome'])},</p>"
@@ -179,6 +669,7 @@ def salvar_aposta(
                     f"<li>Palpite para 11º colocado: {html.escape(piloto_11)}</li>"
                     "</ul>"
                     f"{previsao_html}"
+                    "<p><small><b>Aviso de estimativa:</b> a probabilidade informada é apenas uma projeção estatística/opinativa com base em informações disponíveis e pode variar a qualquer momento. Não constitui garantia de resultado esportivo nem direito a pontuação, prevalecendo sempre as regras oficiais do bolão.</small></p>"
                     "<p>Boa sorte!</p>"
                 )
                 enviar_email(usuario['email'], f"Aposta registrada - {nome_prova_bd}", corpo_email)
@@ -191,6 +682,8 @@ def salvar_aposta(
         return False
 
     registrar_log_aposta(
+        usuario_id=usuario_id,
+        prova_id=prova_id,
         apostador=usuario['nome'],
         pilotos=dados_pilotos,
         aposta=dados_fichas,
@@ -199,12 +692,16 @@ def salvar_aposta(
         tipo_aposta=tipo_aposta,
         automatica=automatica,
         horario=agora_sp,
-        temporada=temporada
+        ip_address=ip_apostador,
+        temporada=temporada,
+        status='Registrada'
     )
     return True
 
 def gerar_aposta_aleatoria(pilotos_df):
     import random
+    if not pilotos_df.empty and 'status' in pilotos_df.columns:
+        pilotos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
     equipes_unicas = [e for e in pilotos_df['equipe'].unique().tolist() if e]
     if len(equipes_unicas) < 3 or pilotos_df.empty:
         return [], [], None
@@ -242,6 +739,8 @@ def gerar_aposta_aleatoria_com_regras(pilotos_df, regras: dict):
     """
     import random
     import math
+    if not pilotos_df.empty and 'status' in pilotos_df.columns:
+        pilotos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
     if pilotos_df.empty:
         return [], [], None
     equipes_unicas = [e for e in pilotos_df['equipe'].unique().tolist() if e]
@@ -398,9 +897,6 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     if prova_atual.empty:
         return False, "Prova não encontrada."
         
-    data_prova = prova_atual['data'].iloc[0]
-    horario_prova = prova_atual['horario_prova'].iloc[0]
-    horario_limite = _parse_datetime_sp(data_prova, horario_prova)
     tipo_prova = _determinar_tipo_prova(prova_atual.iloc[0], nome_prova)
     regras = get_regras_aplicaveis(str(temporada or datetime.now().year), tipo_prova)
     
@@ -412,24 +908,81 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
     if not aposta_existente.empty:
         return False, "Já existe aposta manual para esta prova."
         
-    prova_ant_id = prova_id - 1
-    ap_ant = apostas_df[(apostas_df['usuario_id'] == usuario_id) & (apostas_df['prova_id'] == prova_ant_id)]
+    ap_ant = pd.DataFrame()
+    prova_id_min = None
+    try:
+        prova_id_min = int(provas_df['id'].min()) if not provas_df.empty else None
+    except Exception:
+        prova_id_min = None
+
+    # Encontrar a prova anterior pela data/horario (na mesma temporada)
+    try:
+        provas_tmp = provas_df.copy()
+        if 'data' in provas_tmp.columns:
+            provas_tmp['__data_dt'] = pd.to_datetime(provas_tmp['data'], errors='coerce')
+        else:
+            provas_tmp['__data_dt'] = pd.NaT
+        provas_tmp['__hora_str'] = provas_tmp.get('horario_prova', '00:00:00')
+        provas_tmp['__hora_dt'] = pd.to_datetime(provas_tmp['__hora_str'], format='%H:%M:%S', errors='coerce')
+        provas_tmp['__hora_dt'] = provas_tmp['__hora_dt'].fillna(
+            pd.to_datetime('00:00:00', format='%H:%M:%S')
+        )
+        provas_tmp['__prova_dt'] = provas_tmp['__data_dt'] + pd.to_timedelta(
+            provas_tmp['__hora_dt'].dt.hour, unit='h'
+        ) + pd.to_timedelta(
+            provas_tmp['__hora_dt'].dt.minute, unit='m'
+        ) + pd.to_timedelta(
+            provas_tmp['__hora_dt'].dt.second, unit='s'
+        )
+        provas_tmp = provas_tmp.sort_values(['__prova_dt', 'id'])
+
+        prova_atual_row = provas_tmp[provas_tmp['id'] == prova_id]
+        if not prova_atual_row.empty:
+            prova_atual_dt = prova_atual_row.iloc[0]['__prova_dt']
+            provas_anteriores = provas_tmp[provas_tmp['__prova_dt'] < prova_atual_dt]
+            if not provas_anteriores.empty:
+                prova_ant_id = int(provas_anteriores.iloc[-1]['id'])
+                ap_ant = apostas_df[
+                    (apostas_df['usuario_id'] == usuario_id) &
+                    (apostas_df['prova_id'] == prova_ant_id)
+                ]
+    except Exception:
+        ap_ant = pd.DataFrame()
+
+    if ap_ant.empty:
+        try:
+            provas_sorted = provas_df.sort_values('id')
+            prev_rows = provas_sorted[provas_sorted['id'] < prova_id]
+            if not prev_rows.empty:
+                prova_ant_id = int(prev_rows.iloc[-1]['id'])
+                ap_ant = apostas_df[
+                    (apostas_df['usuario_id'] == usuario_id) &
+                    (apostas_df['prova_id'] == prova_ant_id)
+                ]
+        except Exception:
+            ap_ant = pd.DataFrame()
     
+    pilotos_df = get_pilotos_df()
+    if not pilotos_df.empty and 'status' in pilotos_df.columns:
+        pilotos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
+
     if not ap_ant.empty:
         ap_ant = ap_ant.iloc[0]
         pilotos_ant = [p.strip() for p in ap_ant['pilotos'].split(",")]
         fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
         piloto_11_ant = ap_ant['piloto_11'].strip()
         # Ajustar aposta copiada para obedecer regras da prova atual (ex.: Sprint x Normal)
-        pilotos_aj, fichas_aj = ajustar_aposta_para_regras(pilotos_ant, fichas_ant, regras, get_pilotos_df())
+        pilotos_aj, fichas_aj = ajustar_aposta_para_regras(pilotos_ant, fichas_ant, regras, pilotos_df)
         if not pilotos_aj:
             # Se não conseguir ajustar, gera aleatória com regras
-            pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria_com_regras(get_pilotos_df(), regras)
+            pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria_com_regras(pilotos_df, regras)
         else:
             pilotos_ant, fichas_ant = pilotos_aj, fichas_aj
     else:
-        # Gerar aposta aleatória respeitando regras da temporada e tipo da prova
-        pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria_com_regras(get_pilotos_df(), regras)
+        # Gerar aleatoria apenas na primeira prova do campeonato
+        if prova_id_min is not None and prova_id != prova_id_min:
+            return False, "Sem aposta anterior para copiar. Gere apenas na primeira prova."
+        pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria_com_regras(pilotos_df, regras)
         
     if not pilotos_ant:
         return False, "Não há dados válidos para gerar aposta automática."
@@ -442,11 +995,88 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         
     sucesso = salvar_aposta(
         usuario_id, prova_id, pilotos_ant, fichas_ant, piloto_11_ant, nome_prova,
-        automatica=nova_auto, horario_forcado=horario_limite, temporada=temporada, show_errors=False,
+        automatica=nova_auto, temporada=temporada, show_errors=False,
         permitir_salvar_tardia=True
     )
     
     return (True, "Aposta automática gerada!") if sucesso else (False, "Falha ao salvar.")
+
+
+def gerar_aposta_sem_ideias(usuario_id, prova_id, nome_prova, temporada=None):
+    """Gera e efetiva aposta para o participante dentro do prazo, com tentativa estratégica via Perplexity e fallback aleatório seguro."""
+    try:
+        usuario_id = int(usuario_id)
+        prova_id = int(prova_id)
+    except Exception as e:
+        return False, f"IDs inválidos: {e}"
+
+    provas_df = get_provas_df(temporada)
+    prova_atual = provas_df[provas_df['id'] == prova_id]
+    if prova_atual.empty:
+        return False, "Prova não encontrada."
+
+    data_prova = str(prova_atual['data'].iloc[0])
+    horario_prova = str(prova_atual['horario_prova'].iloc[0])
+    pode, msg, _ = pode_fazer_aposta(data_prova, horario_prova)
+    if not pode:
+        return False, f"Aposta fora do prazo. {msg}"
+
+    tipo_prova = _determinar_tipo_prova(prova_atual.iloc[0], nome_prova)
+    regras = get_regras_aplicaveis(str(temporada or datetime.now().year), tipo_prova)
+
+    pilotos_df = get_pilotos_df()
+    if not pilotos_df.empty and 'status' in pilotos_df.columns:
+        pilotos_df = pilotos_df[pilotos_df['status'] == 'Ativo']
+    if pilotos_df.empty:
+        return False, "Não há pilotos ativos para gerar aposta."
+
+    apostas_df = get_apostas_df(temporada)
+    resultados_df = get_resultados_df(temporada)
+    ultimas_apostas = _get_resumo_ultimas_apostas(usuario_id, apostas_df, provas_df, limite=2)
+    cenario = _get_resumo_cenario_campeonato(resultados_df, provas_df, limite=2)
+    contexto_ergast = _get_contexto_temporada_atual_ergast()
+
+    origem = "aleatória"
+    sugestao = _gerar_aposta_perplexity(
+        pilotos_df,
+        regras,
+        nome_prova,
+        tipo_prova,
+        ultimas_apostas,
+        cenario,
+        contexto_ergast,
+    )
+    if sugestao:
+        pilotos_sel, fichas_sel, piloto_11_sel = sugestao
+        if _aposta_valida_regras(pilotos_sel, fichas_sel, piloto_11_sel, pilotos_df, regras):
+            origem = "estratégica"
+        else:
+            sugestao = None
+
+    if not sugestao:
+        pilotos_sel, fichas_sel, piloto_11_sel = gerar_aposta_aleatoria_com_regras(pilotos_df, regras)
+        if not pilotos_sel:
+            return False, "Não foi possível gerar aposta viável com as regras atuais."
+
+    ok = salvar_aposta(
+        usuario_id=usuario_id,
+        prova_id=prova_id,
+        pilotos=pilotos_sel,
+        fichas=fichas_sel,
+        piloto_11=piloto_11_sel,
+        nome_prova=nome_prova,
+        automatica=0,
+        temporada=temporada,
+        show_errors=False,
+        permitir_salvar_tardia=False,
+    )
+
+    if not ok:
+        return False, "Falha ao salvar aposta gerada."
+
+    if origem == "estratégica":
+        return True, "Aposta 'Sem ideias' gerada com estratégia assistida e registrada!"
+    return True, "Aposta 'Sem ideias' aleatória (fallback) registrada com sucesso!"
 
 def calcular_pontuacao_lote(ap_df, res_df, prov_df, temporada_descarte=None):
     """
