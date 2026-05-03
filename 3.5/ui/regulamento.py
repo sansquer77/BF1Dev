@@ -70,12 +70,7 @@ Para dúvidas, consulte a administração ou acesse o grupo oficial do BF1 e lem
         <script type="text/javascript" async src="https://tenor.com/embed.js"></script>
     """
 
-    if hasattr(st, "html"):
-        st.html(html_content, unsafe_allow_javascript=True)
-    else:
-        import streamlit.components.v1 as components
-
-        components.html(html_content, height=520)
+    st.html(html_content, unsafe_allow_javascript=True)
 
 if __name__ == "__main__":
     main()

@@ -89,12 +89,23 @@ def dict_to_query_params(params: dict) -> str:
 @lru_cache(maxsize=1)
 def _bf1_logo_data_uri() -> str:
     """Retorna logo BF1 como data URI para evitar dependência do media handler em memória."""
-    logo_path = Path(__file__).resolve().parents[1] / "BF1.jpg"
+    # Tentar carregar BF1 2.0.png (versão profissional) primeiro
+    logo_path = Path(__file__).resolve().parents[1] / "BF1 2.0.png"
+    if not logo_path.exists():
+        # Fallback para BF1.jpg se o novo não existir
+        logo_path = Path(__file__).resolve().parents[1] / "BF1.jpg"
+    
     if not logo_path.exists():
         return ""
+    
     content = logo_path.read_bytes()
     encoded = base64.b64encode(content).decode("ascii")
-    return f"data:image/jpeg;base64,{encoded}"
+    
+    # Determinar tipo MIME baseado na extensão
+    file_ext = logo_path.suffix.lower()
+    mime_type = "image/png" if file_ext == ".png" else "image/jpeg"
+    
+    return f"data:{mime_type};base64,{encoded}"
 
 
 def render_bf1_logo_html(width: int = 75, alt: str = "BF1") -> str:
@@ -105,6 +116,18 @@ def render_bf1_logo_html(width: int = 75, alt: str = "BF1") -> str:
     safe_width = max(1, int(width))
     safe_alt = (alt or "BF1").replace('"', "")
     return f'<img src="{data_uri}" alt="{safe_alt}" width="{safe_width}" loading="eager" />'
+
+
+def get_bf1_logo_data_uri() -> str:
+    """Retorna o logo BF1 como data URI para uso em emails e outras aplicações.
+    
+    O data URI contém a imagem codificada em base64 e pode ser usada diretamente
+    em tags <img> sem depender de URLs externas.
+    
+    Returns:
+        str: Data URI da imagem BF1 (ex: data:image/png;base64,...)
+    """
+    return _bf1_logo_data_uri()
 
 
 def render_page_header(st_module: Any, title: str, logo_width: int = 75) -> None:

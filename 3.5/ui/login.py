@@ -18,6 +18,7 @@ from utils.request_utils import get_client_ip
 from utils.validators import validar_email
 from utils.input_models import LoginInput, ValidationError
 from utils.logging_utils import redact_identifier
+from utils.helpers import render_bf1_logo_html
 from services.data_access_core import (
     db_connect,
 )
@@ -216,13 +217,7 @@ def _injetar_autocomplete_login() -> None:
     </script>
     """
 
-    if hasattr(st, "html"):
-        st.html(script_html, unsafe_allow_javascript=True)
-        return
-
-    import streamlit.components.v1 as components
-
-    components.html(script_html, height=0)
+    st.html(script_html, unsafe_allow_javascript=True)
 
 
 def login_view():
@@ -237,8 +232,15 @@ def login_view():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown("# 🏁 BF1 - Bolão de F1")
-        st.markdown("### Sistema de Apostas e Ranking")
+        # Logo profissional BF1 centralizado
+        logo_html = render_bf1_logo_html(width=150, alt="Logo BF1")
+        if logo_html:
+            st.markdown(f"<div style='text-align: center;'>{logo_html}</div>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center; margin-top: 10px;'>BF1 - Bolão de F1</h2>", unsafe_allow_html=True)
+        else:
+            st.markdown("# 🏁 BF1 - Bolão de F1")
+        
+        st.markdown("<h4 style='text-align: center; color: #666;'>Sistema de Apostas e Ranking</h4>", unsafe_allow_html=True)
         st.markdown("---")
         
         # ========== FORMULÁRIO ==========
