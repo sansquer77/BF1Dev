@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import random
-from typing import Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -18,14 +17,7 @@ def _parse_datetime_sp(date_str: str, time_str: str):
 def pode_fazer_aposta(prova_ou_data, horario_prova_str: str | None = None, horario_usuario=None):
     """Verifica se ainda é possível fazer aposta para a prova.
 
-    Aceita duas formas de chamada:
-
-    1. Dict/objeto com chaves ``data`` e ``horario``:
-       ``pode_fazer_aposta(prova_dict)``
-
-    2. Strings separadas (forma legada):
-       ``pode_fazer_aposta(data_str, horario_str)``
-
+    Aceita dict com chaves ``data``/``horario`` ou strings separadas (forma legada).
     Retorna ``(bool, mensagem, horario_limite_sp)``.
     """
     try:
@@ -65,12 +57,8 @@ def validar_composicao_aposta(
 ) -> tuple[bool, str]:
     """Valida a composição de uma aposta, retornando (ok, mensagem).
 
-    Verifica:
-    - Lista de pilotos não vazia
-    - Tamanho de pilotos == tamanho de fichas
-    - Sem pilotos duplicados
-    - Fichas sem valores negativos
-    - piloto_11 preenchido e diferente dos pilotos apostados
+    Verifica: lista não vazia, tamanhos compatíveis, sem duplicatas,
+    fichas sem negativos, piloto_11 preenchido e fora da lista principal.
     """
     if not pilotos:
         return False, "A lista de pilotos não pode estar vazia."
@@ -80,19 +68,19 @@ def validar_composicao_aposta(
             f"Número de pilotos ({len(pilotos)}) diferente do número de fichas ({len(fichas)})."
         )
 
-    if len(set(pilotos)) != len(pilotos):
-        duplicados = [p for p in set(pilotos) if pilotos.count(p) > 1]
+    duplicados = [p for p in set(pilotos) if pilotos.count(p) > 1]
+    if duplicados:
         return False, f"Pilotos duplicados: {', '.join(duplicados)}."
 
     negativos = [str(f) for f in fichas if int(f) < 0]
     if negativos:
-        return False, f"Fichas com valor negativo encontradas: {', '.join(negativos)}."
+        return False, f"Fichas com valor negativo: {', '.join(negativos)}."
 
-    if not piloto_11 or not str(piloto_11).strip():
+    if not str(piloto_11).strip():
         return False, "O 11º colocado (piloto_11) é obrigatório."
 
     if piloto_11 in pilotos:
-        return False, f"O piloto '{piloto_11}' não pode estar tanto na aposta quanto como 11º."
+        return False, f"O piloto '{piloto_11}' não pode estar na aposta e como 11º."
 
     if regras is not None and pilotos_df is not None:
         ok = _aposta_valida_regras(pilotos, [int(f) for f in fichas], piloto_11, pilotos_df, regras)
@@ -108,12 +96,9 @@ def aposta_eh_automatica(aposta: dict) -> bool:
 
 
 def calcular_pior_pontuador(pontos: list) -> float:
-    """Retorna a menor pontuação da lista, ignorando None.
-
-    Retorna 0.0 se a lista estiver vazia ou contiver apenas None.
-    """
+    """Retorna a menor pontuação válida da lista; 0.0 se vazia ou toda None."""
     validos = [p for p in pontos if p is not None]
-    return min(validos) if validos else 0.0
+    return float(min(validos)) if validos else 0.0
 
 
 def _aposta_valida_regras(
@@ -123,6 +108,7 @@ def _aposta_valida_regras(
     pilotos_df: pd.DataFrame,
     regras: dict,
 ) -> bool:
+    """Validação completa das regras configuradas (uso interno)."""
     if not pilotos_sel or not fichas_sel or not piloto_11:
         return False
 
@@ -168,7 +154,8 @@ def ajustar_aposta_para_regras(
     fichas: list[int],
     regras: dict,
     pilotos_df: pd.DataFrame,
-):
+) -> tuple[list[str], list[int]]:
+    """Ajusta pilotos e fichas para que a aposta respeite as regras configuradas."""
     if not pilotos:
         return [], []
     qtd_fichas = int(regras.get("quantidade_fichas", 15))
