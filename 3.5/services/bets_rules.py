@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -14,9 +15,28 @@ def _parse_datetime_sp(date_str: str, time_str: str):
     return parse_datetime_sao_paulo(date_str, time_str)
 
 
-def pode_fazer_aposta(data_prova_str, horario_prova_str, horario_usuario=None):
+def pode_fazer_aposta(prova_ou_data, horario_prova_str: str | None = None, horario_usuario=None):
+    """Verifica se ainda é possível fazer aposta para a prova.
+
+    Aceita duas formas de chamada:
+
+    1. Dict/objeto com chaves ``data`` e ``horario``:
+       ``pode_fazer_aposta(prova_dict)``
+
+    2. Strings separadas (forma legada):
+       ``pode_fazer_aposta(data_str, horario_str)``
+
+    Retorna ``(bool, mensagem, horario_limite_sp)``.
+    """
     try:
-        horario_limite_sp = _parse_datetime_sp(data_prova_str, horario_prova_str)
+        if isinstance(prova_ou_data, dict):
+            data_str = str(prova_ou_data.get("data", "")).strip()
+            horario_str = str(prova_ou_data.get("horario", "00:00:00")).strip()
+        else:
+            data_str = str(prova_ou_data).strip()
+            horario_str = str(horario_prova_str or "00:00:00").strip()
+
+        horario_limite_sp = _parse_datetime_sp(data_str, horario_str)
 
         if horario_usuario is None:
             horario_usuario = now_sao_paulo()
@@ -34,6 +54,66 @@ def pode_fazer_aposta(data_prova_str, horario_prova_str, horario_usuario=None):
         return pode, mensagem, horario_limite_sp
     except Exception as e:
         return False, f"Erro ao validar horário: {str(e)}", None
+
+
+def validar_composicao_aposta(
+    pilotos: list[str],
+    fichas: list[int],
+    piloto_11: str,
+    pilotos_df: pd.DataFrame | None = None,
+    regras: dict | None = None,
+) -> tuple[bool, str]:
+    """Valida a composição de uma aposta, retornando (ok, mensagem).
+
+    Verifica:
+    - Lista de pilotos não vazia
+    - Tamanho de pilotos == tamanho de fichas
+    - Sem pilotos duplicados
+    - Fichas sem valores negativos
+    - piloto_11 preenchido e diferente dos pilotos apostados
+    """
+    if not pilotos:
+        return False, "A lista de pilotos não pode estar vazia."
+
+    if len(pilotos) != len(fichas):
+        return False, (
+            f"Número de pilotos ({len(pilotos)}) diferente do número de fichas ({len(fichas)})."
+        )
+
+    if len(set(pilotos)) != len(pilotos):
+        duplicados = [p for p in set(pilotos) if pilotos.count(p) > 1]
+        return False, f"Pilotos duplicados: {', '.join(duplicados)}."
+
+    negativos = [str(f) for f in fichas if int(f) < 0]
+    if negativos:
+        return False, f"Fichas com valor negativo encontradas: {', '.join(negativos)}."
+
+    if not piloto_11 or not str(piloto_11).strip():
+        return False, "O 11º colocado (piloto_11) é obrigatório."
+
+    if piloto_11 in pilotos:
+        return False, f"O piloto '{piloto_11}' não pode estar tanto na aposta quanto como 11º."
+
+    if regras is not None and pilotos_df is not None:
+        ok = _aposta_valida_regras(pilotos, [int(f) for f in fichas], piloto_11, pilotos_df, regras)
+        if not ok:
+            return False, "A aposta viola as regras configuradas para esta temporada."
+
+    return True, ""
+
+
+def aposta_eh_automatica(aposta: dict) -> bool:
+    """Retorna True se a aposta foi gerada automaticamente (flag automatica != 0)."""
+    return bool(int(aposta.get("automatica", 0)))
+
+
+def calcular_pior_pontuador(pontos: list) -> float:
+    """Retorna a menor pontuação da lista, ignorando None.
+
+    Retorna 0.0 se a lista estiver vazia ou contiver apenas None.
+    """
+    validos = [p for p in pontos if p is not None]
+    return min(validos) if validos else 0.0
 
 
 def _aposta_valida_regras(
@@ -141,8 +221,12 @@ def ajustar_aposta_para_regras(
         return [], []
     return pilotos, fichas
 
+
 __all__ = [
     "pode_fazer_aposta",
+    "validar_composicao_aposta",
+    "aposta_eh_automatica",
+    "calcular_pior_pontuador",
     "_aposta_valida_regras",
     "ajustar_aposta_para_regras",
 ]
