@@ -31,6 +31,7 @@ from services.painel_controller import (
     parse_evento_prova_dt as _controller_parse_evento_prova_dt,
 )
 from services.rules_service import get_regras_aplicaveis
+from services.historico_service import calcular_resumo_historico, calcular_dados_grafico
 from utils.datetime_utils import now_sao_paulo
 from utils.helpers import render_page_header
 from utils.season_utils import get_default_season_index, get_season_options
@@ -102,6 +103,8 @@ def participante_view():
         ((not is_inactive_profile) and has_season_data)
         or (is_inactive_profile and inactive_has_history)
     )
+    # Aba "Histórico" (consolidado) aparece sempre que o participante tem ao menos uma aposta
+    show_historico_geral_tab = not force_change
 
     if force_change:
         st.warning("⚠️ Você precisa alterar sua senha temporária antes de continuar.")
@@ -112,6 +115,10 @@ def participante_view():
     if show_apostas_tab:
         tab_labels.append("Apostas")
     if show_historico_tab:
+        # Aba de histórico por temporada, com nome dinâmico mostrando o ano selecionado
+        tab_labels.append(f"Apostas - {season}")
+    if show_historico_geral_tab:
+        # Aba principal de histórico: consolida todas as temporadas do participante.
         tab_labels.append("Histórico")
     tab_labels.append("Minha Conta")
     tabs = st.tabs(tab_labels)
@@ -196,7 +203,7 @@ def participante_view():
 
             if len(provas) > 0 and len(pilotos_df) > 2:
                     prova_ids_validos = set(provas['id'].tolist())
-                    proxima_prova_id = _get_proxima_prova_id(provas)
+                    proxima_prova_id = _get_proxima_prova_id(provas.to_frame() if isinstance(provas, pd.Series) else provas)
                     temporada_default_aposta = st.session_state.get("aposta_default_temporada")
                     prova_atual_sel = st.session_state.get("sel_prova_aposta")
 
@@ -220,7 +227,7 @@ def participante_view():
                         )
                     with col_btn:
                         st.write("")
-                        if st.button("Ver regras", width="content"):
+                        if st.button("Ver regras"):
                             prova_nome_sel = provas[provas['id'] == prova_id]['nome'].values[0]
                             tipo_raw = provas[provas['id'] == prova_id]['tipo'].values[0] if not provas[provas['id'] == prova_id].empty else 'Normal'
                             tipo_sel = 'Sprint' if str(tipo_raw).strip().lower() == 'sprint' or 'sprint' in str(prova_nome_sel).lower() else 'Normal'
@@ -228,7 +235,7 @@ def participante_view():
                             _mostrar_regras_dialog(regras_sel, temporada, tipo_sel)
                     with col_sem_ideias:
                         st.write("")
-                        if st.button("Sem ideias", width="content"):
+                        if st.button("Sem ideias"):
                             nome_prova_sem_ideias = provas[provas['id'] == prova_id]['nome'].values[0]
                             ok_auto, msg_auto = gerar_aposta_sem_ideias(
                                 usuario_id=user['id'],
@@ -439,7 +446,7 @@ def participante_view():
                 st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
 
     if show_historico_tab:
-        with tab_map["Histórico"]:
+        with tab_map[f"Apostas - {season}"]:
             if is_inactive_profile:
                 st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
 
@@ -462,7 +469,8 @@ def participante_view():
             # evita descartar todas as apostas quando force_change=True (provas_df = DataFrame()).
             if not provas_df.empty and 'id' in provas_df.columns:
                 apostas_part = apostas_part[apostas_part['prova_id'].isin(provas_df['id'])]
-            apostas_part = apostas_part.sort_values('prova_id')
+            if isinstance(apostas_part, pd.DataFrame):
+                apostas_part = apostas_part.sort_values(by='prova_id')
             pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
             pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
 
@@ -551,7 +559,7 @@ def participante_view():
                                 st.write("**Sprint com pontuação dobrada:** Sim")
                             else:
                                 st.write("**Sprint com pontuação dobrada:** Não")
-                        st.dataframe(pd.DataFrame(dados), hide_index=True, width="stretch")
+                        st.dataframe(pd.DataFrame(dados), hide_index=True)
                         st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
                         if penalidade_abandono:
                             pilotos_str = ", ".join(pilotos_abandonados)
@@ -654,6 +662,11 @@ def participante_view():
             else:
                 st.info("Ainda não há histórico de posições registrado.")
 
+    # ------------------ Aba: Histórico (consolidado multi-temporada) ----------------------
+    if show_historico_geral_tab:
+        with tab_map["Histórico"]:
+            _render_historico_geral(user['id'])
+
     # ---------------- Aba: Minha Conta ----------------------
     with tab_map["Minha Conta"]:
         st.header("Gestão da Minha Conta")
@@ -705,3 +718,147 @@ def participante_view():
                         st.error("Falha ao alterar senha.")
                 if atualizado:
                     st.rerun()
+
+
+def _render_historico_geral(usuario_id: int) -> None:
+    """Renderiza a aba 'Histórico' com dados consolidados de todas as temporadas.
+
+    Separada em função própria para facilitar leitura, testes e manutenção.
+
+    Estrutura da aba:
+    1. Cards de resumo (melhor colocação, pontuação, médias, acertos 11º)
+    2. Gráfico de barras: fichas por piloto por temporada
+    3. Destaque do piloto mais apostado
+    """
+    resumo = calcular_resumo_historico(usuario_id)
+    dados_grafico = calcular_dados_grafico(usuario_id)
+
+    if not resumo.temporadas_com_dados:
+        st.info("Nenhuma aposta encontrada em temporadas anteriores.")
+        return
+
+    # ------------------------------------------------------------------
+    # Seção 1: Cards de resumo
+    # ------------------------------------------------------------------
+    st.subheader("🏆 Resumo Histórico")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    with col1:
+        melhor_col = resumo.melhor_colocacao
+        melhor_col_ano = resumo.melhor_colocacao_ano or "-"
+        st.metric(
+            label="Melhor Colocação",
+            value=f"{melhor_col}º" if melhor_col is not None else "-",
+            help=f"Alcançada em {melhor_col_ano}",
+        )
+        st.caption(f"Ano: {melhor_col_ano}")
+
+    with col2:
+        melhor_pt = resumo.melhor_pontuacao
+        melhor_pt_ano = resumo.melhor_pontuacao_ano or "-"
+        st.metric(
+            label="Melhor Pontuação",
+            value=f"{melhor_pt:.0f}" if melhor_pt is not None else "-",
+            help=f"Obtida em {melhor_pt_ano}",
+        )
+        st.caption(f"Ano: {melhor_pt_ano}")
+
+    with col3:
+        media_pos = resumo.media_posicoes
+        st.metric(
+            label="Média das Posições",
+            value=f"{media_pos:.1f}º" if media_pos is not None else "-",
+            help="Média da colocação final por temporada",
+        )
+
+    with col4:
+        media_pt = resumo.media_pontuacoes
+        st.metric(
+            label="Média Pontuações",
+            value=f"{media_pt:.0f}" if media_pt is not None else "-",
+            help="Média da pontuação total por temporada",
+        )
+
+    with col5:
+        st.metric(
+            label="Acertos 11º",
+            value=str(resumo.total_acertos_11),
+            help="Total de vezes que acertou o 11º colocado em todas as temporadas",
+        )
+
+    st.markdown("---")
+
+    # ------------------------------------------------------------------
+    # Seção 2: Gráfico de barras — fichas por piloto por temporada
+    # ------------------------------------------------------------------
+    st.subheader("🏁 Apostas em Pilotos por Temporada")
+
+    fichas_dict = dados_grafico.fichas_por_temporada_piloto
+
+    if not fichas_dict:
+        st.info("Ainda não há dados de apostas para exibir o gráfico.")
+    else:
+        # Transforma a estrutura para: {piloto: {ano: fichas}}
+        fichas_por_piloto_ano: dict[str, dict[str, int]] = {}
+        for temporada, pilotos_dict in fichas_dict.items():
+            for piloto, fichas in pilotos_dict.items():
+                if piloto not in fichas_por_piloto_ano:
+                    fichas_por_piloto_ano[piloto] = {}
+                fichas_por_piloto_ano[piloto][temporada] = fichas
+
+        # Coleta os últimos 5 anos únicos
+        todas_temporadas = sorted(fichas_dict.keys())
+        anos_selecionados = sorted(todas_temporadas)[-5:] if len(todas_temporadas) > 5 else sorted(todas_temporadas)
+
+        # Ordena pilotos por total de fichas (descendente)
+        pilotos_ordenados = sorted(
+            fichas_por_piloto_ano.keys(),
+            key=lambda p: sum(fichas_por_piloto_ano[p].values()),
+            reverse=True
+        )
+
+        fig_barras = go.Figure()
+
+        # Adiciona uma série por ano
+        for ano in anos_selecionados:
+            fichas_por_piloto = [
+                fichas_por_piloto_ano[piloto].get(ano, 0)
+                for piloto in pilotos_ordenados
+            ]
+            fig_barras.add_trace(
+                go.Bar(
+                    name=str(ano),
+                    x=pilotos_ordenados,
+                    y=fichas_por_piloto,
+                    text=[
+                        str(f) if f > 0 else ""
+                        for f in fichas_por_piloto
+                    ],
+                    textposition="auto",
+                )
+            )
+
+        fig_barras.update_layout(
+            barmode="group",
+            xaxis_title="Piloto",
+            yaxis_title="Total de Fichas",
+            legend_title="Temporada",
+            legend=dict(orientation="v", x=1.02, xanchor="left"),
+            margin=dict(r=120),
+            height=500,
+        )
+
+        st.plotly_chart(fig_barras, use_container_width=True)
+
+        # ------------------------------------------------------------------
+        # Seção 3: Piloto mais apostado
+        # ------------------------------------------------------------------
+        piloto_top = dados_grafico.piloto_mais_apostado
+        fichas_top = dados_grafico.total_fichas_piloto_mais_apostado
+
+        if piloto_top:
+            st.markdown(
+                f"⭐ **Piloto mais apostado:** {piloto_top} — "
+                f"**{fichas_top} fichas** no total ao longo de todas as temporadas."
+            )

@@ -217,7 +217,13 @@ def _injetar_autocomplete_login() -> None:
     </script>
     """
 
-    st.html(script_html, unsafe_allow_javascript=True)
+    if hasattr(st, "html"):
+        st.html(script_html, unsafe_allow_javascript=True)
+        return
+
+    import streamlit.components.v1 as components
+
+    components.html(script_html, height=0)
 
 
 def login_view():
