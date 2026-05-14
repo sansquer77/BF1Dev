@@ -11,7 +11,12 @@ from db.db_schema import get_table_columns, init_db, table_exists
 logger = logging.getLogger(__name__)
 
 
-def _add_column_if_missing(cursor, conn, table_name: str, column_name: str, ddl: str) -> None:
+def _add_column_if_missing(
+        cursor,
+        conn,
+        table_name: str,
+        column_name: str,
+        ddl: str) -> None:
     cols = get_table_columns(conn, table_name)
     if column_name not in cols:
         cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {ddl}")
@@ -21,16 +26,28 @@ def _add_column_if_missing(cursor, conn, table_name: str, column_name: str, ddl:
 def add_temporada_columns_if_missing() -> None:
     pool = get_pool()
     current_year = str(datetime.datetime.now().year)
-    tables_to_update = ("provas", "apostas", "resultados", "posicoes_participantes")
+    tables_to_update = (
+        "provas",
+        "apostas",
+        "resultados",
+        "posicoes_participantes")
 
     with pool.get_connection() as conn:
         cursor = conn.cursor()
         for table_name in tables_to_update:
             try:
                 if table_exists(conn, table_name):
-                    _add_column_if_missing(cursor, conn, table_name, "temporada", f"temporada TEXT DEFAULT '{current_year}'")
+                    _add_column_if_missing(
+                        cursor,
+                        conn,
+                        table_name,
+                        "temporada",
+                        f"temporada TEXT DEFAULT '{current_year}'")
             except Exception as exc:
-                logger.debug("Erro ao adicionar temporada em %s: %s", table_name, exc)
+                logger.debug(
+                    "Erro ao adicionar temporada em %s: %s",
+                    table_name,
+                    exc)
         conn.commit()
 
 
@@ -40,7 +57,12 @@ def add_abandono_column_if_missing() -> None:
         cursor = conn.cursor()
         try:
             if table_exists(conn, "resultados"):
-                _add_column_if_missing(cursor, conn, "resultados", "abandono_pilotos", "abandono_pilotos TEXT DEFAULT ''")
+                _add_column_if_missing(
+                    cursor,
+                    conn,
+                    "resultados",
+                    "abandono_pilotos",
+                    "abandono_pilotos TEXT DEFAULT ''")
             conn.commit()
         except Exception as exc:
             logger.debug("Erro ao adicionar abandono_pilotos: %s", exc)
@@ -53,15 +75,34 @@ def add_legacy_columns_if_missing() -> None:
         cursor = conn.cursor()
         try:
             if table_exists(conn, "pilotos"):
-                _add_column_if_missing(cursor, conn, "pilotos", "equipe", "equipe TEXT DEFAULT ''")
-                _add_column_if_missing(cursor, conn, "pilotos", "status", "status TEXT DEFAULT 'Ativo'")
-                _add_column_if_missing(cursor, conn, "pilotos", "numero", "numero INTEGER DEFAULT 0")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_pilotos_nome_norm ON pilotos ((lower(nome)))")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_pilotos_nome_num_eq_norm ON pilotos ((lower(nome)), numero, (lower(equipe)), status)")
+                _add_column_if_missing(
+                    cursor, conn, "pilotos", "equipe", "equipe TEXT DEFAULT ''")
+                _add_column_if_missing(
+                    cursor,
+                    conn,
+                    "pilotos",
+                    "status",
+                    "status TEXT DEFAULT 'Ativo'")
+                _add_column_if_missing(
+                    cursor,
+                    conn,
+                    "pilotos",
+                    "numero",
+                    "numero INTEGER DEFAULT 0")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_pilotos_nome_norm ON pilotos ((lower(nome)))")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_pilotos_nome_num_eq_norm ON pilotos ((lower(nome)), numero, (lower(equipe)), status)")
 
             if table_exists(conn, "provas"):
-                _add_column_if_missing(cursor, conn, "provas", "horario_prova", "horario_prova TEXT DEFAULT ''")
-                _add_column_if_missing(cursor, conn, "provas", "tipo", "tipo TEXT DEFAULT 'Normal'")
+                _add_column_if_missing(
+                    cursor,
+                    conn,
+                    "provas",
+                    "horario_prova",
+                    "horario_prova TEXT DEFAULT ''")
+                _add_column_if_missing(
+                    cursor, conn, "provas", "tipo", "tipo TEXT DEFAULT 'Normal'")
 
             conn.commit()
         except Exception as exc:
@@ -75,7 +116,12 @@ def add_password_reset_flag_if_missing() -> None:
         cursor = conn.cursor()
         try:
             if table_exists(conn, "usuarios"):
-                _add_column_if_missing(cursor, conn, "usuarios", "must_change_password", "must_change_password INTEGER DEFAULT 0")
+                _add_column_if_missing(
+                    cursor,
+                    conn,
+                    "usuarios",
+                    "must_change_password",
+                    "must_change_password INTEGER DEFAULT 0")
             conn.commit()
         except Exception as exc:
             logger.debug("Erro ao adicionar must_change_password: %s", exc)
@@ -88,7 +134,12 @@ def add_login_attempts_action_if_missing() -> None:
         cursor = conn.cursor()
         try:
             if table_exists(conn, "login_attempts"):
-                _add_column_if_missing(cursor, conn, "login_attempts", "action", "action TEXT DEFAULT 'login'")
+                _add_column_if_missing(
+                    cursor,
+                    conn,
+                    "login_attempts",
+                    "action",
+                    "action TEXT DEFAULT 'login'")
             conn.commit()
         except Exception as exc:
             logger.debug("Erro ao adicionar action: %s", exc)
@@ -101,7 +152,12 @@ def add_login_attempts_ip_if_missing() -> None:
         cursor = conn.cursor()
         try:
             if table_exists(conn, "login_attempts"):
-                _add_column_if_missing(cursor, conn, "login_attempts", "ip_address", "ip_address TEXT")
+                _add_column_if_missing(
+                    cursor,
+                    conn,
+                    "login_attempts",
+                    "ip_address",
+                    "ip_address TEXT")
             conn.commit()
         except Exception as exc:
             logger.debug("Erro ao adicionar ip_address: %s", exc)
@@ -139,11 +195,14 @@ def harden_log_apostas_datetime_fields() -> None:
 
             cols = set(get_table_columns(conn, "log_apostas"))
             if "horario" in cols:
-                cursor.execute("ALTER TABLE log_apostas ALTER COLUMN horario DROP DEFAULT")
-                cursor.execute("SELECT COUNT(*) AS qtd FROM log_apostas WHERE horario IS NULL")
+                cursor.execute(
+                    "ALTER TABLE log_apostas ALTER COLUMN horario DROP DEFAULT")
+                cursor.execute(
+                    "SELECT COUNT(*) AS qtd FROM log_apostas WHERE horario IS NULL")
                 horario_nulos = int((cursor.fetchone() or {}).get("qtd", 0))
                 if horario_nulos == 0:
-                    cursor.execute("ALTER TABLE log_apostas ALTER COLUMN horario SET NOT NULL")
+                    cursor.execute(
+                        "ALTER TABLE log_apostas ALTER COLUMN horario SET NOT NULL")
                 else:
                     logger.warning(
                         "⚠️  log_apostas.horario possui %s registros nulos; corrija via import/ajuste de dados antes de aplicar NOT NULL",
@@ -151,11 +210,14 @@ def harden_log_apostas_datetime_fields() -> None:
                     )
 
             if "data" in cols:
-                cursor.execute("ALTER TABLE log_apostas ALTER COLUMN data DROP DEFAULT")
-                cursor.execute("SELECT COUNT(*) AS qtd FROM log_apostas WHERE data IS NULL OR BTRIM(data) = ''")
+                cursor.execute(
+                    "ALTER TABLE log_apostas ALTER COLUMN data DROP DEFAULT")
+                cursor.execute(
+                    "SELECT COUNT(*) AS qtd FROM log_apostas WHERE data IS NULL OR BTRIM(data) = ''")
                 data_vazia = int((cursor.fetchone() or {}).get("qtd", 0))
                 if data_vazia == 0:
-                    cursor.execute("ALTER TABLE log_apostas ALTER COLUMN data SET NOT NULL")
+                    cursor.execute(
+                        "ALTER TABLE log_apostas ALTER COLUMN data SET NOT NULL")
                 else:
                     logger.warning(
                         "⚠️  log_apostas.data possui %s registros vazios/nulos; corrija via import/ajuste de dados antes de aplicar NOT NULL",
@@ -164,7 +226,8 @@ def harden_log_apostas_datetime_fields() -> None:
 
             conn.commit()
         except Exception as exc:
-            logger.warning("⚠️  Falha ao reforçar data/horario em log_apostas: %s", exc)
+            logger.warning(
+                "⚠️  Falha ao reforçar data/horario em log_apostas: %s", exc)
             conn.rollback()
 
 
@@ -190,11 +253,16 @@ def create_access_logs_table_if_missing() -> None:
                 )
                 """
             )
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON access_logs(created_at)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_perfil ON access_logs(perfil)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_sucesso ON access_logs(sucesso)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created_at_id_desc ON access_logs(created_at DESC, id DESC)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_perfil_created_at_desc ON access_logs(perfil, created_at DESC)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON access_logs(created_at)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_access_logs_perfil ON access_logs(perfil)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_access_logs_sucesso ON access_logs(sucesso)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_access_logs_created_at_id_desc ON access_logs(created_at DESC, id DESC)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_access_logs_perfil_created_at_desc ON access_logs(perfil, created_at DESC)")
             conn.commit()
         except Exception as exc:
             logger.debug("Erro ao criar access_logs: %s", exc)
@@ -220,11 +288,16 @@ def create_usuarios_status_historico_if_missing() -> None:
                 )
                 """
             )
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_ush_usuario_id ON usuarios_status_historico(usuario_id)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_ush_status ON usuarios_status_historico(status)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_ush_periodo ON usuarios_status_historico(inicio_em, fim_em)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ush_usuario_id ON usuarios_status_historico(usuario_id)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ush_status ON usuarios_status_historico(status)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ush_periodo ON usuarios_status_historico(inicio_em, fim_em)")
 
-            user_cols = get_table_columns(conn, "usuarios") if table_exists(conn, "usuarios") else []
+            user_cols = get_table_columns(
+                conn, "usuarios") if table_exists(
+                conn, "usuarios") else []
             created_expr = "criado_em" if "criado_em" in user_cols else "CURRENT_TIMESTAMP"
             cursor.execute(
                 f"""
@@ -267,7 +340,12 @@ def create_missing_tables_if_needed() -> None:
             )
 
             if table_exists(conn, "championship_bets"):
-                _add_column_if_missing(cursor, conn, "championship_bets", "season", f"season INTEGER NOT NULL DEFAULT {current_year}")
+                _add_column_if_missing(
+                    cursor,
+                    conn,
+                    "championship_bets",
+                    "season",
+                    f"season INTEGER NOT NULL DEFAULT {current_year}")
 
             cursor.execute(
                 """
@@ -298,9 +376,12 @@ def create_missing_tables_if_needed() -> None:
                 """
             )
 
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_championship_bets_season ON championship_bets(season)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_championship_bets_user_season ON championship_bets(user_id, season)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_championship_bets_log_user_season_time ON championship_bets_log(user_id, season, bet_time DESC)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_championship_bets_season ON championship_bets(season)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_championship_bets_user_season ON championship_bets(user_id, season)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_championship_bets_log_user_season_time ON championship_bets_log(user_id, season, bet_time DESC)")
 
             cursor.execute(
                 f"""
@@ -327,8 +408,10 @@ def create_missing_tables_if_needed() -> None:
                 """
             )
 
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_log_apostas_temporada_usuario_id_desc ON log_apostas(temporada, usuario_id, id DESC)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_log_apostas_temporada_id_desc ON log_apostas(temporada, id DESC)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_log_apostas_temporada_usuario_id_desc ON log_apostas(temporada, usuario_id, id DESC)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_log_apostas_temporada_id_desc ON log_apostas(temporada, id DESC)")
 
             conn.commit()
         except Exception as exc:
@@ -397,9 +480,13 @@ def fix_sequences() -> None:
                     """,
                     (seq_name,),
                 )
-                logger.info("✓ Sequence `%s` ressincronizada para tabela `%s`", seq_name, table)
+                logger.info(
+                    "✓ Sequence `%s` ressincronizada para tabela `%s`",
+                    seq_name,
+                    table)
             except Exception as exc:
-                logger.warning("⚠️  Falha ao ressincronizar sequence de `%s`: %s", table, exc)
+                logger.warning(
+                    "⚠️  Falha ao ressincronizar sequence de `%s`: %s", table, exc)
                 try:
                     conn.rollback()
                 except Exception:
@@ -433,8 +520,10 @@ def run_migrations() -> None:
             create_hall_da_fama_table()
 
             if table_exists(conn, "posicoes_participantes"):
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_posicoes_participantes_usuario_temporada ON posicoes_participantes(usuario_id, temporada)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_posicoes_participantes_temporada_posicao ON posicoes_participantes(temporada, posicao)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_posicoes_participantes_usuario_temporada ON posicoes_participantes(usuario_id, temporada)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_posicoes_participantes_temporada_posicao ON posicoes_participantes(temporada, posicao)")
 
             for table_indexes in INDICES.values():
                 for idx in table_indexes:
@@ -466,8 +555,8 @@ def run_migrations() -> None:
         # Não aborta a inicialização do app se a migration de tipos falhar.
         # As colunas TEXT originais continuam funcionando normalmente.
         logger.warning(
-            "⚠️  Migration de tipos nativos não pôde ser concluída (app segue normal): %s", exc
-        )
+            "⚠️  Migration de tipos nativos não pôde ser concluída (app segue normal): %s",
+            exc)
 
 
 def create_hall_da_fama_table() -> None:
@@ -487,8 +576,10 @@ def create_hall_da_fama_table() -> None:
                 )
                 """
             )
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_hall_da_fama_usuario_temporada ON hall_da_fama(usuario_id, temporada)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_hall_da_fama_temporada_posicao ON hall_da_fama(temporada, posicao_final)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_hall_da_fama_usuario_temporada ON hall_da_fama(usuario_id, temporada)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_hall_da_fama_temporada_posicao ON hall_da_fama(temporada, posicao_final)")
             conn.commit()
             logger.info("✓ Tabela hall_da_fama criada com sucesso")
     except Exception as exc:

@@ -1,5 +1,6 @@
 import streamlit as st
 
+
 def main():
     st.title("ℹ️ Sobre o BF1")
 
@@ -35,7 +36,7 @@ def main():
 
     - Para dúvidas, sugestões ou reportar bugs:
         - **E-mail:** cristiano_gaspar@outlook.com
-    
+
     - Agradecimentos a todos os participantes e beta testers do bolão ao longo dos anos.
 
     ### ☁️ Infraestrutura
@@ -47,6 +48,7 @@ def main():
 
     <a href="https://www.digitalocean.com/?refcode=7a57329868da&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge"><img src="https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg" alt="DigitalOcean Referral Badge" /></a>
     """, unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     main()

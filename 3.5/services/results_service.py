@@ -1,7 +1,4 @@
 import pandas as pd
-import json
-import ast
-from datetime import datetime
 import logging
 from db.db_schema import db_connect
 from db.repo_races import get_provas_df, get_resultados_df
@@ -19,10 +16,10 @@ def _parse_posicoes(posicoes_str: str) -> dict:
     """
     Converte string de posições para dicionário de forma segura.
     Suporta formato JSON e formato Python dict (legado).
-    
+
     Args:
         posicoes_str: String com posições (JSON ou repr de dict Python)
-    
+
     Returns:
         Dicionário com posições {int: str}
     """
@@ -40,7 +37,7 @@ def salvar_resultado_prova(prova_id: int, posicoes: dict) -> bool:
     """
     try:
         # Serializa para JSON canônico (chaves como string)
-        posicoes_json_str = posicoes_to_json(posicoes)
+        posicoes_to_json(posicoes)
         # Mantém repr Python legado na coluna TEXT para retrocompatibilidade
         posicoes_text_legacy = str(posicoes)
 
@@ -55,17 +52,23 @@ def salvar_resultado_prova(prova_id: int, posicoes: dict) -> bool:
                 ''',
                 (prova_id, posicoes_text_legacy)
             )
-            # Sincroniza coluna JSONB nativa (sem rollback se coluna não existir)
+            # Sincroniza coluna JSONB nativa (sem rollback se coluna não
+            # existir)
             sync_resultado_native(conn, prova_id)
             conn.commit()
             return True
     except Exception as e:
-        logger.exception("Erro ao salvar resultado da prova %s: %s", prova_id, e)
+        logger.exception(
+            "Erro ao salvar resultado da prova %s: %s",
+            prova_id,
+            e)
         return False
+
 
 def obter_resultados():
     """Retorna todos os resultados de todas as provas como DataFrame pandas."""
     return get_resultados_df()
+
 
 def obter_resultado_prova(prova_id: int):
     """
@@ -95,6 +98,7 @@ def obter_resultado_prova(prova_id: int):
         return result if result else None
     return None
 
+
 def listar_resultados_completos():
     """
     Retorna DataFrame com nomes das provas e posições dos pilotos (1º ao 11º).
@@ -106,7 +110,8 @@ def listar_resultados_completos():
         prova_id = res['prova_id']
 
         # Prefere JSONB nativo quando disponível
-        jsonb_val = res.get('posicoes_jsonb') if 'posicoes_jsonb' in res.index else None
+        jsonb_val = res.get(
+            'posicoes_jsonb') if 'posicoes_jsonb' in res.index else None
         if isinstance(jsonb_val, dict) and jsonb_val:
             posicoes = {int(k): v for k, v in jsonb_val.items()}
         else:
@@ -120,6 +125,7 @@ def listar_resultados_completos():
             linha[f"{pos}º"] = posicoes.get(pos, "")
         lista.append(linha)
     return pd.DataFrame(lista)
+
 
 def validar_resultado(posicoes: dict, pilotos_ativos=None) -> tuple:
     """

@@ -120,7 +120,8 @@ def _safe_jsonb(txt: Optional[str]) -> Optional[str]:
     # Tenta JSON direto
     try:
         obj = json.loads(s)
-        return json.dumps({str(k): v for k, v in obj.items()}, ensure_ascii=False)
+        return json.dumps(
+            {str(k): v for k, v in obj.items()}, ensure_ascii=False)
     except Exception:
         pass
     # Tenta ast.literal_eval (formato Python dict legado)
@@ -128,7 +129,8 @@ def _safe_jsonb(txt: Optional[str]) -> Optional[str]:
         import ast
         obj = ast.literal_eval(s)
         if isinstance(obj, dict):
-            return json.dumps({str(k): v for k, v in obj.items()}, ensure_ascii=False)
+            return json.dumps(
+                {str(k): v for k, v in obj.items()}, ensure_ascii=False)
     except Exception:
         pass
     return None
@@ -165,14 +167,20 @@ def parse_posicoes_safe(raw: Optional[str]) -> dict:
 
 def posicoes_to_json(posicoes: dict) -> str:
     """Serializa posições para JSON canônico (chaves como string)."""
-    return json.dumps({str(k): v for k, v in posicoes.items()}, ensure_ascii=False)
+    return json.dumps(
+        {str(k): v for k, v in posicoes.items()}, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
 # DDL helpers
 # ---------------------------------------------------------------------------
 
-def _add_col_if_missing(cursor, conn, table: str, column: str, ddl: str) -> bool:
+def _add_col_if_missing(
+        cursor,
+        conn,
+        table: str,
+        column: str,
+        ddl: str) -> bool:
     cols = get_table_columns(conn, table)
     if column not in cols:
         cursor.execute(f'ALTER TABLE "{table}" ADD COLUMN {ddl}')
@@ -352,13 +360,13 @@ def _migrate_apostas_types(conn) -> None:
 
             cur.execute(
                 'UPDATE apostas SET data_envio_ts = %s, pilotos_arr = %s, fichas_arr = %s '
-                'WHERE id = %s',
-                (ts_val, pilotos_val, fichas_val, aid)
-            )
+                'WHERE id = %s', (ts_val, pilotos_val, fichas_val, aid))
             updates += 1
 
         conn.commit()
-        logger.info('  ✓ apostas: %d linha(s) migradas para TIMESTAMPTZ/TEXT[]/INTEGER[]', updates)
+        logger.info(
+            '  ✓ apostas: %d linha(s) migradas para TIMESTAMPTZ/TEXT[]/INTEGER[]',
+            updates)
     except Exception as exc:
         conn.rollback()
         logger.error('  ✗ Falha ao migrar apostas: %s', exc)
@@ -391,20 +399,21 @@ def _migrate_resultados_jsonb(conn) -> None:
         for row in rows:
             pid = row['prova_id']
             jsonb_val = _safe_jsonb(row.get('posicoes'))
-            abandono_val = _safe_text_array(row.get('abandono_pilotos')) if has_abandono_col else None
+            abandono_val = _safe_text_array(
+                row.get('abandono_pilotos')) if has_abandono_col else None
 
             if jsonb_val is None:
                 continue  # não força conversão de dados ilegíveis
 
             cur.execute(
                 'UPDATE resultados SET posicoes_jsonb = %s::jsonb, abandono_arr = %s '
-                'WHERE prova_id = %s',
-                (jsonb_val, abandono_val, pid)
-            )
+                'WHERE prova_id = %s', (jsonb_val, abandono_val, pid))
             updates += 1
 
         conn.commit()
-        logger.info('  ✓ resultados: %d linha(s) migradas para JSONB/TEXT[]', updates)
+        logger.info(
+            '  ✓ resultados: %d linha(s) migradas para JSONB/TEXT[]',
+            updates)
     except Exception as exc:
         conn.rollback()
         logger.error('  ✗ Falha ao migrar resultados: %s', exc)
@@ -434,17 +443,16 @@ def sync_aposta_native(conn, aposta_id: int) -> None:
             return
         cur.execute(
             'UPDATE apostas SET data_envio_ts = %s, pilotos_arr = %s, fichas_arr = %s '
-            'WHERE id = %s',
-            (
-                _safe_timestamptz(row['data_envio']),
-                _safe_text_array(row['pilotos']),
-                _safe_int_array(row['fichas']),
-                aposta_id,
-            )
-        )
+            'WHERE id = %s', (_safe_timestamptz(
+                row['data_envio']), _safe_text_array(
+                row['pilotos']), _safe_int_array(
+                row['fichas']), aposta_id, ))
         # Não faz commit aqui — responsabilidade do caller
     except Exception as exc:
-        logger.debug('sync_aposta_native falhou para id=%s: %s', aposta_id, exc)
+        logger.debug(
+            'sync_aposta_native falhou para id=%s: %s',
+            aposta_id,
+            exc)
 
 
 def sync_resultado_native(conn, prova_id: int) -> None:
@@ -472,17 +480,19 @@ def sync_resultado_native(conn, prova_id: int) -> None:
         if not row:
             return
         jsonb_val = _safe_jsonb(row['posicoes'])
-        abandono_val = _safe_text_array(row.get('abandono_pilotos')) if has_abandono else None
+        abandono_val = _safe_text_array(
+            row.get('abandono_pilotos')) if has_abandono else None
         if jsonb_val is None:
             return
         cur.execute(
             'UPDATE resultados SET posicoes_jsonb = %s::jsonb, abandono_arr = %s '
-            'WHERE prova_id = %s',
-            (jsonb_val, abandono_val, prova_id)
-        )
+            'WHERE prova_id = %s', (jsonb_val, abandono_val, prova_id))
         # Não faz commit aqui — responsabilidade do caller
     except Exception as exc:
-        logger.debug('sync_resultado_native falhou para prova_id=%s: %s', prova_id, exc)
+        logger.debug(
+            'sync_resultado_native falhou para prova_id=%s: %s',
+            prova_id,
+            exc)
 
 
 def sync_prova_native(conn, prova_id: int) -> None:
@@ -498,15 +508,15 @@ def sync_prova_native(conn, prova_id: int) -> None:
         has_horario = 'horario_prova' in cols
         if has_horario:
             cur.execute(
-                'SELECT data, horario_prova FROM provas WHERE id = %s', (prova_id,)
-            )
+                'SELECT data, horario_prova FROM provas WHERE id = %s', (prova_id,))
         else:
             cur.execute('SELECT data FROM provas WHERE id = %s', (prova_id,))
         row = cur.fetchone()
         if not row:
             return
         date_val = _safe_date(row['data'])
-        time_val = _safe_time(row.get('horario_prova')) if has_horario else None
+        time_val = _safe_time(row.get('horario_prova')
+                              ) if has_horario else None
         if date_val is None:
             return
         cur.execute(

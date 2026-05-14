@@ -7,6 +7,29 @@ Melhorias:
 - Rate limiting
 - Tema Liquid Glass (responsivo mobile/desktop)
 """
+from services.auth_service import decode_token
+from ui.hall_da_fama import hall_da_fama
+from ui.sobre import main as sobre_view
+from ui.dashboard import main as dashboard_view
+from ui.backup import main as backup_view
+from ui.gestao_pilotos import main as gestao_pilotos_view
+from ui.gestao_regras import main as gestao_regras_view
+from ui.gestao_provas import main as gestao_provas_view
+from ui.log_apostas import main as log_apostas_view
+from ui.classificacao import main as classificacao_view
+from ui.regulamento import main as regulamento_view
+from ui.analysis import main as analysis_view
+from ui.gestao_apostas import main as gestao_apostas_view
+from ui.championship_results import main as championship_results_view
+from ui.championship_bets import main as championship_bets_view
+from ui.calendario import main as calendario_view
+from ui.gestao_resultados import resultados_view
+from ui.usuarios import main as usuarios_view
+from ui.painel import participante_view
+from ui.login import login_view
+from db.master_user_manager import MasterUserManager
+from db.migrations import run_migrations
+from db.db_utils import init_db
 import streamlit as st
 import logging
 import datetime
@@ -21,6 +44,8 @@ st.set_page_config(
 )
 
 # ============ CARREGAR ESTILOS CSS LIQUID GLASS ============
+
+
 def load_css():
     """Carrega o arquivo CSS customizado com tema Liquid Glass."""
     css_file = Path(__file__).parent / "assets" / "styles.css"
@@ -28,21 +53,22 @@ def load_css():
         with open(css_file, "r", encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
+
 def load_pwa_meta_tags():
     """Adiciona meta tags para PWA e iOS Add to Home Screen."""
     import base64
     from pathlib import Path
-    
+
     # Carregar ícone 180x180 como base64 (tamanho ideal para iOS)
     icon_path = Path(__file__).parent / "static" / "apple-touch-icon-180.png"
     if not icon_path.exists():
         icon_path = Path(__file__).parent / "static" / "apple-touch-icon.png"
-    
+
     icon_base64 = ""
     if icon_path.exists():
         with open(icon_path, "rb") as f:
             icon_base64 = base64.b64encode(f.read()).decode()
-    
+
     # Usar JavaScript para injetar as meta tags no <head> do documento
     if icon_base64:
         icon_data_uri = f"data:image/png;base64,{icon_base64}"
@@ -51,22 +77,22 @@ def load_pwa_meta_tags():
             (function() {{
                 // Remover meta tags antigas se existirem
                 document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove());
-                
+
                 // Criar e adicionar novas meta tags no head
                 var head = document.getElementsByTagName('head')[0];
-                
+
                 // Apple Touch Icon
                 var link = document.createElement('link');
                 link.rel = 'apple-touch-icon';
                 link.href = '{icon_data_uri}';
                 head.appendChild(link);
-                
+
                 var link180 = document.createElement('link');
                 link180.rel = 'apple-touch-icon';
                 link180.sizes = '180x180';
                 link180.href = '{icon_data_uri}';
                 head.appendChild(link180);
-                
+
                 // Verificar/adicionar meta tags PWA
                 if (!document.querySelector('meta[name="apple-mobile-web-app-capable"]')) {{
                     var meta1 = document.createElement('meta');
@@ -74,14 +100,14 @@ def load_pwa_meta_tags():
                     meta1.content = 'yes';
                     head.appendChild(meta1);
                 }}
-                
+
                 if (!document.querySelector('meta[name="apple-mobile-web-app-title"]')) {{
                     var meta2 = document.createElement('meta');
                     meta2.name = 'apple-mobile-web-app-title';
                     meta2.content = 'BF1';
                     head.appendChild(meta2);
                 }}
-                
+
                 if (!document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')) {{
                     var meta3 = document.createElement('meta');
                     meta3.name = 'apple-mobile-web-app-status-bar-style';
@@ -91,11 +117,12 @@ def load_pwa_meta_tags():
             }})();
             </script>
         """, unsafe_allow_html=True)
-    
+
     st.markdown("""
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="theme-color" content="#0a0a0f">
     """, unsafe_allow_html=True)
+
 
 load_css()
 load_pwa_meta_tags()
@@ -108,9 +135,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============ INICIALIZAÇÃO DO BANCO ============
-from db.db_utils import init_db
-from db.migrations import run_migrations
-from db.master_user_manager import MasterUserManager
+
 
 @st.cache_resource(show_spinner=False)
 def bootstrap_app() -> bool:
@@ -125,26 +150,6 @@ def bootstrap_app() -> bool:
 bootstrap_app()
 
 # ============ IMPORTAÇÃO DAS VIEWS ============
-from ui.login import login_view
-from ui.painel import participante_view
-from ui.usuarios import main as usuarios_view
-from ui.gestao_resultados import resultados_view
-from ui.calendario import main as calendario_view
-from ui.championship_bets import main as championship_bets_view
-from ui.championship_results import main as championship_results_view
-from ui.gestao_apostas import main as gestao_apostas_view
-from ui.analysis import main as analysis_view
-from ui.regulamento import main as regulamento_view
-from ui.classificacao import main as classificacao_view
-from ui.log_apostas import main as log_apostas_view
-from ui.gestao_provas import main as gestao_provas_view
-from ui.gestao_regras import main as gestao_regras_view
-from ui.gestao_pilotos import main as gestao_pilotos_view
-from ui.backup import main as backup_view
-from ui.dashboard import main as dashboard_view
-from ui.sobre import main as sobre_view
-from ui.hall_da_fama import hall_da_fama
-from services.auth_service import decode_token
 
 # ============ ESTADO INICIAL DA SESSÃO ============
 if 'pagina' not in st.session_state:
@@ -153,8 +158,11 @@ if 'token' not in st.session_state:
     st.session_state['token'] = None
 
 # ============ MENUS POR PERFIL ============
+
+
 def _calendario_label():
     return f"Calendário ({datetime.datetime.now().year})"
+
 
 def menu_master():
     return [
@@ -179,6 +187,7 @@ def menu_master():
         "Logout"
     ]
 
+
 def menu_admin():
     return [
         "Painel do Participante",
@@ -199,6 +208,7 @@ def menu_admin():
         "Logout"
     ]
 
+
 def menu_participante():
     return [
         "Painel do Participante",
@@ -214,6 +224,7 @@ def menu_participante():
         "Logout"
     ]
 
+
 def get_payload():
     token = st.session_state.get('token')
     if not token:
@@ -225,6 +236,7 @@ def get_payload():
         st.session_state['token'] = None
         st.stop()
     return payload
+
 
 # ============ DICIONÁRIO DE ROTAS ============
 PAGES = {
@@ -250,6 +262,8 @@ PAGES = {
 }
 
 # ============ MENU LATERAL ============
+
+
 def sidebar_menu():
     token = st.session_state.get("token")
     if not token:
@@ -262,15 +276,17 @@ def sidebar_menu():
             menu_items = menu_admin()
         else:
             menu_items = menu_participante()
-    
+
     escolha = st.sidebar.radio("Menu", menu_items, key="menu_lateral")
     st.session_state["pagina"] = escolha
 
 # ============ APP PRINCIPAL ============
+
+
 def main():
     sidebar_menu()
     pagina = st.session_state["pagina"]
-    
+
     # LOGOUT
     if pagina == "Logout":
         for k in list(st.session_state.keys()):
@@ -278,12 +294,13 @@ def main():
         st.sidebar.success("Logout realizado com sucesso.")
         st.rerun()
         return
-    
+
     # EXECUTA A VIEW
     if pagina in PAGES:
         PAGES[pagina]()
     else:
         st.error("Página não encontrada.")
+
 
 if __name__ == "__main__":
     main()

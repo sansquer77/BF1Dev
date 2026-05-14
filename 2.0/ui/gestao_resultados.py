@@ -5,9 +5,11 @@ import ast
 from db.db_utils import db_connect, get_provas_df, get_pilotos_df, get_resultados_df
 from services.bets_service import atualizar_classificacoes_todas_as_provas
 
+
 def resultados_view():
     # Verificação de permissão (apenas admin/master)
-    if 'token' not in st.session_state or st.session_state.get('user_role') not in ('admin', 'master'):
+    if 'token' not in st.session_state or st.session_state.get(
+            'user_role') not in ('admin', 'master'):
         st.warning("Acesso restrito a administradores/master.")
         return
 
@@ -75,7 +77,8 @@ def resultados_view():
     erro = None
     if st.button("Salvar resultado"):
         # Validação dos campos
-        if len(posicoes) < 11 or any(not posicoes.get(pos) for pos in range(1, 11)):
+        if len(posicoes) < 11 or any(not posicoes.get(pos)
+                                     for pos in range(1, 11)):
             erro = "Preencha todos os campos de 1º ao 10º colocado (não deixe em branco)."
         elif len(set([posicoes.get(pos) for pos in range(1, 11)])) < 10:
             erro = "Não é permitido repetir piloto entre 1º e 10º colocado."

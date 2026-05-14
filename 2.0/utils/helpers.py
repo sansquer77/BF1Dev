@@ -2,6 +2,7 @@ import unicodedata
 import re
 from datetime import datetime, timedelta
 
+
 def normalize_str(text: str) -> str:
     """
     Remove acentos/diacríticos, espaços extras e converte string para minúsculas.
@@ -10,7 +11,8 @@ def normalize_str(text: str) -> str:
     if not isinstance(text, str):
         return ""
     nfkd = unicodedata.normalize("NFKD", text)
-    return "".join([c for c in nfkd if not unicodedata.combining(c)]).strip().lower()
+    return "".join(
+        [c for c in nfkd if not unicodedata.combining(c)]).strip().lower()
 
 
 def contains_html(text: str) -> bool:
@@ -80,4 +82,3 @@ def dict_to_query_params(params: dict) -> str:
     Converte um dicionário simples em string de query params GET.
     """
     return "&".join(f"{k}={v}" for k, v in params.items() if v is not None)
-

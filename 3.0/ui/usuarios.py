@@ -45,7 +45,8 @@ def _get_pagamentos_temporada(temporada: str) -> dict[int, bool]:
     return {int(r[0]): bool(int(r[1])) for r in rows}
 
 
-def _salvar_pagamentos_temporada(temporada: str, pagamentos: dict[int, bool]) -> None:
+def _salvar_pagamentos_temporada(
+        temporada: str, pagamentos: dict[int, bool]) -> None:
     _ensure_gestao_financeira_table()
     with db_connect() as conn:
         c = conn.cursor()
@@ -97,7 +98,14 @@ def _salvar_valor_taxa_temporada(temporada: str, valor_taxa: float) -> None:
 
 def _fmt_brl(valor: float) -> str:
     try:
-        return f"R$ {float(valor):,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+        return f"R$ {
+            float(valor):,.2f}".replace(
+            ",",
+            "v").replace(
+            ".",
+            ",").replace(
+                "v",
+            ".")
     except Exception:
         return "R$ 0,00"
 
@@ -123,8 +131,14 @@ def _render_gestao_usuarios_tab(perfil: str):
     # Campos de edição
     novo_nome = st.text_input("Nome", user_row["nome"])
     novo_email = st.text_input("Email", user_row["email"])
-    novo_perfil = st.selectbox("Perfil", ["participante", "admin", "master"], index=["participante", "admin", "master"].index(user_row["perfil"]))
-    novo_status = st.selectbox("Status", ["Ativo", "Inativo"], index=0 if user_row["status"] == "Ativo" else 1)
+    novo_perfil = st.selectbox(
+        "Perfil", [
+            "participante", "admin", "master"], index=[
+            "participante", "admin", "master"].index(
+                user_row["perfil"]))
+    novo_status = st.selectbox(
+        "Status", [
+            "Ativo", "Inativo"], index=0 if user_row["status"] == "Ativo" else 1)
 
     col1, col2 = st.columns(2)
 
@@ -163,7 +177,8 @@ def _render_gestao_usuarios_tab(perfil: str):
             st.session_state["alterar_senha"] = True
 
         if st.session_state["alterar_senha"]:
-            nova_senha = st.text_input("Nova senha", type="password", key="senha_reset")
+            nova_senha = st.text_input(
+                "Nova senha", type="password", key="senha_reset")
             if st.button("Salvar nova senha"):
                 if not nova_senha:
                     st.error("Digite a nova senha.")
@@ -171,15 +186,18 @@ def _render_gestao_usuarios_tab(perfil: str):
                     nova_hash = hash_password(nova_senha)
                     with db_connect() as conn:
                         c = conn.cursor()
-                        c.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (nova_hash, int(user_row["id"])))
+                        c.execute(
+                            "UPDATE usuarios SET senha_hash=? WHERE id=?", (nova_hash, int(
+                                user_row["id"])))
                         conn.commit()
                     st.success("Senha atualizada com sucesso!")
                     st.session_state["alterar_senha"] = False
-                    
+
                     # TODO: add email and password validation to user management
                     # Use utils.validators in the user management interface to ensure that new
                     # users are created with valid email formats and strong passwords. This
-                    # addresses vulnerabilities related to predictable/default credentials.
+                    # addresses vulnerabilities related to predictable/default
+                    # credentials.
                     st.rerun()
             if st.button("Cancelar alteração de senha"):
                 st.session_state["alterar_senha"] = False
@@ -192,7 +210,8 @@ def _render_gestao_usuarios_tab(perfil: str):
             else:
                 with db_connect() as conn:
                     c = conn.cursor()
-                    c.execute("DELETE FROM usuarios WHERE id=?", (int(user_row["id"]),))
+                    c.execute("DELETE FROM usuarios WHERE id=?",
+                              (int(user_row["id"]),))
                     conn.commit()
                 st.success("Usuário excluído com sucesso!")
                 st.cache_data.clear()
@@ -203,15 +222,23 @@ def _render_gestao_usuarios_tab(perfil: str):
     nome_novo = st.text_input("Nome completo", key="novo_nome")
     email_novo = st.text_input("Email", key="novo_email")
     senha_novo = st.text_input("Senha", type="password", key="nova_senha")
-    perfil_novo = st.selectbox("Perfil", ["participante", "admin", "master"], key="novo_perfil")
-    status_novo = st.selectbox("Status", ["Ativo", "Inativo"], key="novo_status")
+    perfil_novo = st.selectbox(
+        "Perfil", [
+            "participante", "admin", "master"], key="novo_perfil")
+    status_novo = st.selectbox(
+        "Status", ["Ativo", "Inativo"], key="novo_status")
 
     if st.button("Adicionar usuário"):
         if not nome_novo or not email_novo or not senha_novo:
             st.error("Preencha todos os campos obrigatórios.")
         else:
             from services.auth_service import cadastrar_usuario
-            sucesso = cadastrar_usuario(nome_novo, email_novo, senha_novo, perfil=perfil_novo, status=status_novo)
+            sucesso = cadastrar_usuario(
+                nome_novo,
+                email_novo,
+                senha_novo,
+                perfil=perfil_novo,
+                status=status_novo)
             if sucesso:
                 st.success("Usuário adicionado com sucesso!")
                 st.cache_data.clear()
@@ -226,15 +253,16 @@ def _render_gestao_financeira_tab():
     if not usuarios_status_historico_disponivel():
         st.warning(
             "⚠️ Aviso técnico: a tabela de histórico de status de usuários não foi encontrada. "
-            "Para temporadas anteriores, a lista pode refletir o status atual em vez do status histórico da temporada."
-        )
+            "Para temporadas anteriores, a lista pode refletir o status atual em vez do status histórico da temporada.")
 
     current_year = str(datetime.now().year)
     season_options = get_season_options()
     temporada = st.selectbox(
         "Temporada",
         season_options,
-        index=get_default_season_index(season_options, current_year=current_year),
+        index=get_default_season_index(
+            season_options,
+            current_year=current_year),
         key="usuarios_finance_temporada",
     )
 
@@ -253,10 +281,10 @@ def _render_gestao_financeira_tab():
 
     participantes = get_participantes_temporada_df(temporada)
     if not participantes.empty and "perfil" in participantes.columns:
-        participantes = participantes[
-            participantes["perfil"].astype(str).str.strip().str.lower() != "master"
-        ]
-    participantes = participantes.sort_values("nome") if not participantes.empty else participantes
+        participantes = participantes[participantes["perfil"].astype(
+            str).str.strip().str.lower() != "master"]
+    participantes = participantes.sort_values(
+        "nome") if not participantes.empty else participantes
 
     if participantes.empty:
         st.info("Não há participantes ativos nesta temporada.")
@@ -368,24 +396,30 @@ def _render_gestao_financeira_tab():
                 cco=[d["E-mail"] for d in pendentes_preview],
             )
             if ok:
-                st.success(f"Lembrete enviado em CCO para {len(pendentes_preview)} participante(s).")
+                st.success(
+                    f"Lembrete enviado em CCO para {
+                        len(pendentes_preview)} participante(s).")
             else:
                 st.error("Falha ao enviar lembrete financeiro.")
+
 
 def main():
     st.title("👥 Gestão de Usuários")
 
-    # Definir permissões necessárias: apenas master pode editar tudo, admin pode ver; participante não acessa
+    # Definir permissões necessárias: apenas master pode editar tudo, admin
+    # pode ver; participante não acessa
     perfil = st.session_state.get("user_role", "participante")
     if perfil not in ("admin", "master"):
         st.warning("Acesso restrito a administradores.")
         return
 
-    aba_usuarios, aba_financeira = st.tabs(["Gestão de Usuários", "Gestão financeira"])
+    aba_usuarios, aba_financeira = st.tabs(
+        ["Gestão de Usuários", "Gestão financeira"])
     with aba_usuarios:
         _render_gestao_usuarios_tab(perfil)
     with aba_financeira:
         _render_gestao_financeira_tab()
+
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
+
 def main():
     st.title("📜 Regulamento BF1-2026 (Completo e Oficial)")
 
@@ -18,8 +19,8 @@ O BF1-2026 terá início, oficialmente, em 08 de março, no dia do GP da Austrá
 **Apostas dos Participantes**
 - As apostas devem ser efetuadas até o horário oficial da prova e que está programado dentro do app.
 - O app tem log e timestamp de todas as apostas efetuadas, além de enviar confirmação por e-mail.
-- O participante pode enviar quantas apostas quiser, sendo válida a última enviada até o horário limite.  
-- Apostas registradas após o horário da largada, por exemplo 09:01 sendo a corrida às 09h, serão desconsideradas (E isso fica logado)  
+- O participante pode enviar quantas apostas quiser, sendo válida a última enviada até o horário limite.
+- Apostas registradas após o horário da largada, por exemplo 09:01 sendo a corrida às 09h, serão desconsideradas (E isso fica logado)
 - Os horários das corridas deste ano estão listados no menu - Calendário 2026.
 
 **Ausências e Penalizações**
@@ -38,7 +39,7 @@ O BF1-2026 terá início, oficialmente, em 08 de março, no dia do GP da Austrá
     - Limite de 5 fichas por piloto.
     - As corridas Sprint seguem a mesma regra e são consideradas provas válidas e terão a pontuação dobrada.
     - Deve ser indicado o piloto que irá chegar em 11º lugar em todas as provas; em caso de acerto, serão computados 50 pontos extras.
-    - Caso o piloto apostado não termine a prova, o participante receberá uma punição de 10 pontos por piloto, que serão descontados da pontuação total do participante.      
+    - Caso o piloto apostado não termine a prova, o participante receberá uma punição de 10 pontos por piloto, que serão descontados da pontuação total do participante.
 - A pontuação do participante será a multiplicação das fichas apostadas em cada piloto pelo número de pontos que ele obteve na prova (fichas x pontos) mais a pontuação do 11º lugar e menos as punições por não terminar a prova.
 - As apostas e apurações ficam neste sistema, sendo o placar atualizado publicado no grupo do WhatsApp após as corridas.
 
@@ -72,6 +73,7 @@ Para dúvidas, consulte a administração ou acesse o grupo oficial do BF1 e lem
         """,
         height=520,
     )
+
 
 if __name__ == "__main__":
     main()

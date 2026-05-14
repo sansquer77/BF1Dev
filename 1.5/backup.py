@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 
+
 def main():
     # Configurações da página
     st.set_page_config(

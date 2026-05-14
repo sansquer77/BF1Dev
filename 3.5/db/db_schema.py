@@ -140,6 +140,7 @@ def init_db() -> None:
         conn.commit()
     logger.info("init_db concluido")
 
+
 __all__ = [
     "db_connect",
     "get_table_columns",

@@ -12,12 +12,14 @@ from db.db_utils import (
 from services.rules_service import get_regras_aplicaveis
 from utils.season_utils import get_season_options
 
+
 def _get_participantes_temporada(temporada: str | None = None) -> pd.DataFrame:
     participantes_df = get_participantes_temporada_df(temporada)
     if participantes_df.empty:
         return participantes_df
     if 'perfil' in participantes_df.columns:
-        participantes_df = participantes_df[participantes_df['perfil'].str.lower() != 'master']
+        participantes_df = participantes_df[participantes_df['perfil'].str.lower(
+        ) != 'master']
     else:
         participantes_df = participantes_df[participantes_df['nome'] != 'Master']
     return participantes_df
@@ -43,11 +45,14 @@ def _get_log_apostas_df(
         conditions.append("temporada = ?")
         params.append(temporada)
 
-    id_placeholders = ','.join(['?'] * len(participantes_ids)) if participantes_ids else ''
-    nome_placeholders = ','.join(['?'] * len(participantes_nomes)) if participantes_nomes else ''
+    id_placeholders = ','.join(
+        ['?'] * len(participantes_ids)) if participantes_ids else ''
+    nome_placeholders = ','.join(
+        ['?'] * len(participantes_nomes)) if participantes_nomes else ''
 
     if participantes_ids and 'usuario_id' in cols and participantes_nomes and 'apostador' in cols:
-        conditions.append(f"(usuario_id IN ({id_placeholders}) OR apostador IN ({nome_placeholders}))")
+        conditions.append(
+            f"(usuario_id IN ({id_placeholders}) OR apostador IN ({nome_placeholders}))")
         params.extend(participantes_ids)
         params.extend(participantes_nomes)
     elif participantes_ids and 'usuario_id' in cols:
@@ -66,7 +71,9 @@ def _get_log_apostas_df(
     return pd.read_sql(query, conn, params=tuple(params))
 
 
-def get_apostas_por_piloto(temporada: str | None = None, participantes_df: pd.DataFrame | None = None):
+def get_apostas_por_piloto(
+        temporada: str | None = None,
+        participantes_df: pd.DataFrame | None = None):
     """
     Agrupa apostas por participante e piloto para análise da distribuição de apostas.
     Retorna DataFrame: participante | piloto | total_apostas
@@ -91,7 +98,9 @@ def get_apostas_por_piloto(temporada: str | None = None, participantes_df: pd.Da
                     JOIN usuarios u ON a.usuario_id = u.id
                     WHERE a.usuario_id IN ({}) AND a.temporada = ?
                 '''
-                df = pd.read_sql(query.format(placeholders), conn, params=(*participantes_ids, temporada))
+                df = pd.read_sql(
+                    query.format(placeholders), conn, params=(
+                        *participantes_ids, temporada))
             else:
                 query = '''
                     SELECT u.nome AS participante, a.pilotos
@@ -99,7 +108,10 @@ def get_apostas_por_piloto(temporada: str | None = None, participantes_df: pd.Da
                     JOIN usuarios u ON a.usuario_id = u.id
                     WHERE a.usuario_id IN ({})
                 '''
-                df = pd.read_sql(query.format(placeholders), conn, params=tuple(participantes_ids))
+                df = pd.read_sql(
+                    query.format(placeholders),
+                    conn,
+                    params=tuple(participantes_ids))
             if df.empty:
                 df = _get_log_apostas_df(
                     conn,
@@ -111,7 +123,8 @@ def get_apostas_por_piloto(temporada: str | None = None, participantes_df: pd.Da
             if not df.empty and 'pilotos' in df.columns:
                 df['piloto'] = df['pilotos'].str.split(',')
                 df = df.explode('piloto')
-                df = df.groupby(['participante', 'piloto']).size().reset_index(name='total_apostas')
+                df = df.groupby(['participante', 'piloto']).size(
+                ).reset_index(name='total_apostas')
             else:
                 df = pd.DataFrame()
     except Exception as e:
@@ -119,7 +132,10 @@ def get_apostas_por_piloto(temporada: str | None = None, participantes_df: pd.Da
         df = pd.DataFrame()
     return df
 
-def get_distribuicao_piloto_11(temporada: str | None = None, participantes_df: pd.DataFrame | None = None):
+
+def get_distribuicao_piloto_11(
+        temporada: str | None = None,
+        participantes_df: pd.DataFrame | None = None):
     """
     Distribuição de apostas para o 11º colocado por participante.
     Retorna DataFrame: participante | piloto_11
@@ -145,7 +161,9 @@ def get_distribuicao_piloto_11(temporada: str | None = None, participantes_df: p
                     WHERE a.usuario_id IN ({}) AND a.temporada = ?
                     AND a.piloto_11 IS NOT NULL AND a.piloto_11 != ''
                 '''
-                df = pd.read_sql(query.format(placeholders), conn, params=(*participantes_ids, temporada))
+                df = pd.read_sql(
+                    query.format(placeholders), conn, params=(
+                        *participantes_ids, temporada))
             else:
                 query = '''
                     SELECT u.nome AS participante, a.piloto_11 AS piloto_11
@@ -154,7 +172,10 @@ def get_distribuicao_piloto_11(temporada: str | None = None, participantes_df: p
                     WHERE a.usuario_id IN ({})
                     AND a.piloto_11 IS NOT NULL AND a.piloto_11 != ''
                 '''
-                df = pd.read_sql(query.format(placeholders), conn, params=tuple(participantes_ids))
+                df = pd.read_sql(
+                    query.format(placeholders),
+                    conn,
+                    params=tuple(participantes_ids))
             if df.empty:
                 df = _get_log_apostas_df(
                     conn,
@@ -168,14 +189,14 @@ def get_distribuicao_piloto_11(temporada: str | None = None, participantes_df: p
         df = pd.DataFrame()
     return df
 
+
 def main():
     st.title("📊 Análise Detalhada das Apostas")
 
     if not usuarios_status_historico_disponivel():
         st.warning(
             "⚠️ Aviso técnico: histórico de status de usuários indisponível. "
-            "As análises por temporada podem considerar o status atual de participantes."
-        )
+            "As análises por temporada podem considerar o status atual de participantes.")
 
     # Seletor de temporada para diagnósticos
     season_options = get_season_options()
@@ -204,7 +225,8 @@ def main():
         else:
             participantes = apostas_pilotos['participante'].unique()
             for participante in participantes:
-                df_filtrado = apostas_pilotos[apostas_pilotos['participante'] == participante]
+                df_filtrado = apostas_pilotos[apostas_pilotos['participante']
+                                              == participante]
                 fig = px.pie(
                     df_filtrado, names='piloto', values='total_apostas',
                     title=f"Apostas de {participante}"
@@ -231,7 +253,8 @@ def main():
     with tab3:
         st.subheader("Consolidado de Apostas por Piloto")
         if not apostas_pilotos.empty:
-            consolidado_pilotos = apostas_pilotos.groupby('piloto')['total_apostas'].sum().reset_index()
+            consolidado_pilotos = apostas_pilotos.groupby(
+                'piloto')['total_apostas'].sum().reset_index()
             fig = px.pie(
                 consolidado_pilotos, names='piloto', values='total_apostas',
                 title="Distribuição Geral de Apostas por Piloto"
@@ -268,9 +291,12 @@ def main():
             # Resolver tipo Sprint/Normal por linha
             tipos_resolvidos = []
             for _, pr in provas_df.iterrows():
-                tipo = pr['tipo'] if 'tipo' in provas_df.columns and pd.notna(pr.get('tipo')) else None
+                tipo = pr['tipo'] if 'tipo' in provas_df.columns and pd.notna(
+                    pr.get('tipo')) else None
                 nome = pr.get('nome', '')
-                is_sprint = (str(tipo).strip().lower() == 'sprint') or ('sprint' in str(nome).lower())
+                is_sprint = (
+                    str(tipo).strip().lower() == 'sprint') or (
+                    'sprint' in str(nome).lower())
                 tipos_resolvidos.append('Sprint' if is_sprint else 'Normal')
             provas_df = provas_df.copy()
             provas_df['tipo_resolvido'] = tipos_resolvidos
@@ -298,7 +324,9 @@ def main():
                 })
             diag = pd.DataFrame(linhas)
             st.dataframe(diag, width="stretch")
-            st.caption("Tipo resolvido usa coluna 'tipo' ou contém 'Sprint' no nome. Pontos e parâmetros vêm das regras da temporada.")
+            st.caption(
+                "Tipo resolvido usa coluna 'tipo' ou contém 'Sprint' no nome. Pontos e parâmetros vêm das regras da temporada.")
+
 
 if __name__ == "__main__":
     main()

@@ -13,17 +13,16 @@ Execute:
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
-
-import pandas as pd
-import pytest
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_prova(data: str, horario: str = "14:00:00", tipo: str = "Normal") -> dict:
+def _make_prova(
+        data: str,
+        horario: str = "14:00:00",
+        tipo: str = "Normal") -> dict:
     return {"data": data, "horario": horario, "tipo": tipo}
 
 
@@ -37,7 +36,11 @@ class TestPodeFazerAposta:
         """Se agora < horário da prova, pode apostar."""
         from services.bets_rules import pode_fazer_aposta
 
-        amanha = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+        amanha = (
+            datetime.now(
+                tz=timezone.utc) +
+            timedelta(
+                days=1)).strftime("%Y-%m-%d")
         prova = _make_prova(amanha)
         pode, _, _ = pode_fazer_aposta(prova)
         assert pode is True
@@ -46,7 +49,11 @@ class TestPodeFazerAposta:
         """Se agora >= horário da prova, não pode apostar."""
         from services.bets_rules import pode_fazer_aposta
 
-        ontem = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        ontem = (
+            datetime.now(
+                tz=timezone.utc) -
+            timedelta(
+                days=1)).strftime("%Y-%m-%d")
         prova = _make_prova(ontem)
         pode, _, _ = pode_fazer_aposta(prova)
         assert pode is False
@@ -55,7 +62,11 @@ class TestPodeFazerAposta:
         """Horário imparsável deve retornar False (seguro por padrão)."""
         from services.bets_rules import pode_fazer_aposta
 
-        amanha = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+        amanha = (
+            datetime.now(
+                tz=timezone.utc) +
+            timedelta(
+                days=1)).strftime("%Y-%m-%d")
         prova = _make_prova(amanha, horario="hora_invalida")
         pode, _, _ = pode_fazer_aposta(prova)
         assert pode is False
@@ -72,7 +83,11 @@ class TestPodeFazerAposta:
         """Teste documenta que tipo Sprint é aceito sem erro."""
         from services.bets_rules import pode_fazer_aposta
 
-        amanha = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+        amanha = (
+            datetime.now(
+                tz=timezone.utc) +
+            timedelta(
+                days=1)).strftime("%Y-%m-%d")
         prova = _make_prova(amanha, tipo="Sprint")
         # Deve retornar (bool, msg, dt) sem lançar exceção
         pode, msg, _ = pode_fazer_aposta(prova)
@@ -133,7 +148,8 @@ class TestValidarComposicaoAposta:
     def test_lista_pilotos_vazia_retorna_false(self):
         from services.bets_rules import validar_composicao_aposta
 
-        ok, msg = validar_composicao_aposta(pilotos=[], fichas=[], piloto_11="Sainz")
+        ok, msg = validar_composicao_aposta(
+            pilotos=[], fichas=[], piloto_11="Sainz")
         assert ok is False
 
     def test_tamanho_pilotos_e_fichas_divergente_retorna_false(self):

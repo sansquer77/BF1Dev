@@ -7,6 +7,7 @@ from championship_utils import (
     get_user_name  # Nova função necessária
 )
 
+
 def main():
     st.title("Apostas no Campeonato")
 
@@ -40,16 +41,13 @@ def main():
     st.subheader("Escolha seu Campeão, Vice e Equipe Campeã")
 
     # Selectbox para Campeão
-    campeao = st.selectbox(
-        "Piloto Campeão",
-        pilotos,
-        index=pilotos.index(campeao_apostado) if campeao_apostado in pilotos else 0,
-        key="campeao"
-    )
+    campeao = st.selectbox("Piloto Campeão", pilotos, index=pilotos.index(
+        campeao_apostado) if campeao_apostado in pilotos else 0, key="campeao")
 
     # Remove o campeão da lista de opções do vice
     vices_possiveis = [p for p in pilotos if p != campeao]
-    vice_index = vices_possiveis.index(vice_apostado) if vice_apostado in vices_possiveis else 0
+    vice_index = vices_possiveis.index(
+        vice_apostado) if vice_apostado in vices_possiveis else 0
 
     vice = st.selectbox(
         "Piloto Vice",
@@ -58,7 +56,8 @@ def main():
         key="vice"
     )
 
-    equipe_index = equipes.index(equipe_apostada) if equipe_apostada in equipes else 0
+    equipe_index = equipes.index(
+        equipe_apostada) if equipe_apostada in equipes else 0
     equipe = st.selectbox(
         "Equipe Campeã",
         equipes,
@@ -88,6 +87,7 @@ def main():
         st.subheader("Histórico de Apostas no Campeonato")
         st.dataframe(df_log)
     elif log:
-        st.warning("Há apostas registradas, mas alguns registros estão inconsistentes.")
+        st.warning(
+            "Há apostas registradas, mas alguns registros estão inconsistentes.")
     else:
         st.info("Nenhuma aposta registrada ainda.")

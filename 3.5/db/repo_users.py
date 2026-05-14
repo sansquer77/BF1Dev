@@ -103,7 +103,8 @@ def get_master_user() -> Optional[dict]:
         return dict(row) if row else None
 
 
-def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "participante") -> bool:
+def cadastrar_usuario(nome: str, email: str, senha: str,
+                      perfil: str = "participante") -> bool:
     try:
         hashed = hash_password(senha)
         with db_connect() as conn:
@@ -151,7 +152,10 @@ def update_user_email(user_id: int, novo_email: str) -> bool:
         return False
 
 
-def update_user_password(user_id: int, nova_senha: str, must_change_password: bool = False) -> bool:
+def update_user_password(
+        user_id: int,
+        nova_senha: str,
+        must_change_password: bool = False) -> bool:
     try:
         if isinstance(nova_senha, str) and nova_senha.startswith("$2"):
             senha_hash = nova_senha
@@ -161,7 +165,8 @@ def update_user_password(user_id: int, nova_senha: str, must_change_password: bo
             cur = conn.cursor()
             cols = get_table_columns(conn, "usuarios")
             if "must_change_password" in cols:
-                must_change_value = _must_change_password_db_value(conn, must_change_password)
+                must_change_value = _must_change_password_db_value(
+                    conn, must_change_password)
                 cur.execute(
                     "UPDATE usuarios SET senha_hash = %s, must_change_password = %s WHERE id = %s",
                     (senha_hash, must_change_value, user_id),
@@ -185,14 +190,19 @@ def update_usuario(user_id: int, **campos) -> bool:
         return False
     campos_invalidos = set(campos) - _COLUNAS_USUARIOS_VALIDAS
     if campos_invalidos:
-        logger.error("update_usuario: colunas não permitidas rejeitadas: %s", campos_invalidos)
-        raise ValueError(f"Colunas não permitidas em update_usuario: {campos_invalidos}")
+        logger.error(
+            "update_usuario: colunas não permitidas rejeitadas: %s",
+            campos_invalidos)
+        raise ValueError(
+            f"Colunas não permitidas em update_usuario: {campos_invalidos}")
     set_clause = ", ".join(f"{k} = %s" for k in campos)
     values = list(campos.values()) + [user_id]
     try:
         with db_connect() as conn:
             cur = conn.cursor()
-            cur.execute(f"UPDATE usuarios SET {set_clause} WHERE id = %s", values)
+            cur.execute(
+                f"UPDATE usuarios SET {set_clause} WHERE id = %s",
+                values)
             cur.close()
             conn.commit()
         return True
@@ -290,8 +300,12 @@ def get_usuario_temporadas_ativas(user_id: int) -> list[str]:
         temporadas.update(df["t"].tolist() if not df.empty else [])
 
         with db_connect() as conn:
-            log_cols = set(get_table_columns(conn, "log_apostas")) if table_exists(conn, "log_apostas") else set()
-        user_col = "usuario_id" if "usuario_id" in log_cols else ("user_id" if "user_id" in log_cols else None)
+            log_cols = set(
+                get_table_columns(
+                    conn, "log_apostas")) if table_exists(
+                conn, "log_apostas") else set()
+        user_col = "usuario_id" if "usuario_id" in log_cols else (
+            "user_id" if "user_id" in log_cols else None)
         if user_col:
             parts = []
             if "temporada" in log_cols:
@@ -304,7 +318,8 @@ def get_usuario_temporadas_ativas(user_id: int) -> list[str]:
                     f"FROM log_apostas WHERE {user_col} = %s",
                     (int(user_id),),
                 )
-                temporadas.update([v for v in df2["t"].tolist() if v] if not df2.empty else [])
+                temporadas.update(
+                    [v for v in df2["t"].tolist() if v] if not df2.empty else [])
 
         with db_connect() as conn:
             has_pos = table_exists(conn, "posicoes_participantes")
@@ -327,7 +342,8 @@ def get_usuario_temporadas_ativas(user_id: int) -> list[str]:
         ORDER BY t
         """
     )
-    temporadas_base = [str(v).strip() for v in df_base["t"].tolist() if v] if not df_base.empty else []
+    temporadas_base = [
+        str(v).strip() for v in df_base["t"].tolist() if v] if not df_base.empty else []
     if not temporadas_base:
         return []
 
@@ -360,6 +376,7 @@ def get_usuario_temporadas_ativas(user_id: int) -> list[str]:
         return [str(v).strip() for v in df_ativas["t"].tolist() if v]
 
     return _infer_por_atividade(int(user_id))
+
 
 __all__ = [
     "hash_password",

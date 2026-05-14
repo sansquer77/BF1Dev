@@ -15,22 +15,50 @@ def convert_mysql_to_sqlite(sql_content):
     """Converte sintaxe MySQL para SQLite"""
 
     # Remover AUTO_INCREMENT
-    sql_content = re.sub(r'\s+AUTO_INCREMENT\s*,', ',', sql_content, flags=re.IGNORECASE)
-    sql_content = re.sub(r'\s+AUTO_INCREMENT\s+', ' ', sql_content, flags=re.IGNORECASE)
+    sql_content = re.sub(
+        r'\s+AUTO_INCREMENT\s*,',
+        ',',
+        sql_content,
+        flags=re.IGNORECASE)
+    sql_content = re.sub(
+        r'\s+AUTO_INCREMENT\s+',
+        ' ',
+        sql_content,
+        flags=re.IGNORECASE)
 
     # Substituir AUTOINCREMENT por AUTOINCREMENT (SQLite exige maiúscula)
-    sql_content = re.sub(r'integer\s+AUTO_INCREMENT', 'INTEGER PRIMARY KEY AUTOINCREMENT', sql_content, flags=re.IGNORECASE)
+    sql_content = re.sub(
+        r'integer\s+AUTO_INCREMENT',
+        'INTEGER PRIMARY KEY AUTOINCREMENT',
+        sql_content,
+        flags=re.IGNORECASE)
 
     # Remover backticks e substituir por aspas duplas
     sql_content = sql_content.replace('`', '"')
 
     # Remover ENGINE=InnoDB, CHARSET, etc
-    sql_content = re.sub(r'\s*ENGINE\s*=\s*\w+', '', sql_content, flags=re.IGNORECASE)
-    sql_content = re.sub(r'\s*DEFAULT\s+CHARSET\s*=\s*\w+', '', sql_content, flags=re.IGNORECASE)
-    sql_content = re.sub(r'\s*COLLATE\s*=\s*\w+', '', sql_content, flags=re.IGNORECASE)
+    sql_content = re.sub(
+        r'\s*ENGINE\s*=\s*\w+',
+        '',
+        sql_content,
+        flags=re.IGNORECASE)
+    sql_content = re.sub(
+        r'\s*DEFAULT\s+CHARSET\s*=\s*\w+',
+        '',
+        sql_content,
+        flags=re.IGNORECASE)
+    sql_content = re.sub(
+        r'\s*COLLATE\s*=\s*\w+',
+        '',
+        sql_content,
+        flags=re.IGNORECASE)
 
     # Garantir que PRIMARY KEY está na definição correta
-    sql_content = re.sub(r'(\s+id\s+)integer\s*,\s*PRIMARY KEY\s*\(\s*id\s*\)', r'\1INTEGER PRIMARY KEY AUTOINCREMENT', sql_content, flags=re.IGNORECASE)
+    sql_content = re.sub(
+        r'(\s+id\s+)integer\s*,\s*PRIMARY KEY\s*\(\s*id\s*\)',
+        r'\1INTEGER PRIMARY KEY AUTOINCREMENT',
+        sql_content,
+        flags=re.IGNORECASE)
 
     return sql_content
 
@@ -76,7 +104,10 @@ def import_sql_file(sql_file_path, target_db_path=None):
                 current_statement = []
 
         # Conectar e executar - usar DELETE mode para evitar problemas com WAL
-        conn = sqlite3.connect(str(target_db_path), timeout=30, isolation_level=None)
+        conn = sqlite3.connect(
+            str(target_db_path),
+            timeout=30,
+            isolation_level=None)
         cursor = conn.cursor()
 
         # CRÍTICO: Usar DELETE mode em vez de WAL para garantir escrita direta
@@ -106,20 +137,21 @@ def import_sql_file(sql_file_path, target_db_path=None):
 
             except sqlite3.Error as e:
                 stats['failed'] += 1
-                stats['errors'].append(f"Erro: {str(e)[:100]} | SQL: {statement[:100]}")
+                stats['errors'].append(
+                    f"Erro: {str(e)[:100]} | SQL: {statement[:100]}")
 
         # Commit final garantido
         conn.commit()
 
         # Reabilitar configuracoes normais
         cursor.execute("PRAGMA foreign_keys=ON")
-        
+
         # CRÍTICO: Consolidar WAL se existir e fazer VACUUM
         cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         cursor.execute("VACUUM")
-        
+
         conn.close()
-        
+
         # Remover arquivos WAL/SHM que podem ter sido criados
         target_path = Path(target_db_path)
         wal_file = Path(str(target_path) + "-wal")
@@ -132,12 +164,16 @@ def import_sql_file(sql_file_path, target_db_path=None):
         # Reinicializar pool apos importacao
         init_pool()
 
-        return (True, f"✅ Importacao concluida: {stats['successful']} comandos executados, {stats['failed']} erros", stats)
+        return (
+            True, f"✅ Importacao concluida: {
+                stats['successful']} comandos executados, {
+                stats['failed']} erros", stats)
 
     except Exception as e:
         # Reinicializar pool mesmo em caso de erro
         init_pool()
         return (False, f"❌ Erro ao importar SQL: {str(e)}", {})
+
 
 if __name__ == "__main__":
     # Teste

@@ -10,7 +10,9 @@ from typing import Any
 
 def _sanitize_identifier(identifier: str) -> str:
     value = (identifier or "").strip()
-    if not value.replace("_", "").isalnum() or not (value[0].isalpha() or value[0] == "_"):
+    if not value.replace(
+            "_", "").isalnum() or not (
+            value[0].isalpha() or value[0] == "_"):
         raise ValueError(f"Invalid identifier: {identifier}")
     return value
 
@@ -92,7 +94,8 @@ def _get_json_columns(conn, table_name: str) -> set[str]:
         """,
         (table_name,),
     )
-    return {str(r["column_name"]).lower() for r in (c.fetchall() or []) if r and r["column_name"]}
+    return {str(r["column_name"]).lower()
+            for r in (c.fetchall() or []) if r and r["column_name"]}
 
 
 def _get_array_columns(conn, table_name: str) -> set[str]:
@@ -107,7 +110,8 @@ def _get_array_columns(conn, table_name: str) -> set[str]:
         """,
         (table_name,),
     )
-    return {str(r["column_name"]).lower() for r in (c.fetchall() or []) if r and r["column_name"]}
+    return {str(r["column_name"]).lower()
+            for r in (c.fetchall() or []) if r and r["column_name"]}
 
 
 def _normalize_legacy_json_sql_literal(value_literal: str) -> str | None:
@@ -141,7 +145,8 @@ def _python_to_sql_expression(value: Any) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     if isinstance(value, (list, tuple)):
-        return "ARRAY[" + ", ".join(_python_to_sql_expression(v) for v in value) + "]"
+        return "ARRAY[" + ", ".join(_python_to_sql_expression(v)
+                                    for v in value) + "]"
     text = str(value).replace("\\", "\\\\").replace("'", "''")
     return f"'{text}'"
 
@@ -166,7 +171,10 @@ def _normalize_legacy_array_sql_literal(value_literal: str) -> str | None:
     return _python_to_sql_expression(list(parsed))
 
 
-def _repair_insert_json_literals(conn, statement: str, table_name: str) -> str | None:
+def _repair_insert_json_literals(
+        conn,
+        statement: str,
+        table_name: str) -> str | None:
     json_cols = _get_json_columns(conn, table_name)
     if not json_cols:
         return None
@@ -200,7 +208,10 @@ def _repair_insert_json_literals(conn, statement: str, table_name: str) -> str |
     )
 
 
-def _repair_insert_array_literals(conn, statement: str, table_name: str) -> str | None:
+def _repair_insert_array_literals(
+        conn,
+        statement: str,
+        table_name: str) -> str | None:
     array_cols = _get_array_columns(conn, table_name)
     if not array_cols:
         return None
@@ -234,7 +245,10 @@ def _repair_insert_array_literals(conn, statement: str, table_name: str) -> str 
     )
 
 
-def _repair_insert_legacy_literals(conn, statement: str, table_name: str) -> str | None:
+def _repair_insert_legacy_literals(
+        conn,
+        statement: str,
+        table_name: str) -> str | None:
     repaired_stmt = statement
     changed = False
 
@@ -249,6 +263,7 @@ def _repair_insert_legacy_literals(conn, statement: str, table_name: str) -> str
         changed = True
 
     return repaired_stmt if changed else None
+
 
 __all__ = [
     "_repair_insert_json_literals",

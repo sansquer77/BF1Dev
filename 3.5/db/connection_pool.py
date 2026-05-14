@@ -10,7 +10,6 @@ try:
 except Exception:  # no cover - fallback para execução fora do Streamlit
     st = None
 
-import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool as PsycopgConnectionPool
 
@@ -35,7 +34,8 @@ class ConnectionPool:
     def _initialize_pool(self) -> None:
         """Inicializa recursos do backend PostgreSQL."""
         if not DATABASE_URL:
-            raise ValueError("DATABASE_URL não configurada para backend PostgreSQL")
+            raise ValueError(
+                "DATABASE_URL não configurada para backend PostgreSQL")
         self._pg_pool = PsycopgConnectionPool(
             conninfo=DATABASE_URL,
             min_size=DB_MIN_CONN,
@@ -66,6 +66,7 @@ class ConnectionPool:
 # Instância global do pool
 _pool: Optional[ConnectionPool] = None
 
+
 def _build_pool(pool_size: int) -> ConnectionPool:
     return ConnectionPool(pool_size, DB_TIMEOUT)
 
@@ -87,12 +88,13 @@ def init_pool(pool_size: int = 5) -> None:
     global _pool
     _pool = _get_cached_pool(pool_size)
 
+
 def get_pool() -> ConnectionPool:
     """Retorna o pool global."""
-    global _pool
     if _pool is None:
         init_pool(pool_size=5)
     return _pool
+
 
 def close_pool() -> None:
     """Fecha o pool global."""

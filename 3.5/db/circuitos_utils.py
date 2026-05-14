@@ -32,8 +32,10 @@ def ensure_circuitos_f1_table() -> None:
             )
             """
         )
-        c.execute("CREATE INDEX IF NOT EXISTS idx_circuitos_f1_country ON circuitos_f1(country)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_circuitos_f1_locality ON circuitos_f1(locality)")
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_circuitos_f1_country ON circuitos_f1(country)")
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_circuitos_f1_locality ON circuitos_f1(locality)")
         conn.commit()
 
 
@@ -43,8 +45,10 @@ def ensure_provas_circuit_id_column() -> None:
         c = conn.cursor()
         cols = get_table_columns(conn, 'provas')
         if "circuit_id" not in cols:
-            c.execute("ALTER TABLE provas ADD COLUMN circuit_id TEXT REFERENCES circuitos_f1(circuit_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_provas_circuit_id ON provas(circuit_id)")
+            c.execute(
+                "ALTER TABLE provas ADD COLUMN circuit_id TEXT REFERENCES circuitos_f1(circuit_id)")
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_provas_circuit_id ON provas(circuit_id)")
         conn.commit()
 
 
@@ -63,7 +67,8 @@ def _extract_circuit_entries_from_season(data: dict) -> dict[str, dict]:
             continue
 
         race_name = str(race.get("raceName", "")).strip()
-        circuit_name = str(circuit.get("circuitName", "")).strip() or race_name or circuit_id
+        circuit_name = str(circuit.get("circuitName", "")
+                           ).strip() or race_name or circuit_id
         locality = str(location.get("locality", "")).strip() or None
         country = str(location.get("country", "")).strip() or None
 
@@ -105,7 +110,10 @@ def _fetch_season_json(season: str) -> dict | None:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        logger.warning("Falha ao consultar Ergast/Jolpica para temporada %s: %s", season, e)
+        logger.warning(
+            "Falha ao consultar Ergast/Jolpica para temporada %s: %s",
+            season,
+            e)
         return None
 
 
@@ -171,7 +179,10 @@ def atualizar_base_circuitos(seasons: Iterable[str]) -> dict[str, int]:
             )
         conn.commit()
 
-    logger.info("✓ Base de circuitos atualizada: %s temporadas, %s circuitos", processed, len(merged))
+    logger.info(
+        "✓ Base de circuitos atualizada: %s temporadas, %s circuitos",
+        processed,
+        len(merged))
     return {"temporadas": processed, "circuitos": len(merged)}
 
 
@@ -204,6 +215,8 @@ def get_temporadas_existentes_provas() -> list[str]:
         if "temporada" not in cols:
             return [str(datetime.now().year)]
 
-        c.execute("SELECT DISTINCT temporada FROM provas WHERE temporada IS NOT NULL AND TRIM(temporada) <> '' ORDER BY temporada")
-        rows = [str(r['temporada']).strip() for r in c.fetchall() if r and r['temporada']]
+        c.execute(
+            "SELECT DISTINCT temporada FROM provas WHERE temporada IS NOT NULL AND TRIM(temporada) <> '' ORDER BY temporada")
+        rows = [str(r['temporada']).strip()
+                for r in c.fetchall() if r and r['temporada']]
         return rows or [str(datetime.now().year)]

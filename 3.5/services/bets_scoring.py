@@ -55,38 +55,51 @@ def _construir_mapa_resultados(res_df: pd.DataFrame) -> tuple[dict, dict]:
         try:
             ress_map[prova_id] = ast.literal_eval(r["posicoes"])
         except Exception:
-            logger.exception("Erro ao parsear posições da prova_id=%s", prova_id)
+            logger.exception(
+                "Erro ao parsear posições da prova_id=%s", prova_id)
             continue
         try:
             if "abandono_pilotos" in res_df.columns:
                 raw = r.get("abandono_pilotos", "") or ""
-                abandonos_map[prova_id] = {p.strip() for p in str(raw).split(",") if p.strip()}
+                abandonos_map[prova_id] = {
+                    p.strip() for p in str(raw).split(",") if p.strip()}
             else:
                 abandonos_map[prova_id] = set()
         except Exception:
-            logger.exception("Erro ao parsear abandonos da prova_id=%s", prova_id)
+            logger.exception(
+                "Erro ao parsear abandonos da prova_id=%s",
+                prova_id)
             abandonos_map[prova_id] = set()
     return ress_map, abandonos_map
 
 
 def _construir_tipos_prova(prov_df: pd.DataFrame) -> dict:
     """Retorna {prova_id: 'Sprint'|'Normal'}."""
-    tipos = prov_df["tipo"].fillna("").astype(str).tolist() if "tipo" in prov_df.columns else [""] * len(prov_df)
-    nomes = prov_df["nome"].fillna("").astype(str).tolist() if "nome" in prov_df.columns else [""] * len(prov_df)
+    tipos = prov_df["tipo"].fillna("").astype(str).tolist(
+    ) if "tipo" in prov_df.columns else [""] * len(prov_df)
+    nomes = prov_df["nome"].fillna("").astype(str).tolist(
+    ) if "nome" in prov_df.columns else [""] * len(prov_df)
     result = {}
     for i, row in enumerate(prov_df.itertuples()):
         t = tipos[i].strip().lower()
         n = nomes[i].strip().lower()
-        result[row.id] = "Sprint" if (t == "sprint" or "sprint" in n) else "Normal"
+        result[row.id] = "Sprint" if (
+            t == "sprint" or "sprint" in n) else "Normal"
     return result
 
 
-def _calcular_pontos_aposta(aposta: pd.Series, res: dict, tipo: str, temporada: str, abandonos: set) -> float:
+def _calcular_pontos_aposta(
+        aposta: pd.Series,
+        res: dict,
+        tipo: str,
+        temporada: str,
+        abandonos: set) -> float:
     """Calcula os pontos de uma única aposta com base no resultado da prova."""
     regras = get_regras_aplicaveis(temporada, tipo)
 
     if tipo == "Sprint":
-        pontos_tabela = regras.get("pontos_sprint_posicoes") or regras.get("pontos_posicoes") or PONTOS_SPRINT
+        pontos_tabela = regras.get("pontos_sprint_posicoes") or regras.get(
+            "pontos_posicoes") or PONTOS_SPRINT
     else:
         pontos_tabela = regras.get("pontos_posicoes") or PONTOS_F1_NORMAL
 
@@ -118,7 +131,14 @@ def _calcular_pontos_aposta(aposta: pd.Series, res: dict, tipo: str, temporada: 
         pt *= 2
 
     if automatica >= 2:
-        fator = max(0.0, 1 - float(regras.get("penalidade_auto_percent", 20)) / 100)
+        fator = max(
+            0.0,
+            1 -
+            float(
+                regras.get(
+                    "penalidade_auto_percent",
+                    20)) /
+            100)
         pt = round(pt * fator, 2)
 
     return pt
@@ -154,7 +174,8 @@ def calcular_pontuacao_lote(
             pontos.append(None)
             continue
 
-        temporada = resolver_temporada_aposta(aposta, temporadas_prova, year_fallback)
+        temporada = resolver_temporada_aposta(
+            aposta, temporadas_prova, year_fallback)
         tipo = tipos_prova.get(prova_id, "Normal")
 
         try:
@@ -181,14 +202,18 @@ def calcular_pontuacao_lote(
 # Persistência
 # ---------------------------------------------------------------------------
 
-def salvar_classificacao_prova(p_id: int, df_c: pd.DataFrame, temp: Optional[str] = None) -> None:
+def salvar_classificacao_prova(
+        p_id: int,
+        df_c: pd.DataFrame,
+        temp: Optional[str] = None) -> None:
     """Salva a classificação de uma prova no banco, compatível com schemas antigo e novo."""
     if temp is None:
         temp = str(datetime.now().year)
 
     with db_connect() as conn:
         c = conn.cursor()
-        usa_temporada = has_coluna_temporada_tabela(conn, "posicoes_participantes")
+        usa_temporada = has_coluna_temporada_tabela(
+            conn, "posicoes_participantes")
 
         if usa_temporada:
             c.execute(
@@ -196,21 +221,24 @@ def salvar_classificacao_prova(p_id: int, df_c: pd.DataFrame, temp: Optional[str
                 (p_id, temp),
             )
         else:
-            c.execute("DELETE FROM posicoes_participantes WHERE prova_id=%s", (p_id,))
+            c.execute(
+                "DELETE FROM posicoes_participantes WHERE prova_id=%s", (p_id,))
 
         for _, r in df_c.iterrows():
             if usa_temporada:
                 c.execute(
                     "INSERT INTO posicoes_participantes (prova_id, usuario_id, posicao, pontos, temporada)"
-                    " VALUES (%s,%s,%s,%s,%s)",
-                    (p_id, int(r["usuario_id"]), int(r["posicao"]), float(r["pontos"]), temp),
-                )
+                    " VALUES (%s,%s,%s,%s,%s)", (p_id, int(
+                        r["usuario_id"]), int(
+                        r["posicao"]), float(
+                        r["pontos"]), temp), )
             else:
                 c.execute(
                     "INSERT INTO posicoes_participantes (prova_id, usuario_id, posicao, pontos)"
-                    " VALUES (%s,%s,%s,%s)",
-                    (p_id, int(r["usuario_id"]), int(r["posicao"]), float(r["pontos"])),
-                )
+                    " VALUES (%s,%s,%s,%s)", (p_id, int(
+                        r["usuario_id"]), int(
+                        r["posicao"]), float(
+                        r["pontos"])), )
         conn.commit()
 
 
@@ -219,18 +247,34 @@ def salvar_classificacao_prova(p_id: int, df_c: pd.DataFrame, temp: Optional[str
 # (decomposta em funções nomeadas com responsabilidade única)
 # ---------------------------------------------------------------------------
 
-def _carregar_dados_base(conn, temporada: Optional[str]) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def _carregar_dados_base(conn,
+                         temporada: Optional[str]) -> tuple[pd.DataFrame,
+                                                            pd.DataFrame,
+                                                            pd.DataFrame,
+                                                            pd.DataFrame]:
     """Carrega e filtra os DataFrames base do banco de dados."""
     usrs = cast(
         pd.DataFrame,
-        _fetch_df(conn, "SELECT id FROM usuarios WHERE lower(trim(coalesce(status, ''))) = 'ativo'"),
+        _fetch_df(
+            conn,
+            "SELECT id FROM usuarios WHERE lower(trim(coalesce(status, ''))) = 'ativo'"),
     )
-    provs = cast(pd.DataFrame, _fetch_df(conn, "SELECT id, nome, data, tipo, temporada FROM provas"))
+    provs = cast(
+        pd.DataFrame,
+        _fetch_df(
+            conn,
+            "SELECT id, nome, data, tipo, temporada FROM provas"))
     apts = cast(
         pd.DataFrame,
-        _fetch_df(conn, "SELECT usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, automatica, temporada FROM apostas"),
+        _fetch_df(
+            conn,
+            "SELECT usuario_id, prova_id, data_envio, pilotos, fichas, piloto_11, automatica, temporada FROM apostas"),
     )
-    ress = cast(pd.DataFrame, _fetch_df(conn, "SELECT prova_id, posicoes, abandono_pilotos FROM resultados"))
+    ress = cast(
+        pd.DataFrame,
+        _fetch_df(
+            conn,
+            "SELECT prova_id, posicoes, abandono_pilotos FROM resultados"))
 
     if temporada and "temporada" in provs.columns:
         provs = provs[provs["temporada"] == temporada]
@@ -238,7 +282,8 @@ def _carregar_dados_base(conn, temporada: Optional[str]) -> tuple[pd.DataFrame, 
     return usrs, provs, apts, ress
 
 
-def _mapear_primeira_prova_por_temporada(provs: pd.DataFrame) -> dict[str, int]:
+def _mapear_primeira_prova_por_temporada(
+        provs: pd.DataFrame) -> dict[str, int]:
     """Retorna {temporada: prova_id} com a primeira prova de cada temporada."""
     if provs.empty or "data" not in provs.columns:
         return {}
@@ -270,7 +315,9 @@ def _calcular_pontos_usuario(
     Retorna dicionário com usuario_id, pontos, data_envio, acerto_11.
     """
     ap = aps[aps["usuario_id"] == u["id"]]
-    is_primeira = str(prova_id) == str(primeira_prova_por_temp.get(str(temporada_prova)))
+    is_primeira = str(prova_id) == str(
+        primeira_prova_por_temp.get(
+            str(temporada_prova)))
 
     if ap.empty:
         return {
@@ -285,7 +332,10 @@ def _calcular_pontos_usuario(
         p_list = calcular_pontuacao_lote(ap, ress, provs)
         pontos_val = sum(p for p in p_list if p is not None)
     except Exception:
-        logger.exception("Erro ao calcular pontuação lote usuario_id=%s prova_id=%s", u["id"], prova_id)
+        logger.exception(
+            "Erro ao calcular pontuação lote usuario_id=%s prova_id=%s",
+            u["id"],
+            prova_id)
         pontos_val = 0
 
     data_envio = ap.iloc[0].get("data_envio", None)
@@ -305,7 +355,8 @@ def _aplicar_regra_primeira_prova(tab: list[dict]) -> None:
 
     Modifica *tab* in-place.
     """
-    sem_aposta_ids = {int(t["usuario_id"]) for t in tab if t.get("_sem_aposta_primeira_prova")}
+    sem_aposta_ids = {int(t["usuario_id"])
+                      for t in tab if t.get("_sem_aposta_primeira_prova")}
     if not sem_aposta_ids:
         return
 
@@ -317,7 +368,8 @@ def _aplicar_regra_primeira_prova(tab: list[dict]) -> None:
         ]
         pior = min(pontos_validos) if pontos_validos else 0
     except Exception:
-        logger.exception("Erro ao calcular pior pontuador para regra de primeira prova")
+        logger.exception(
+            "Erro ao calcular pior pontuador para regra de primeira prova")
         pior = 0
 
     for t in tab:
@@ -328,7 +380,10 @@ def _aplicar_regra_primeira_prova(tab: list[dict]) -> None:
 def _ordenar_e_posicionar(tab: list[dict]) -> pd.DataFrame:
     """Converte a lista de resultados em DataFrame ordenado com posição calculada."""
     df = pd.DataFrame(tab)
-    df.drop(columns=[c for c in ["_sem_aposta_primeira_prova"] if c in df.columns], inplace=True)
+    df.drop(
+        columns=[
+            c for c in ["_sem_aposta_primeira_prova"] if c in df.columns],
+        inplace=True)
     df["data_envio"] = pd.to_datetime(df["data_envio"], errors="coerce")
     df = df.sort_values(
         by=["pontos", "acerto_11", "data_envio"],
@@ -354,7 +409,8 @@ def _processar_prova(
     temporada_prova = str(pr.get("temporada", datetime.now().year))
     aps = apts[apts["prova_id"] == pid]
     if "temporada" in aps.columns:
-        aps = aps[(aps["temporada"] == temporada_prova) | (aps["temporada"].isna())]
+        aps = aps[(aps["temporada"] == temporada_prova)
+                  | (aps["temporada"].isna())]
     if aps.empty:
         return
 
@@ -368,16 +424,24 @@ def _processar_prova(
     piloto_11_real = res_p.get(11, "")
 
     tab = [
-        _calcular_pontos_usuario(u, aps, ress, provs, pid, temporada_prova, piloto_11_real, primeira_prova_por_temp)
-        for _, u in usrs.iterrows()
-    ]
+        _calcular_pontos_usuario(
+            u,
+            aps,
+            ress,
+            provs,
+            pid,
+            temporada_prova,
+            piloto_11_real,
+            primeira_prova_por_temp) for _,
+        u in usrs.iterrows()]
 
     _aplicar_regra_primeira_prova(tab)
     df = _ordenar_e_posicionar(tab)
     salvar_classificacao_prova(pid, df, temporada_prova)
 
 
-def atualizar_classificacoes_todas_as_provas(temporada: Optional[str] = None) -> None:
+def atualizar_classificacoes_todas_as_provas(
+        temporada: Optional[str] = None) -> None:
     """Recalcula e persiste a classificação de todas as provas com resultado.
 
     Fluxo:
@@ -397,7 +461,13 @@ def atualizar_classificacoes_todas_as_provas(temporada: Optional[str] = None) ->
 
     for _, pr in provs.iterrows():
         try:
-            _processar_prova(pr, usrs, apts, ress, provs, primeira_prova_por_temp)
+            _processar_prova(
+                pr,
+                usrs,
+                apts,
+                ress,
+                provs,
+                primeira_prova_por_temp)
         except Exception:
             logger.exception("Erro ao processar prova_id=%s", pr["id"])
 

@@ -86,7 +86,9 @@ def _parse_horario(value: object) -> tuple[int, int] | None:
     return hour, minute
 
 
-def _build_dt_sp(data_dt: pd.Timestamp, horario_value: object) -> datetime | None:
+def _build_dt_sp(
+        data_dt: pd.Timestamp,
+        horario_value: object) -> datetime | None:
     """Constrói datetime aware em America/Sao_Paulo a partir dos campos brutos.
 
     Args:
@@ -105,7 +107,8 @@ def _build_dt_sp(data_dt: pd.Timestamp, horario_value: object) -> datetime | Non
         )
     else:
         # Sem horário: limite conservador no fim do dia.
-        dt_naive = data_dt.to_pydatetime().replace(hour=23, minute=59, second=59, microsecond=0)
+        dt_naive = data_dt.to_pydatetime().replace(
+            hour=23, minute=59, second=59, microsecond=0)
     return dt_naive.replace(tzinfo=ZoneInfo(_TZ_BD))
 
 
@@ -181,15 +184,18 @@ def _build_tabela_horario(
 
     # Monta datetime aware (SP) e converte para o destino.
     df["limite_sp"] = df.apply(
-        lambda row: _build_dt_sp(row.get("data_dt"), row.get("horario_prova")), axis=1
-    )
+        lambda row: _build_dt_sp(
+            row.get("data_dt"),
+            row.get("horario_prova")),
+        axis=1)
     df["limite_dest"] = df["limite_sp"].apply(
-        lambda dt: dt.astimezone(ZoneInfo(tz_destino)) if dt is not None else None
-    )
+        lambda dt: dt.astimezone(
+            ZoneInfo(tz_destino)) if dt is not None else None)
 
     # Determina próxima prova.
     futuros = df[df["limite_dest"].notna() & (df["limite_dest"] >= now_aware)]
-    proxima_idx = futuros["limite_dest"].sort_values().index[0] if not futuros.empty else None
+    proxima_idx = futuros["limite_dest"].sort_values(
+    ).index[0] if not futuros.empty else None
 
     estado_linha: dict[int, str] = {}
     for idx, row in df.iterrows():
@@ -216,7 +222,8 @@ def _build_tabela_horario(
         "horario_exibir": "Horário",
         "tipo": "Tipo",
     }
-    df_exibir = df.rename(columns=colunas_exibir)[list(colunas_exibir.values())]
+    df_exibir = df.rename(columns=colunas_exibir)[
+        list(colunas_exibir.values())]
 
     return df_exibir, estado_linha
 
@@ -241,10 +248,12 @@ def main():
             temporadas = sorted(set([*temporadas, temporada_atual]))
 
     if not temporadas:
-        st.info("Não há temporadas disponíveis para consulta no seu histórico de status.")
+        st.info(
+            "Não há temporadas disponíveis para consulta no seu histórico de status.")
         return
 
-    entering_calendar_page = st.session_state.get("_previous_page") != st.session_state.get("_current_page")
+    entering_calendar_page = st.session_state.get(
+        "_previous_page") != st.session_state.get("_current_page")
     selected_temporada = st.session_state.get("calendario_temporada")
 
     if entering_calendar_page and temporada_atual in temporadas:
@@ -256,7 +265,10 @@ def main():
             default_index = get_default_season_index(temporadas)
             st.session_state["calendario_temporada"] = temporadas[default_index]
 
-    temporada = st.selectbox("Temporada", temporadas, key="calendario_temporada")
+    temporada = st.selectbox(
+        "Temporada",
+        temporadas,
+        key="calendario_temporada")
 
     # --- Carrega e prepara provas ---
     provas_df = get_provas_df(temporada=temporada)
@@ -303,7 +315,8 @@ def main():
             },
         }
         # A key inclui o TZ para forçar re-render quando o usuário muda o fuso.
-        calendar(events=eventos, options=calendar_options, key=f"calendar_{temporada}_{tz_exibicao}")
+        calendar(events=eventos, options=calendar_options,
+                 key=f"calendar_{temporada}_{tz_exibicao}")
         st.caption(
             f"Horários exibidos em **{tz_exibicao}**. "
             "Calendário inicia em Lista do mês atual; use a barra superior para trocar a visualização."
@@ -313,22 +326,24 @@ def main():
     with tab_horario:
         df_temp = df.copy()
         if "temporada" in df_temp.columns:
-            df_temp = df_temp[
-                df_temp["temporada"].astype(str).str.strip() == str(temporada).strip()
-            ]
+            df_temp = df_temp[df_temp["temporada"].astype(
+                str).str.strip() == str(temporada).strip()]
 
         if df_temp.empty:
             st.info("Nenhuma prova cadastrada para a temporada selecionada.")
             return
 
-        df_exibir, estado_linha = _build_tabela_horario(df_temp, tz_exibicao, now_aware)
+        df_exibir, estado_linha = _build_tabela_horario(
+            df_temp, tz_exibicao, now_aware)
 
         def _style_linha(row: pd.Series) -> list[str]:
             estado = estado_linha.get(row.name, "normal")
             if estado == "passada":
-                return ["color: #8B93A1; background-color: #F8FAFC;"] * len(row)
+                return [
+                    "color: #8B93A1; background-color: #F8FAFC;"] * len(row)
             if estado == "proxima":
-                return ["background-color: #FFF7D6; color: #1F2937; font-weight: 700;"] * len(row)
+                return [
+                    "background-color: #FFF7D6; color: #1F2937; font-weight: 700;"] * len(row)
             return [""] * len(row)
 
         styled_df = df_exibir.style.apply(_style_linha, axis=1)

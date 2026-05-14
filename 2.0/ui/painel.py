@@ -4,11 +4,18 @@ import plotly.graph_objects as go
 import ast
 
 from db.db_utils import (
-    db_connect, get_user_by_id, get_provas_df, get_pilotos_df, get_apostas_df, get_resultados_df,
-    update_user_email, update_user_password, get_user_by_email
-)
+    db_connect,
+    get_user_by_id,
+    get_provas_df,
+    get_pilotos_df,
+    get_apostas_df,
+    get_resultados_df,
+    update_user_email,
+    update_user_password,
+    get_user_by_email)
 from services.bets_service import salvar_aposta
 from services.auth_service import check_password, hash_password
+
 
 def participante_view():
     if 'token' not in st.session_state or 'user_id' not in st.session_state:
@@ -20,12 +27,13 @@ def participante_view():
         st.error("Usuário não encontrado.")
         return
 
-    col1, col2 = st.columns([1, 16])  # Proporção ajustável conforme aparência desejada
+    # Proporção ajustável conforme aparência desejada
+    col1, col2 = st.columns([1, 16])
     with col1:
         st.image("BF1.jpg", width=75)
     with col2:
         st.title("Painel do Participante")
-    
+
     st.write(f"Bem-vindo, {user[1]} ({user[2]}) - Status: {user[4]}")
 
     tabs = st.tabs(["Apostas", "Minha Conta"])
@@ -49,20 +57,22 @@ def participante_view():
                 )
                 nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
                 apostas_df = get_apostas_df()
-                aposta_existente = apostas_df[
-                    (apostas_df['usuario_id'] == user[0]) & (apostas_df['prova_id'] == prova_id)
-                ]
+                aposta_existente = apostas_df[(apostas_df['usuario_id'] == user[0]) & (
+                    apostas_df['prova_id'] == prova_id)]
                 pilotos_apostados_ant, fichas_ant, piloto_11_ant = [], [], ""
                 if not aposta_existente.empty:
                     aposta_existente = aposta_existente.iloc[0]
-                    pilotos_apostados_ant = aposta_existente['pilotos'].split(",")
-                    fichas_ant = list(map(int, aposta_existente['fichas'].split(",")))
+                    pilotos_apostados_ant = aposta_existente['pilotos'].split(
+                        ",")
+                    fichas_ant = list(
+                        map(int, aposta_existente['fichas'].split(",")))
                     piloto_11_ant = aposta_existente['piloto_11']
                 else:
                     fichas_ant = []
                     piloto_11_ant = ""
 
-                st.write("Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
+                st.write(
+                    "Escolha seus pilotos e distribua 15 fichas entre eles (mínimo 3 pilotos de equipes diferentes):")
                 max_linhas = 10
                 pilotos_aposta, fichas_aposta = [], []
                 for i in range(max_linhas):
@@ -75,18 +85,24 @@ def participante_view():
                         col1, col2 = st.columns([3, 1])
                         with col1:
                             piloto_sel = st.selectbox(
-                                f"Piloto {i+1}",
-                                ["Nenhum"] + pilotos,
-                                index=(pilotos.index(pilotos_apostados_ant[i]) + 1) if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos else 0,
-                                key=f"piloto_aposta_{i}"
-                            )
+                                f"Piloto {
+                                    i +
+                                    1}",
+                                ["Nenhum"] +
+                                pilotos,
+                                index=(
+                                    pilotos.index(
+                                        pilotos_apostados_ant[i]) +
+                                    1) if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos else 0,
+                                key=f"piloto_aposta_{i}")
                         with col2:
                             if piloto_sel != "Nenhum":
                                 valor_ficha = st.number_input(
-                                    f"Fichas para {piloto_sel}", min_value=0, max_value=15,
+                                    f"Fichas para {piloto_sel}",
+                                    min_value=0,
+                                    max_value=15,
                                     value=fichas_ant[i] if len(fichas_ant) > i else 0,
-                                    key=f"fichas_aposta_{i}"
-                                )
+                                    key=f"fichas_aposta_{i}")
                             else:
                                 valor_ficha = 0
                         pilotos_aposta.append(piloto_sel)
@@ -96,16 +112,19 @@ def participante_view():
                         fichas_aposta.append(0)
 
                 pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
-                fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
-                equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
+                fichas_validas = [f for i, f in enumerate(
+                    fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
+                equipes_apostadas = [pilotos_equipe[p]
+                                     for p in pilotos_validos]
                 total_fichas = sum(fichas_validas)
-                pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
+                pilotos_11_opcoes = [
+                    p for p in pilotos if p not in pilotos_validos]
                 if not pilotos_11_opcoes:
                     pilotos_11_opcoes = pilotos
                 piloto_11 = st.selectbox(
-                    "Palpite para 11º colocado", pilotos_11_opcoes,
-                    index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0
-                )
+                    "Palpite para 11º colocado",
+                    pilotos_11_opcoes,
+                    index=pilotos_11_opcoes.index(piloto_11_ant) if piloto_11_ant in pilotos_11_opcoes else 0)
 
                 erro = None
                 if st.button("Efetivar Aposta"):
@@ -130,9 +149,11 @@ def participante_view():
                         st.cache_data.clear()
                         st.rerun()
             else:
-                st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
+                st.warning(
+                    "Administração deve cadastrar provas e pilotos antes das apostas.")
         else:
-            st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
+            st.info(
+                "Usuário inativo: você só pode visualizar suas apostas anteriores.")
 
         # --- Exibição detalhada das apostas do participante ---
         st.subheader("Minhas apostas detalhadas")
@@ -140,13 +161,15 @@ def participante_view():
         resultados_df = get_resultados_df()
         provas_df = get_provas_df()
 
-        apostas_part = apostas_df[apostas_df['usuario_id'] == user[0]].sort_values('prova_id')
+        apostas_part = apostas_df[apostas_df['usuario_id']
+                                  == user[0]].sort_values('prova_id')
         pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
         pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
         bonus_11 = 25
 
         if not apostas_part.empty:
-            nomes_abas = [f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
+            nomes_abas = [
+                f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
             abas = st.tabs(nomes_abas)
             for aba, (_, aposta) in zip(abas, apostas_part.iterrows()):
                 with aba:
@@ -156,11 +179,13 @@ def participante_view():
                     pilotos_apostados = aposta['pilotos'].split(',')
                     piloto_11_apostado = aposta['piloto_11']
                     automatica = aposta.get('automatica', 0)
-                    tipo_prova = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
+                    tipo_prova = provas_df[provas_df['id'] ==
+                                           prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
                     resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
                     if not resultado_row.empty:
                         try:
-                            posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                            posicoes_dict = ast.literal_eval(
+                                resultado_row.iloc[0]['posicoes'])
                         except Exception:
                             posicoes_dict = {}
                     else:
@@ -173,9 +198,11 @@ def participante_view():
                     else:
                         pontos_lista = pontos_f1
                         n_pos = 10
-                    piloto_para_pos = {v: int(k) for k, v in posicoes_dict.items()}
+                    piloto_para_pos = {v: int(k)
+                                       for k, v in posicoes_dict.items()}
                     for i in range(n_pos):
-                        aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
+                        aposta_piloto = pilotos_apostados[i] if i < len(
+                            pilotos_apostados) else ""
                         ficha = fichas[i] if i < len(fichas) else 0
                         pos_real = piloto_para_pos.get(aposta_piloto, None)
                         pontos = 0
@@ -195,29 +222,37 @@ def participante_view():
                         total_pontos = round(total_pontos * 0.75, 2)
                     st.markdown(f"#### {prova_nome} ({tipo_prova})")
                     st.dataframe(pd.DataFrame(dados), hide_index=True)
-                    st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
-                    st.write(f"**Total de Pontos na Prova:** {total_pontos:.2f}")
+                    st.write(
+                        f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
+                    st.write(
+                        f"**Total de Pontos na Prova:** {total_pontos:.2f}")
                     st.markdown("---")
         else:
             st.info("Nenhuma aposta registrada.")
 
-        # --------- Gráfico de evolução da posição do participante logado ---------
+        # --------- Gráfico de evolução da posição do participante logado -----
         st.subheader("Evolução da Posição no Campeonato")
         user_id_logado = user[0]
         user_nome_logado = user[1]
         conn = db_connect()
         try:
-            df_posicoes = pd.read_sql('SELECT * FROM posicoes_participantes', conn)
+            df_posicoes = pd.read_sql(
+                'SELECT * FROM posicoes_participantes', conn)
         except Exception:
-            st.info("Nenhum histórico de posições disponível ainda. Quando houver dados, eles aparecerão aqui.")
+            st.info(
+                "Nenhum histórico de posições disponível ainda. Quando houver dados, eles aparecerão aqui.")
             df_posicoes = pd.DataFrame()
         conn.close()
 
         # Verifica se as colunas existem e só então faz o filtro
-        if not df_posicoes.empty and {'usuario_id', 'prova_id', 'posicao'}.issubset(df_posicoes.columns):
-            posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado].sort_values('prova_id')
+        if not df_posicoes.empty and {
+                'usuario_id', 'prova_id', 'posicao'}.issubset(
+                df_posicoes.columns):
+            posicoes_part = df_posicoes[df_posicoes['usuario_id']
+                                        == user_id_logado].sort_values('prova_id')
             if not posicoes_part.empty:
-                provas_nomes = [provas_df[provas_df['id'] == pid]['nome'].values[0] for pid in posicoes_part['prova_id']]
+                provas_nomes = [provas_df[provas_df['id'] == pid][
+                    'nome'].values[0] for pid in posicoes_part['prova_id']]
                 fig_pos = go.Figure()
                 fig_pos.add_trace(go.Scatter(
                     x=provas_nomes,
@@ -244,9 +279,18 @@ def participante_view():
         st.write(f"Usuário: **{user[1]}**")
         novo_email = st.text_input("Email cadastrado", value=user[2])
         st.subheader("Alterar Senha")
-        senha_atual = st.text_input("Senha Atual", type="password", key="senha_atual")
-        nova_senha = st.text_input("Nova Senha", type="password", key="nova_senha")
-        confirma_senha = st.text_input("Confirme Nova Senha", type="password", key="confirma_senha")
+        senha_atual = st.text_input(
+            "Senha Atual",
+            type="password",
+            key="senha_atual")
+        nova_senha = st.text_input(
+            "Nova Senha",
+            type="password",
+            key="nova_senha")
+        confirma_senha = st.text_input(
+            "Confirme Nova Senha",
+            type="password",
+            key="confirma_senha")
 
         if st.button("Salvar Alterações (Conta)"):
             erros = []
@@ -256,7 +300,8 @@ def participante_view():
                 # só verifica duplicidade se o email mudou
                 email_cadastrado = get_user_by_email(novo_email)
                 if email_cadastrado and email_cadastrado[0] != user[0]:
-                    erros.append("O email informado já está em uso por outro usuário.")
+                    erros.append(
+                        "O email informado já está em uso por outro usuário.")
 
             # Troca de senha (opcional)
             if senha_atual or nova_senha or confirma_senha:

@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from db.db_utils import db_connect
 
+
 def get_apostas_por_piloto():
     """
     Agrupa apostas por participante e piloto para análise da distribuição de apostas.
@@ -19,7 +20,8 @@ def get_apostas_por_piloto():
         if not df.empty and 'pilotos' in df.columns:
             df['piloto'] = df['pilotos'].str.split(',')
             df = df.explode('piloto')
-            df = df.groupby(['participante', 'piloto']).size().reset_index(name='total_apostas')
+            df = df.groupby(['participante', 'piloto']).size(
+            ).reset_index(name='total_apostas')
         else:
             df = pd.DataFrame()
     except Exception as e:
@@ -27,6 +29,7 @@ def get_apostas_por_piloto():
         df = pd.DataFrame()
     conn.close()
     return df
+
 
 def get_distribuicao_piloto_11():
     """
@@ -47,6 +50,7 @@ def get_distribuicao_piloto_11():
         df = pd.DataFrame()
     conn.close()
     return df
+
 
 def main():
     st.title("📊 Análise Detalhada das Apostas")
@@ -72,7 +76,8 @@ def main():
         else:
             participantes = apostas_pilotos['participante'].unique()
             for participante in participantes:
-                df_filtrado = apostas_pilotos[apostas_pilotos['participante'] == participante]
+                df_filtrado = apostas_pilotos[apostas_pilotos['participante']
+                                              == participante]
                 fig = px.pie(
                     df_filtrado, names='piloto', values='total_apostas',
                     title=f"Apostas de {participante}"
@@ -99,7 +104,8 @@ def main():
     with tab3:
         st.subheader("Consolidado de Apostas por Piloto")
         if not apostas_pilotos.empty:
-            consolidado_pilotos = apostas_pilotos.groupby('piloto')['total_apostas'].sum().reset_index()
+            consolidado_pilotos = apostas_pilotos.groupby(
+                'piloto')['total_apostas'].sum().reset_index()
             fig = px.pie(
                 consolidado_pilotos, names='piloto', values='total_apostas',
                 title="Distribuição Geral de Apostas por Piloto"
@@ -122,6 +128,7 @@ def main():
             st.dataframe(consolidado_11)
         else:
             st.info("Nenhuma aposta registrada para o 11º colocado.")
+
 
 if __name__ == "__main__":
     main()

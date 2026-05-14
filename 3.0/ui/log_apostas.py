@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import logging
 from db.db_utils import db_connect
-import extra_streamlit_components as stx # type: ignore
+import extra_streamlit_components as stx  # type: ignore
 import jwt
 import os
 from utils.season_utils import get_default_season_index, get_season_options
 
 logger = logging.getLogger(__name__)
+
 
 def carregar_logs(temporada=None):
     """Carrega logs de apostas, opcionalmente filtrando por temporada"""
@@ -19,7 +20,7 @@ def carregar_logs(temporada=None):
         ip_expr = "ip_address" if has_ip_address else "NULL AS ip_address"
 
         if temporada:
-            query = f'''SELECT id, data, horario, apostador, nome_prova, pilotos, aposta, piloto_11, tipo_aposta, automatica, {ip_expr}, temporada, {status_expr} FROM log_apostas 
+            query = f'''SELECT id, data, horario, apostador, nome_prova, pilotos, aposta, piloto_11, tipo_aposta, automatica, {ip_expr}, temporada, {status_expr} FROM log_apostas
                        WHERE (temporada = ? OR temporada IS NULL)
                        ORDER BY id DESC'''
             df = pd.read_sql(query, conn, params=(temporada,))
@@ -28,6 +29,7 @@ def carregar_logs(temporada=None):
             df = pd.read_sql(query, conn)
     return df
 
+
 def get_nome_from_cookie():
     cookie_manager = stx.CookieManager()
     cookies = cookie_manager.get_all()
@@ -35,12 +37,14 @@ def get_nome_from_cookie():
     nome_do_cookie = None
     if token:
         try:
-            JWT_SECRET = st.secrets["JWT_SECRET"] or os.environ.get("JWT_SECRET")
+            JWT_SECRET = st.secrets["JWT_SECRET"] or os.environ.get(
+                "JWT_SECRET")
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             nome_do_cookie = payload.get("nome")
         except Exception as e:
             logger.warning(f"Falha ao ler token da sessão: {e}")
     return nome_do_cookie
+
 
 def main():
     st.title("📜 Log de Apostas")
@@ -50,8 +54,12 @@ def main():
     # Season selector - read from temporadas table
     season_options = get_season_options(fallback_years=["2025", "2026"])
     default_index = get_default_season_index(season_options)
-    
-    season = st.selectbox("Temporada", season_options, index=default_index, key="log_apostas_season")
+
+    season = st.selectbox(
+        "Temporada",
+        season_options,
+        index=default_index,
+        key="log_apostas_season")
     st.session_state['temporada'] = season
 
     # Usa o nome do cookie se não for perfil admin/master
@@ -59,7 +67,8 @@ def main():
     if perfil not in ("admin", "master"):
         nome_usuario = get_nome_from_cookie()
     else:
-        nome_usuario = st.session_state.get("user_name")  # ou pode não usar, depende dos filtros
+        # ou pode não usar, depende dos filtros
+        nome_usuario = st.session_state.get("user_name")
 
     df = carregar_logs(season)
     if df.empty:
@@ -77,7 +86,8 @@ def main():
 
     if "apostador" in colunas_filtro:
         apostador_opcoes = ["Todos"] + sorted(df["apostador"].unique())
-        apostador_sel = cols[idx_filtro].selectbox("Apostador", apostador_opcoes)
+        apostador_sel = cols[idx_filtro].selectbox(
+            "Apostador", apostador_opcoes)
         idx_filtro += 1
     else:
         apostador_sel = nome_usuario
@@ -92,10 +102,13 @@ def main():
     idx_filtro += 1
 
     status_sel = cols[idx_filtro].selectbox(
-        "Status", ["Todos"] + sorted(df["status"].fillna("Registrada").unique().tolist())
-    )
+        "Status",
+        ["Todos"] +
+        sorted(
+            df["status"].fillna("Registrada").unique().tolist()))
 
-    mostrar_automaticas = st.checkbox("Mostrar apenas apostas automáticas (automatica > 0)", value=False)
+    mostrar_automaticas = st.checkbox(
+        "Mostrar apenas apostas automáticas (automatica > 0)", value=False)
 
     filtro = df.copy()
     # st.write("nome_usuario do cookie:", nome_usuario)
@@ -127,18 +140,32 @@ def main():
 
     filtro_show = filtro.copy()
     filtro_show["Tipo de Aposta"] = filtro["tipo_aposta"].map(tipos_map)
-    filtro_show["Automática"] = filtro["automatica"].apply(lambda x: "Sim" if x > 0 else "Não")
+    filtro_show["Automática"] = filtro["automatica"].apply(
+        lambda x: "Sim" if x > 0 else "Não")
     if "pilotos" in filtro_show.columns:
         filtro_show["Pilotos/Fichas"] = filtro_show.apply(
-            lambda r: f"{r.get('pilotos', '')} | {r.get('aposta', '')}".strip(" |"),
-            axis=1
-        )
+            lambda r: f"{
+                r.get(
+                    'pilotos',
+                    '')} | {
+                r.get(
+                    'aposta',
+                    '')}".strip(" |"),
+            axis=1)
     else:
         filtro_show["Pilotos/Fichas"] = filtro_show["aposta"]
 
     colunas_exibir = [
-        "data", "horario", "apostador", "nome_prova", "Pilotos/Fichas", "piloto_11", "Tipo de Aposta", "Automática", "ip_address", "status"
-    ]
+        "data",
+        "horario",
+        "apostador",
+        "nome_prova",
+        "Pilotos/Fichas",
+        "piloto_11",
+        "Tipo de Aposta",
+        "Automática",
+        "ip_address",
+        "status"]
     if "automatica" in filtro_show.columns and "tipo_aposta" in filtro_show.columns:
         st.dataframe(
             filtro_show[colunas_exibir].rename(columns={
@@ -156,7 +183,9 @@ def main():
     else:
         st.dataframe(filtro_show, width="stretch")
 
-    st.caption("*O campo 'Automática' indica apostas geradas automaticamente pelo sistema (qualquer valor > 0 no campo).*")
+    st.caption(
+        "*O campo 'Automática' indica apostas geradas automaticamente pelo sistema (qualquer valor > 0 no campo).*")
+
 
 if __name__ == "__main__":
     main()

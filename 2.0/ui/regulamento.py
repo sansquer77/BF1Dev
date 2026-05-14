@@ -1,5 +1,6 @@
 import streamlit as st
 
+
 def main():
     st.title("📜 Regulamento BF1-2025 (Completo e Oficial)")
 
@@ -18,8 +19,8 @@ O BF1-2025 terá início, oficialmente, em 16 de março, no dia do GP da Austrá
 - As apostas devem ser efetuadas até o horário programado da corrida e compartilhadas via formulário padrão que está no grupo do WhatsApp.
 - Fica facultado ao participante a geração de um print da tela do aplicativo com a aposta e o horário da mensagem para futuras validações, mas cabe ressaltar que a ferramenta possui um Time Stamp do horário de envio das mensagens.
 
-a. O participante pode enviar quantas apostas quiser até o horário limite, sendo válida a última enviada.  
-b. Apostas registradas após o horário da largada, por exemplo 09:01 sendo a corrida às 09h, serão desconsideradas.  
+a. O participante pode enviar quantas apostas quiser até o horário limite, sendo válida a última enviada.
+b. Apostas registradas após o horário da largada, por exemplo 09:01 sendo a corrida às 09h, serão desconsideradas.
 c. Os horários das corridas deste ano são:
 
 | Grande Prêmio                         | Data             | Horário |
@@ -90,6 +91,7 @@ c. Os horários das corridas deste ano são:
 
 Para dúvidas, consulte a administração ou acesse o grupo oficial do BF1 e lembrem-se: The best decision is my decision! 🏁
     """)
+
 
 if __name__ == "__main__":
     main()

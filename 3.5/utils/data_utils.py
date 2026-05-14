@@ -30,7 +30,13 @@ def _normalize_driver_name(name: str) -> str:
 
 
 def _extract_driver_name(driver_obj: dict) -> str:
-    return f"{driver_obj.get('givenName', '')} {driver_obj.get('familyName', '')}".strip()
+    return f"{
+        driver_obj.get(
+            'givenName',
+            '')} {
+        driver_obj.get(
+            'familyName',
+            '')}".strip()
 
 
 def _status_is_finished(status: str) -> bool:
@@ -67,22 +73,32 @@ def get_current_season() -> str:
         return str(datetime.datetime.now().year)
 
 # 2. Get driver standings by season
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def get_driver_standings(season: str = 'current') -> pd.DataFrame:
     """Obtém classificação de pilotos por temporada
-    
+
     Args:
         season: Ano da temporada (ex: '2024', '1950') ou 'current' para temporada atual
     """
-    columns = ['Position', 'Driver', 'Points', 'Wins', 'Nationality', 'Constructor']
+    columns = [
+        'Position',
+        'Driver',
+        'Points',
+        'Wins',
+        'Nationality',
+        'Constructor']
     season_val = _resolve_season(season)
     data = _request_json(f"{BASE_URL}/{season_val}/driverStandings.json")
     if not data:
         return _empty_df(columns)
 
     try:
-        standings_lists = data['MRData']['StandingsTable'].get('StandingsLists', [])
-        standings = standings_lists[0].get('DriverStandings', []) if standings_lists else []
+        standings_lists = data['MRData']['StandingsTable'].get(
+            'StandingsLists', [])
+        standings = standings_lists[0].get(
+            'DriverStandings', []) if standings_lists else []
     except (KeyError, TypeError, IndexError):
         return _empty_df(columns)
 
@@ -106,15 +122,19 @@ def get_driver_standings(season: str = 'current') -> pd.DataFrame:
     return pd.DataFrame(drivers, columns=columns)
 
 # Alias para compatibilidade
+
+
 def get_current_driver_standings():
     """Alias para manter compatibilidade com código existente"""
     return get_driver_standings('current')
 
 # 3. Get constructor standings by season
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def get_constructor_standings(season: str = 'current') -> pd.DataFrame:
     """Obtém classificação de construtores por temporada
-    
+
     Args:
         season: Ano da temporada (ex: '2024', '1950') ou 'current' para temporada atual
     """
@@ -125,8 +145,11 @@ def get_constructor_standings(season: str = 'current') -> pd.DataFrame:
         return _empty_df(columns)
 
     try:
-        standings_lists = data['MRData']['StandingsTable'].get('StandingsLists', [])
-        standings = standings_lists[0].get('ConstructorStandings', []) if standings_lists else []
+        standings_lists = data['MRData']['StandingsTable'].get(
+            'StandingsLists', [])
+        standings = standings_lists[0].get(
+            'ConstructorStandings',
+            []) if standings_lists else []
     except (KeyError, TypeError, IndexError):
         return _empty_df(columns)
 
@@ -147,15 +170,19 @@ def get_constructor_standings(season: str = 'current') -> pd.DataFrame:
     return pd.DataFrame(constructors, columns=columns)
 
 # Alias para compatibilidade
+
+
 def get_current_constructor_standings():
     """Alias para manter compatibilidade com código existente"""
     return get_constructor_standings('current')
 
 # 4. Get driver cumulative points by race
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def get_driver_points_by_race(season: str = 'current') -> pd.DataFrame:
     """Obtém pontos acumulados dos pilotos por corrida
-    
+
     Args:
         season: Ano da temporada (ex: '2024', '1950') ou 'current' para temporada atual
     """
@@ -189,16 +216,21 @@ def get_driver_points_by_race(season: str = 'current') -> pd.DataFrame:
         race = unique_races[round_num]
         for result in race.get('Results', []):
             driver_info = result.get('Driver', {})
-            driver_name = f"{driver_info.get('givenName', '')} {driver_info.get('familyName', '')}".strip()
+            driver_name = f"{
+                driver_info.get(
+                    'givenName',
+                    '')} {
+                driver_info.get(
+                    'familyName',
+                    '')}".strip()
             if not driver_name:
                 continue
             driver_names.add(driver_name)
-            points_tracker[driver_name][round_num] = _safe_int(result.get('points'))
+            points_tracker[driver_name][round_num] = _safe_int(
+                result.get('points'))
 
-    output = {
-        'Round': rounds,
-        'Race': [str(unique_races[r].get('raceName', f'Round {r}')) for r in rounds],
-    }
+    output = {'Round': rounds, 'Race': [
+        str(unique_races[r].get('raceName', f'Round {r}')) for r in rounds], }
 
     for driver in sorted(driver_names):
         cumulative = 0
@@ -211,10 +243,12 @@ def get_driver_points_by_race(season: str = 'current') -> pd.DataFrame:
     return pd.DataFrame(output)
 
 # 5. Get qualifying vs race position delta for last race
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def get_qualifying_vs_race_delta(season: str = 'current') -> pd.DataFrame:
     """Obtém diferença entre posição de classificatória e corrida (última prova da temporada)
-    
+
     Args:
         season: Ano da temporada (ex: '2024', '1950') ou 'current' para temporada atual
     """
@@ -233,8 +267,10 @@ def get_qualifying_vs_race_delta(season: str = 'current') -> pd.DataFrame:
     if not round_num:
         return _empty_df(columns)
 
-    race_data = _request_json(f"{BASE_URL}/{season_val}/{round_num}/results.json")
-    qual_data = _request_json(f"{BASE_URL}/{season_val}/{round_num}/qualifying.json")
+    race_data = _request_json(
+        f"{BASE_URL}/{season_val}/{round_num}/results.json")
+    qual_data = _request_json(
+        f"{BASE_URL}/{season_val}/{round_num}/qualifying.json")
     if not race_data or not qual_data:
         return _empty_df(columns)
 
@@ -250,14 +286,26 @@ def get_qualifying_vs_race_delta(season: str = 'current') -> pd.DataFrame:
     race_pos = {}
     for item in race_races[0].get('Results', []):
         driver = item.get('Driver', {})
-        name = f"{driver.get('givenName', '')} {driver.get('familyName', '')}".strip()
+        name = f"{
+            driver.get(
+                'givenName',
+                '')} {
+            driver.get(
+                'familyName',
+                '')}".strip()
         if name:
             race_pos[name] = _safe_int(item.get('position'))
 
     qual_pos = {}
     for item in qual_races[0].get('QualifyingResults', []):
         driver = item.get('Driver', {})
-        name = f"{driver.get('givenName', '')} {driver.get('familyName', '')}".strip()
+        name = f"{
+            driver.get(
+                'givenName',
+                '')} {
+            driver.get(
+                'familyName',
+                '')}".strip()
         if name:
             qual_pos[name] = _safe_int(item.get('position'))
 
@@ -276,10 +324,12 @@ def get_qualifying_vs_race_delta(season: str = 'current') -> pd.DataFrame:
     return pd.DataFrame(deltas, columns=columns)
 
 # 6. Get fastest lap times from last race
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def get_fastest_lap_times(season: str = 'current') -> pd.DataFrame:
     """Obtém tempos de volta mais rápida da última corrida
-    
+
     Args:
         season: Ano da temporada (ex: '2024', '1950') ou 'current' para temporada atual
     """
@@ -304,19 +354,27 @@ def get_fastest_lap_times(season: str = 'current') -> pd.DataFrame:
         fastest_time = fastest.get('Time', {}).get('time')
         if not fastest_time:
             continue
-        name = f"{driver.get('givenName', '')} {driver.get('familyName', '')}".strip()
+        name = f"{
+            driver.get(
+                'givenName',
+                '')} {
+            driver.get(
+                'familyName',
+                '')}".strip()
         laps.append({'Driver': name, 'Fastest Lap': fastest_time})
 
     return pd.DataFrame(laps, columns=columns)
 
 # 7. Get pit stop data for the last race
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def get_pit_stop_data(season: str = 'current') -> pd.DataFrame:
     """Obtém dados de pit stops da última corrida
-    
+
     Args:
         season: Ano da temporada (ex: '2024', '1950') ou 'current' para temporada atual
-    
+
     Nota: Dados de pit stops estão disponíveis apenas a partir de 2011
     """
     columns = ['Driver', 'Lap', 'Stop', 'Time']
@@ -334,7 +392,8 @@ def get_pit_stop_data(season: str = 'current') -> pd.DataFrame:
     if not round_num:
         return _empty_df(columns)
 
-    data = _request_json(f"{BASE_URL}/{season_val}/{round_num}/pitstops.json?limit=1000")
+    data = _request_json(
+        f"{BASE_URL}/{season_val}/{round_num}/pitstops.json?limit=1000")
     if not data:
         return _empty_df(columns)
 
@@ -360,7 +419,8 @@ def get_pit_stop_data(season: str = 'current') -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_posicoes_recentes(season: str = 'current', n_corridas: int = 5) -> dict[str, list[int]]:
+def get_posicoes_recentes(season: str = 'current',
+                          n_corridas: int = 5) -> dict[str, list[int]]:
     """Retorna posições recentes por piloto: {nome_normalizado: [posições]}.
 
     Usa resultados oficiais da temporada e considera as últimas n corridas disponíveis.
@@ -405,7 +465,8 @@ def get_posicoes_recentes(season: str = 'current', n_corridas: int = 5) -> dict[
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_qualifying_grid_ultima_corrida(season: str = 'current') -> dict[str, int]:
+def get_qualifying_grid_ultima_corrida(
+        season: str = 'current') -> dict[str, int]:
     """Retorna grid de classificação da última corrida disponível na temporada.
 
     Formato: {nome_normalizado: posicao_grid}
@@ -444,7 +505,9 @@ def _normalize_race_name(race_name: str) -> str:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_circuit_id_por_nome_prova(season: str, nome_prova: str) -> Optional[str]:
+def get_circuit_id_por_nome_prova(
+        season: str,
+        nome_prova: str) -> Optional[str]:
     """Resolve circuitId pelo vínculo direto salvo em `provas.circuit_id`."""
     season_val = _resolve_season(season)
     target = _normalize_race_name(nome_prova)
@@ -492,18 +555,23 @@ def get_circuit_id_por_nome_prova(season: str, nome_prova: str) -> Optional[str]
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_historico_circuito(circuit_id: str, n_anos: int = 4, season_ref: str = 'current') -> dict[str, float]:
+def get_historico_circuito(circuit_id: str,
+                           n_anos: int = 4,
+                           season_ref: str = 'current') -> dict[str,
+                                                                float]:
     """Retorna média de posição no circuito: {nome_normalizado: media_posicao}."""
     if not circuit_id:
         return {}
 
     season_val = _resolve_season(season_ref)
     ano_ref = _safe_int(season_val, default=datetime.datetime.now().year)
-    anos = [str(ano) for ano in range(max(1950, ano_ref - max(1, n_anos) + 1), ano_ref + 1)]
+    anos = [str(ano) for ano in range(
+        max(1950, ano_ref - max(1, n_anos) + 1), ano_ref + 1)]
 
     acum: dict[str, list[int]] = defaultdict(list)
     for ano in anos:
-        data = _request_json(f"{BASE_URL}/{ano}/circuits/{circuit_id}/results.json?limit=2000")
+        data = _request_json(
+            f"{BASE_URL}/{ano}/circuits/{circuit_id}/results.json?limit=2000")
         if not data:
             continue
         try:
@@ -528,13 +596,16 @@ def get_historico_circuito(circuit_id: str, n_anos: int = 4, season_ref: str = '
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def get_frequencia_11_por_piloto(seasons: Optional[list[str]] = None) -> dict[str, float]:
+def get_frequencia_11_por_piloto(
+        seasons: Optional[list[str]] = None) -> dict[str, float]:
     """Retorna frequência relativa em P11 por piloto para as temporadas informadas.
 
     Formato: {nome_normalizado: frequencia_0_a_1}
     """
     if not seasons:
-        current = _safe_int(get_current_season(), default=datetime.datetime.now().year)
+        current = _safe_int(
+            get_current_season(),
+            default=datetime.datetime.now().year)
         seasons = [str(current - 2), str(current - 1), str(current)]
 
     total_corridas = 0
@@ -542,15 +613,18 @@ def get_frequencia_11_por_piloto(seasons: Optional[list[str]] = None) -> dict[st
 
     for season in seasons:
         season_val = _resolve_season(str(season))
-        season_results = _request_json(f"{BASE_URL}/{season_val}/results.json?limit=2000")
+        season_results = _request_json(
+            f"{BASE_URL}/{season_val}/results.json?limit=2000")
         if season_results:
             try:
-                races_all = season_results['MRData']['RaceTable'].get('Races', [])
+                races_all = season_results['MRData']['RaceTable'].get(
+                    'Races', [])
                 total_corridas += len(races_all)
             except (KeyError, TypeError):
                 pass
 
-        data = _request_json(f"{BASE_URL}/{season_val}/results/11.json?limit=2000")
+        data = _request_json(
+            f"{BASE_URL}/{season_val}/results/11.json?limit=2000")
         if not data:
             continue
         try:
@@ -570,7 +644,8 @@ def get_frequencia_11_por_piloto(seasons: Optional[list[str]] = None) -> dict[st
     if total_corridas <= 0:
         return {}
 
-    return {name: (count / float(total_corridas)) for name, count in contagem_p11.items()}
+    return {name: (count / float(total_corridas))
+            for name, count in contagem_p11.items()}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)

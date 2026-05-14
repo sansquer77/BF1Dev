@@ -4,9 +4,16 @@ import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-EMAIL_REMETENTE = st.secrets["EMAIL_REMETENTE"] or os.environ.get("EMAIL_REMETENTE", "")
-SENHA_REMETENTE = st.secrets["SENHA_EMAIL"] or os.environ.get("SENHA_EMAIL", "")
-EMAIL_ADMIN = st.secrets.get("EMAIL_ADMIN", "") or os.environ.get("EMAIL_ADMIN", "")
+EMAIL_REMETENTE = st.secrets["EMAIL_REMETENTE"] or os.environ.get(
+    "EMAIL_REMETENTE", "")
+SENHA_REMETENTE = st.secrets["SENHA_EMAIL"] or os.environ.get(
+    "SENHA_EMAIL", "")
+EMAIL_ADMIN = st.secrets.get(
+    "EMAIL_ADMIN",
+    "") or os.environ.get(
+        "EMAIL_ADMIN",
+    "")
+
 
 def enviar_email(destinatario: str, assunto: str, corpo_html: str) -> bool:
     """Envia um e-mail HTML para o destinatário informado."""
@@ -24,7 +31,11 @@ def enviar_email(destinatario: str, assunto: str, corpo_html: str) -> bool:
         st.error(f"Erro no envio para {destinatario}: {str(e)}")
         return False
 
-def enviar_email_recuperacao_senha(email_usuario: str, nome_usuario: str, nova_senha: str):
+
+def enviar_email_recuperacao_senha(
+        email_usuario: str,
+        nome_usuario: str,
+        nova_senha: str):
     """Envia e-mail com senha temporária para o usuário."""
     corpo_html = f"""
     <h3>Recuperação de Senha - BF1Dev</h3>

@@ -47,12 +47,15 @@ def _extrair_json_texto(raw_text: str) -> Optional[dict]:
     if ini == -1 or fim == -1 or fim <= ini:
         return None
     try:
-        return json.loads(txt[ini : fim + 1])
+        return json.loads(txt[ini: fim + 1])
     except Exception:
         return None
 
 
-def _get_resumo_ultimas_apostas(usuario_id: int, apostas_df: pd.DataFrame, limite: int = 3) -> list[dict]:
+def _get_resumo_ultimas_apostas(
+        usuario_id: int,
+        apostas_df: pd.DataFrame,
+        limite: int = 3) -> list[dict]:
     if apostas_df.empty:
         return []
     ap = apostas_df[apostas_df["usuario_id"] == usuario_id].copy()
@@ -67,20 +70,33 @@ def _get_resumo_ultimas_apostas(usuario_id: int, apostas_df: pd.DataFrame, limit
     out = []
     for _, row in ap.iterrows():
         try:
-            fichas = [int(x) for x in str(row.get("fichas", "")).split(",") if str(x).strip() != ""]
+            fichas = [
+                int(x) for x in str(
+                    row.get(
+                        "fichas",
+                        "")).split(",") if str(x).strip() != ""]
         except Exception:
             fichas = []
         out.append(
             {
-                "pilotos": [p.strip() for p in str(row.get("pilotos", "")).split(",") if p.strip()],
+                "pilotos": [
+                    p.strip() for p in str(
+                        row.get(
+                            "pilotos",
+                            "")).split(",") if p.strip()],
                 "fichas": fichas,
-                "piloto_11": str(row.get("piloto_11", "")).strip(),
-            }
-        )
+                "piloto_11": str(
+                    row.get(
+                        "piloto_11",
+                        "")).strip(),
+            })
     return out
 
 
-def _get_resumo_cenario_campeonato(resultados_df: pd.DataFrame, provas_df: pd.DataFrame, limite: int = 3) -> list[dict]:
+def _get_resumo_cenario_campeonato(
+        resultados_df: pd.DataFrame,
+        provas_df: pd.DataFrame,
+        limite: int = 3) -> list[dict]:
     if resultados_df.empty:
         return []
     res = resultados_df.copy()
@@ -101,16 +117,14 @@ def _get_resumo_cenario_campeonato(resultados_df: pd.DataFrame, provas_df: pd.Da
         except Exception:
             posicoes = {}
         top3 = [str(posicoes.get(i, "")).strip() for i in [1, 2, 3]]
-        out.append(
-            {
-                "prova": str(provas_nome.get(row.get("prova_id"), f"Prova {row.get('prova_id')}")),
-                "top3": [p for p in top3 if p],
-            }
-        )
+        out.append({"prova": str(provas_nome.get(row.get(
+            "prova_id"), f"Prova {row.get('prova_id')}")), "top3": [p for p in top3 if p], })
     return out
 
 
-def _get_contexto_temporada_atual_ergast(temporada: Optional[str] = None, nome_prova: Optional[str] = None) -> dict:
+def _get_contexto_temporada_atual_ergast(
+        temporada: Optional[str] = None,
+        nome_prova: Optional[str] = None) -> dict:
     contexto = {
         "src": "ergast",
         "s": None,
@@ -172,14 +186,16 @@ def _get_contexto_temporada_atual_ergast(temporada: Optional[str] = None, nome_p
         if not df_delta.empty:
             top_delta = []
             bottom_delta = []
-            for _, row in df_delta.sort_values("Delta", ascending=False).head(5).iterrows():
+            for _, row in df_delta.sort_values(
+                    "Delta", ascending=False).head(5).iterrows():
                 top_delta.append(
                     {
                         "n": str(row.get("Driver", "")).strip(),
                         "d": int(row.get("Delta", 0) or 0),
                     }
                 )
-            for _, row in df_delta.sort_values("Delta", ascending=True).head(4).iterrows():
+            for _, row in df_delta.sort_values(
+                    "Delta", ascending=True).head(4).iterrows():
                 bottom_delta.append(
                     {
                         "n": str(row.get("Driver", "")).strip(),
@@ -195,28 +211,33 @@ def _get_contexto_temporada_atual_ergast(temporada: Optional[str] = None, nome_p
         if not df_volta_rapida.empty:
             voltas = []
             for _, row in df_volta_rapida.head(5).iterrows():
-                voltas.append({"n": str(row.get("Driver", "")).strip(), "t": str(row.get("Fastest Lap", "")).strip()})
+                voltas.append({"n": str(row.get("Driver", "")).strip(
+                ), "t": str(row.get("Fastest Lap", "")).strip()})
             contexto["vr"] = voltas
     except Exception:
         pass
 
     try:
-        contexto["qg"] = get_qualifying_grid_ultima_corrida(temporada_resolvida)
+        contexto["qg"] = get_qualifying_grid_ultima_corrida(
+            temporada_resolvida)
     except Exception:
         pass
 
     try:
-        contexto["rp5"] = get_posicoes_recentes(temporada_resolvida, n_corridas=5)
+        contexto["rp5"] = get_posicoes_recentes(
+            temporada_resolvida, n_corridas=5)
     except Exception:
         pass
 
     try:
-        contexto["rp8"] = get_posicoes_recentes(temporada_resolvida, n_corridas=8)
+        contexto["rp8"] = get_posicoes_recentes(
+            temporada_resolvida, n_corridas=8)
     except Exception:
         pass
 
     try:
-        contexto["dnf"] = get_taxa_dnf_por_piloto(temporada_resolvida, n_corridas=8)
+        contexto["dnf"] = get_taxa_dnf_por_piloto(
+            temporada_resolvida, n_corridas=8)
     except Exception:
         pass
 
@@ -233,10 +254,12 @@ def _get_contexto_temporada_atual_ergast(temporada: Optional[str] = None, nome_p
 
     try:
         if nome_prova:
-            circuit_id = get_circuit_id_por_nome_prova(temporada_resolvida, nome_prova)
+            circuit_id = get_circuit_id_por_nome_prova(
+                temporada_resolvida, nome_prova)
             if circuit_id:
                 contexto["circuit_id"] = circuit_id
-                contexto["hc"] = get_historico_circuito(circuit_id, n_anos=4, season_ref=temporada_resolvida)
+                contexto["hc"] = get_historico_circuito(
+                    circuit_id, n_anos=4, season_ref=temporada_resolvida)
     except Exception:
         pass
 
@@ -244,7 +267,13 @@ def _get_contexto_temporada_atual_ergast(temporada: Optional[str] = None, nome_p
 
 
 def _canonical_json(data: dict) -> str:
-    return json.dumps(data, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return json.dumps(
+        data,
+        ensure_ascii=False,
+        separators=(
+            ",",
+            ":"),
+        sort_keys=True)
 
 
 def _reduce_context_for_limit(data: dict) -> dict:
@@ -325,9 +354,15 @@ def _build_compact_prompt_payload(
 ) -> tuple[str, str]:
     payload_data = {
         "v": 1,
-        "alvo": {"nome": nome_prova, "tipo": tipo_prova},
+        "alvo": {
+            "nome": nome_prova,
+            "tipo": tipo_prova},
         "pd": pilotos_disponiveis,
-        "rg": {"min": min_pilotos, "qf": qtd_fichas, "fmax": fichas_max, "me": permite_mesma_equipe},
+        "rg": {
+            "min": min_pilotos,
+            "qf": qtd_fichas,
+            "fmax": fichas_max,
+            "me": permite_mesma_equipe},
         "ua": ultimas_apostas,
         "cz": cenario,
         "erg": contexto_ergast,
@@ -405,8 +440,10 @@ def _gerar_aposta_perplexity(
     if not api_key:
         return None
 
-    pilotos_disponiveis = [str(x) for x in pilotos_df["nome"].tolist()] if not pilotos_df.empty else []
-    min_pilotos = int(regras.get("qtd_minima_pilotos") or regras.get("min_pilotos", 3))
+    pilotos_disponiveis = [
+        str(x) for x in pilotos_df["nome"].tolist()] if not pilotos_df.empty else []
+    min_pilotos = int(regras.get("qtd_minima_pilotos")
+                      or regras.get("min_pilotos", 3))
     qtd_fichas = int(regras.get("quantidade_fichas", 15))
     fichas_max = int(regras.get("fichas_por_piloto", qtd_fichas))
     permite_mesma_equipe = bool(regras.get("mesma_equipe", False))
@@ -449,8 +486,7 @@ def _gerar_aposta_perplexity(
         "erg.hc=media_posicao_neste_circuito[nome:media], "
         "erg.fr11=frequencia_P11[nome:0.0_a_1.0], "
         "erg.dnf=taxa_abandono[nome:0.0_a_1.0]. "
-        "Priorize rp5, hc e tp. Use fr11 para piloto_11. Evite dnf alto."
-    )
+        "Priorize rp5, hc e tp. Use fr11 para piloto_11. Evite dnf alto.")
     user_prompt = (
         "Dados de entrada (JSON canônico compacto):\n"
         f"{contexto_compacto_json}\n"
@@ -474,10 +510,17 @@ def _gerar_aposta_perplexity(
 
     try:
         with httpx.Client(timeout=12.0) as client:
-            resp = client.post("https://api.perplexity.ai/chat/completions", headers=headers, json=payload)
+            resp = client.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers=headers,
+                json=payload)
             resp.raise_for_status()
             data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = data.get(
+            "choices", [
+                {}])[0].get(
+            "message", {}).get(
+                "content", "")
         parsed = _extrair_json_texto(content)
         if not parsed:
             return None
@@ -489,14 +532,16 @@ def _gerar_aposta_perplexity(
             min_pilotos=min_pilotos,
         ):
             return None
-        pilotos = [str(p).strip() for p in parsed.get("pilotos", []) if str(p).strip()]
+        pilotos = [str(p).strip()
+                   for p in parsed.get("pilotos", []) if str(p).strip()]
         fichas = [int(x) for x in parsed.get("fichas", [])]
         piloto_11 = str(parsed.get("piloto_11", "")).strip()
         if not pilotos or not fichas or not piloto_11:
             return None
         return pilotos, fichas, piloto_11
     except Exception as e:
-        logger.warning("Falha na geração via Perplexity para aposta estratégica: %s", e)
+        logger.warning(
+            "Falha na geração via Perplexity para aposta estratégica: %s", e)
         return None
 
 

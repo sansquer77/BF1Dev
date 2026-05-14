@@ -40,11 +40,17 @@ def get_season_options(
         fallback = fallback_years or [get_current_year_str()]
         seasons = _normalize_season_values(fallback)
 
-    # Restrição global para usuário inativo: apenas temporadas em que esteve ativo.
+    # Restrição global para usuário inativo: apenas temporadas em que esteve
+    # ativo.
     try:
-        user_status = str(st.session_state.get("user_status", "")).strip().lower()
+        user_status = str(
+            st.session_state.get(
+                "user_status",
+                "")).strip().lower()
         if user_status and user_status != "ativo":
-            allowed = _normalize_season_values(st.session_state.get("allowed_seasons", []) or [])
+            allowed = _normalize_season_values(
+                st.session_state.get(
+                    "allowed_seasons", []) or [])
             if allowed:
                 allowed_set = set(allowed)
                 seasons = [s for s in seasons if s in allowed_set]
@@ -57,7 +63,9 @@ def get_season_options(
     return seasons
 
 
-def get_default_season_index(options: list[str], current_year: Optional[str] = None) -> int:
+def get_default_season_index(
+        options: list[str],
+        current_year: Optional[str] = None) -> int:
     if not options:
         return 0
     year = current_year or get_current_year_str()

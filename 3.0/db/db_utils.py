@@ -3,26 +3,26 @@ Utilitários de Banco de Dados - Versão 3.0
 Melhorias: bcrypt para senhas, pool de conexões, caching
 """
 
+from db.rules_utils import init_rules_table
+import datetime
 import sqlite3
 import pandas as pd
 from pathlib import Path
 import bcrypt
 import logging
-import os
 from functools import lru_cache
 from typing import Optional, Dict
-from db.connection_pool import get_pool, init_pool
+from db.connection_pool import get_pool
 from db.db_config import BCRYPT_ROUNDS, DB_PATH
 
 logger = logging.getLogger(__name__)
 
-import datetime
-from db.rules_utils import init_rules_table
 
 # NÃO inicializar pool aqui - será lazy-initialized em get_pool()
 # Isso evita criar pool com arquivo antigo antes da importação substituir
 
 # ============ FUNÇÕES DE CONEXÃO ============
+
 
 def db_connect():
     """Retorna uma conexão do pool"""
@@ -30,37 +30,42 @@ def db_connect():
 
 # ============ FUNÇÕES DE SEGURANÇA (BCRYPT) ============
 
+
 def hash_password(senha: str) -> str:
     """
     Hash seguro de senha usando bcrypt
-    
+
     Args:
         senha: Senha em texto plano
-    
+
     Returns:
         Hash da senha (bcrypt)
     """
     salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
     return bcrypt.hashpw(senha.encode('utf-8'), salt).decode('utf-8')
 
+
 def check_password(senha: str, hash_senha: str) -> bool:
     """
     Verifica se a senha corresponde ao hash
-    
+
     Args:
         senha: Senha em texto plano
         hash_senha: Hash do bcrypt
-    
+
     Returns:
         True se a senha é válida
     """
     try:
-        return bcrypt.checkpw(senha.encode('utf-8'), hash_senha.encode('utf-8'))
+        return bcrypt.checkpw(
+            senha.encode('utf-8'),
+            hash_senha.encode('utf-8'))
     except (ValueError, TypeError):
         logger.error("Erro ao verificar password - hash inválido")
         return False
 
 # ============ TABELAS ============
+
 
 def init_db():
     """Inicializa o banco de dados com todas as tabelas necessárias"""
@@ -70,7 +75,8 @@ def init_db():
             test_conn.execute("PRAGMA integrity_check")
             test_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except sqlite3.DatabaseError as e:
-        logger.error(f"Banco corrompido detectado: {e}. Tentando recuperação...")
+        logger.error(
+            f"Banco corrompido detectado: {e}. Tentando recuperação...")
         try:
             # Tentar recuperação via dump
             import os
@@ -81,8 +87,9 @@ def init_db():
             # O banco será recriado abaixo
         except Exception as recovery_error:
             logger.error(f"Erro na recuperação: {recovery_error}")
-    
-    # Cria o esquema compatível com o dump histórico (pilotos com 'equipe', provas com 'horario_prova' e 'tipo', resultados com 'posicoes')
+
+    # Cria o esquema compatível com o dump histórico (pilotos com 'equipe',
+    # provas com 'horario_prova' e 'tipo', resultados com 'posicoes')
     with db_connect() as conn:
         c = conn.cursor()
 
@@ -186,6 +193,7 @@ def init_db():
 
 # ============ OPERAÇÕES CRUD ============
 
+
 @lru_cache(maxsize=64)
 def _get_existing_columns_cached(table: str) -> tuple[str, ...]:
     with db_connect() as conn:
@@ -195,7 +203,8 @@ def _get_existing_columns_cached(table: str) -> tuple[str, ...]:
     return cols
 
 
-def _get_existing_columns(table: str, preferred: Optional[list[str]] = None) -> list[str]:
+def _get_existing_columns(table: str,
+                          preferred: Optional[list[str]] = None) -> list[str]:
     cols = list(_get_existing_columns_cached(table))
     if preferred:
         return [c for c in preferred if c in cols]
@@ -205,28 +214,36 @@ def _get_existing_columns(table: str, preferred: Optional[list[str]] = None) -> 
 def get_user_by_email(email: str) -> Optional[Dict]:
     """
     Retorna usuário pelo email
-    
+
     Args:
         email: Email do usuário
-    
+
     Returns:
         Dict com dados do usuário ou None
     """
     cols = _get_existing_columns('usuarios')
     with db_connect() as conn:
         c = conn.cursor()
-        c.execute(f"SELECT {', '.join(cols)} FROM usuarios WHERE email = ?", (email,))
+        c.execute(
+            f"SELECT {
+                ', '.join(cols)} FROM usuarios WHERE email = ?", (email,))
         row = c.fetchone()
-        
+
         if row:
             return dict(row)
         return None
+
 
 def get_master_user() -> Optional[Dict]:
     """Retorna o usuário Master se existir"""
     return get_user_by_email('master@sistema.local')
 
-def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "participante"):
+
+def cadastrar_usuario(
+        nome: str,
+        email: str,
+        senha: str,
+        perfil: str = "participante"):
     """Registra novo usuário com senha bcrypt"""
     senha_hash = hash_password(senha)
     with db_connect() as conn:
@@ -238,6 +255,7 @@ def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "particip
         conn.commit()
         logger.info(f"✓ Usuário cadastrado: {email}")
 
+
 def autenticar_usuario(email: str, senha: str) -> dict:
     """Autentica usuário com bcrypt"""
     usuario = get_user_by_email(email)
@@ -245,31 +263,38 @@ def autenticar_usuario(email: str, senha: str) -> dict:
         return usuario
     return {}
 
+
 def get_user_by_id(user_id: int) -> Optional[Dict]:
     """
     Retorna usuário pelo ID
-    
+
     Args:
         user_id: ID do usuário
-    
+
     Returns:
         Dict com dados do usuário ou None
     """
     cols = _get_existing_columns('usuarios')
     with db_connect() as conn:
         c = conn.cursor()
-        c.execute(f"SELECT {', '.join(cols)} FROM usuarios WHERE id = ?", (user_id,))
+        c.execute(
+            f"SELECT {
+                ', '.join(cols)} FROM usuarios WHERE id = ?", (user_id,))
         row = c.fetchone()
-        
+
         if row:
             return dict(row)
         return None
+
 
 def get_usuarios_df() -> pd.DataFrame:
     """Retorna todos os usuários como DataFrame"""
     cols = _get_existing_columns('usuarios')
     with db_connect() as conn:
-        return pd.read_sql_query(f"SELECT {', '.join(cols)} FROM usuarios", conn)
+        return pd.read_sql_query(
+            f"SELECT {
+                ', '.join(cols)} FROM usuarios",
+            conn)
 
 
 def _usuarios_status_historico_exists(conn) -> bool:
@@ -286,7 +311,8 @@ def usuarios_status_historico_disponivel() -> bool:
         return _usuarios_status_historico_exists(conn)
 
 
-def get_participantes_temporada_df(temporada: Optional[str] = None) -> pd.DataFrame:
+def get_participantes_temporada_df(
+        temporada: Optional[str] = None) -> pd.DataFrame:
     """Retorna participantes ativos na temporada selecionada.
 
     Se a tabela de historico de status existir, considera o status ativo no periodo.
@@ -309,7 +335,10 @@ def get_participantes_temporada_df(temporada: Optional[str] = None) -> pd.DataFr
                     """,
                     conn,
                 )
-            return pd.read_sql_query(f"SELECT {', '.join(cols)} FROM usuarios", conn)
+            return pd.read_sql_query(
+                f"SELECT {
+                    ', '.join(cols)} FROM usuarios",
+                conn)
 
         query = f"""
             SELECT DISTINCT u.{', u.'.join(cols)}
@@ -319,7 +348,9 @@ def get_participantes_temporada_df(temporada: Optional[str] = None) -> pd.DataFr
               AND datetime(h.inicio_em) <= datetime(?)
               AND (h.fim_em IS NULL OR datetime(h.fim_em) >= datetime(?))
         """
-        return pd.read_sql_query(query, conn, params=(season_end, season_start))
+        return pd.read_sql_query(
+            query, conn, params=(
+                season_end, season_start))
 
 
 def registrar_historico_status_usuario(
@@ -375,13 +406,20 @@ def registrar_historico_status_usuario(
         )
         conn.commit()
 
+
 def get_pilotos_df() -> pd.DataFrame:
     """Retorna todos os pilotos como DataFrame"""
     cols = _get_existing_columns('pilotos')
     with db_connect() as conn:
-        return pd.read_sql_query(f"SELECT {', '.join(cols)} FROM pilotos", conn)
+        return pd.read_sql_query(
+            f"SELECT {
+                ', '.join(cols)} FROM pilotos",
+            conn)
 
-def _read_table_df(table: str, temporada: Optional[str] = None, columns: Optional[list[str]] = None) -> pd.DataFrame:
+
+def _read_table_df(table: str,
+                   temporada: Optional[str] = None,
+                   columns: Optional[list[str]] = None) -> pd.DataFrame:
     """Helper: read table into DataFrame, filtering by `temporada` when column exists.
 
     If `temporada` is None, defaults to current year as string.
@@ -391,16 +429,20 @@ def _read_table_df(table: str, temporada: Optional[str] = None, columns: Optiona
         temporada = str(datetime.datetime.now().year)
     cols = _get_existing_columns(table, columns)
     with db_connect() as conn:
-        c = conn.cursor()
+        conn.cursor()
         if 'temporada' in cols:
-            # Include rows where temporada matches OR temporada is NULL (backward compat)
+            # Include rows where temporada matches OR temporada is NULL
+            # (backward compat)
             return pd.read_sql_query(
-                f"SELECT {', '.join(cols)} FROM {table} WHERE temporada = ? OR temporada IS NULL",
+                f"SELECT {
+                    ', '.join(cols)} FROM {table} WHERE temporada = ? OR temporada IS NULL",
                 conn,
-                params=(temporada,)
-            )
+                params=(
+                    temporada,
+                ))
         else:
-            return pd.read_sql_query(f"SELECT {', '.join(cols)} FROM {table}", conn)
+            return pd.read_sql_query(
+                f"SELECT {', '.join(cols)} FROM {table}", conn)
 
 
 def get_provas_df(temporada: Optional[str] = None) -> pd.DataFrame:
@@ -427,7 +469,7 @@ def registrar_log_aposta(*args, **kwargs):
 
     If pattern (2) is used, entries are stored in an `log_apostas` table (created on demand).
     If pattern (1) is used, an entry is inserted into `apostas` (respecting `temporada` column when present).
-    
+
     Pattern (2) fields:
     - apostador: username/name of bettor
     - pilotos: comma-separated list of pilot names (e.g., "Oscar Piastri, Max Verstappen, George Russell")
@@ -462,14 +504,16 @@ def registrar_log_aposta(*args, **kwargs):
             if horario:
                 data_str = getattr(horario, 'date', lambda: None)()
                 data_str = data_str.isoformat() if data_str else None
-                horario_str = horario.isoformat() if hasattr(horario, 'isoformat') else str(horario)
+                horario_str = horario.isoformat() if hasattr(
+                    horario, 'isoformat') else str(horario)
         except Exception:
             data_str = None
             horario_str = None
 
         with db_connect() as conn:
             c = conn.cursor()
-            # create log table if not exists (using log_apostas name for consistency)
+            # create log table if not exists (using log_apostas name for
+            # consistency)
             c.execute(f'''
                 CREATE TABLE IF NOT EXISTS log_apostas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -522,10 +566,10 @@ def registrar_log_aposta(*args, **kwargs):
             cols_sql = ', '.join(insert_cols)
             c.execute(
                 f'INSERT INTO log_apostas ({cols_sql}) VALUES ({placeholders})',
-                tuple(insert_vals)
-            )
+                tuple(insert_vals))
             conn.commit()
-            logger.info(f"✓ Aposta log registrada (log_apostas): {apostador} - {nome_prova}")
+            logger.info(
+                f"✓ Aposta log registrada (log_apostas): {apostador} - {nome_prova}")
         return
 
     # Pattern 1: positional insert into apostas
@@ -574,10 +618,14 @@ def registrar_log_aposta(*args, **kwargs):
                 (usuario_id, prova_id, piloto_id, pontos)
             )
         conn.commit()
-        logger.info(f"✓ Aposta registrada: usuário {usuario_id}, prova {prova_id}, piloto {piloto_id}")
+        logger.info(
+            f"✓ Aposta registrada: usuário {usuario_id}, prova {prova_id}, piloto {piloto_id}")
 
 
-def log_aposta_existe(usuario_id: int, prova_id: int, temporada: Optional[str] = None) -> bool:
+def log_aposta_existe(
+        usuario_id: int,
+        prova_id: int,
+        temporada: Optional[str] = None) -> bool:
     """Verifica se existe aposta para usuário em uma prova (opcionalmente filtrando por temporada)."""
     if temporada is None:
         temporada = str(datetime.datetime.now().year)
@@ -586,23 +634,33 @@ def log_aposta_existe(usuario_id: int, prova_id: int, temporada: Optional[str] =
         c.execute("PRAGMA table_info('apostas')")
         cols = [r[1] for r in c.fetchall()]
         if 'temporada' in cols:
-            c.execute('SELECT 1 FROM apostas WHERE usuario_id = ? AND prova_id = ? AND temporada = ?', (usuario_id, prova_id, temporada))
+            c.execute(
+                'SELECT 1 FROM apostas WHERE usuario_id = ? AND prova_id = ? AND temporada = ?',
+                (usuario_id,
+                 prova_id,
+                 temporada))
         else:
-            c.execute('SELECT 1 FROM apostas WHERE usuario_id = ? AND prova_id = ?', (usuario_id, prova_id))
+            c.execute(
+                'SELECT 1 FROM apostas WHERE usuario_id = ? AND prova_id = ?',
+                (usuario_id,
+                 prova_id))
         return c.fetchone() is not None
+
 
 def update_user_email(user_id: int, novo_email: str) -> bool:
     """Atualiza o email do usuário"""
     try:
         with db_connect() as conn:
             c = conn.cursor()
-            c.execute('UPDATE usuarios SET email = ? WHERE id = ?', (novo_email, user_id))
+            c.execute('UPDATE usuarios SET email = ? WHERE id = ?',
+                      (novo_email, user_id))
             conn.commit()
             logger.info(f"✓ Email do usuário {user_id} atualizado")
             return True
     except Exception as e:
         logger.error(f"Erro ao atualizar email: {e}")
         return False
+
 
 def update_user_password(user_id: int, nova_senha: str) -> bool:
     """Atualiza a senha do usuário"""
@@ -621,7 +679,8 @@ def update_user_password(user_id: int, nova_senha: str) -> bool:
                     (senha_hash, user_id)
                 )
             else:
-                c.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', (senha_hash, user_id))
+                c.execute(
+                    'UPDATE usuarios SET senha_hash = ? WHERE id = ?', (senha_hash, user_id))
             conn.commit()
             logger.info(f"✓ Senha do usuário {user_id} atualizada")
             return True
@@ -629,13 +688,14 @@ def update_user_password(user_id: int, nova_senha: str) -> bool:
         logger.error(f"Erro ao atualizar senha: {e}")
         return False
 
+
 def get_horario_prova(prova_id: int) -> tuple:
     """
     Retorna informações da prova (nome, data, horário)
-    
+
     Args:
         prova_id: ID da prova
-    
+
     Returns:
         Tupla com (nome_prova, data_prova, horario_prova) ou (None, None, None)
     """
@@ -644,9 +704,11 @@ def get_horario_prova(prova_id: int) -> tuple:
         c.execute("PRAGMA table_info('provas')")
         cols = [r[1] for r in c.fetchall()]
         if 'horario_prova' in cols:
-            c.execute('SELECT nome, data, horario_prova FROM provas WHERE id = ?', (prova_id,))
+            c.execute(
+                'SELECT nome, data, horario_prova FROM provas WHERE id = ?', (prova_id,))
         else:
-            c.execute('SELECT nome, data FROM provas WHERE id = ?', (prova_id,))
+            c.execute(
+                'SELECT nome, data FROM provas WHERE id = ?', (prova_id,))
         row = c.fetchone()
 
         if row:

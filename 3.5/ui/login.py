@@ -36,10 +36,15 @@ logger = logging.getLogger(__name__)
 
 # ============ RATE LIMITING ============
 
-def registrar_tentativa_login(email: str, sucesso: bool, ip_address: str = "LOCAL", action: str = "login"):
+
+def registrar_tentativa_login(
+        email: str,
+        sucesso: bool,
+        ip_address: str = "LOCAL",
+        action: str = "login"):
     """
     Registra tentativa de login para rate limiting
-    
+
     Args:
         email: Email do usuário
         sucesso: True se login foi bem-sucedido
@@ -101,23 +106,23 @@ def obter_tentativas_recentes(
 ) -> tuple[int, int, bool]:
     """
     Obtém tentativas de login recentes
-    
+
     Returns:
         (falhas_email, falhas_ip, usuario_bloqueado)
     """
     with db_connect() as conn:
         cursor = conn.cursor()
-        
+
         # Buscar tentativas dos últimos 15 minutos
         tempo_limite = datetime.now() - timedelta(seconds=lockout_seconds)
-        
+
         cursor.execute('''
             SELECT COUNT(*) as total,
                    SUM(CASE WHEN sucesso IS NOT TRUE THEN 1 ELSE 0 END) as falhas
             FROM login_attempts
             WHERE email = %s AND tentativa_em > %s AND action = %s
         ''', (email, tempo_limite, action))
-        
+
         resultado = cursor.fetchone()
         falhas = resultado['falhas'] if resultado and resultado['falhas'] else 0
 
@@ -129,11 +134,12 @@ def obter_tentativas_recentes(
 
         resultado_ip = cursor.fetchone()
         falhas_ip = resultado_ip['falhas_ip'] if resultado_ip and resultado_ip['falhas_ip'] else 0
-        
+
         # Bloqueado se tiver mais que MAX_LOGIN_ATTEMPTS falhas
-        # Limite por IP mais permissivo para reduzir falso positivo em redes compartilhadas.
+        # Limite por IP mais permissivo para reduzir falso positivo em redes
+        # compartilhadas.
         bloqueado = falhas >= max_attempts or falhas_ip >= (max_attempts * 3)
-        
+
         return falhas, falhas_ip, bloqueado
 
 
@@ -159,12 +165,12 @@ def limpar_tentativas_antigas():
     with db_connect() as conn:
         cursor = conn.cursor()
         tempo_limite = datetime.now() - timedelta(hours=24)
-        
+
         cursor.execute('''
             DELETE FROM login_attempts
             WHERE tentativa_em < %s
         ''', (tempo_limite,))
-        
+
         conn.commit()
 
 
@@ -228,44 +234,50 @@ def _injetar_autocomplete_login() -> None:
 
 def login_view():
     """Interface de login com rate limiting e segurança"""
-    
+
     # Limpar tentativas antigas periodicamente
     if 'login_cleanup_done' not in st.session_state:
         limpar_tentativas_antigas()
         st.session_state['login_cleanup_done'] = True
-    
+
     # ========== LAYOUT ==========
     col1, col2, col3 = st.columns([1, 2, 1])
-    
+
     with col2:
         # Logo profissional BF1 centralizado
         logo_html = render_bf1_logo_html(width=150, alt="Logo BF1")
         if logo_html:
-            st.markdown(f"<div style='text-align: center;'>{logo_html}</div>", unsafe_allow_html=True)
-            st.markdown("<h2 style='text-align: center; margin-top: 10px;'>BF1 - Bolão de F1</h2>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='text-align: center;'>{logo_html}</div>",
+                unsafe_allow_html=True)
+            st.markdown(
+                "<h2 style='text-align: center; margin-top: 10px;'>BF1 - Bolão de F1</h2>",
+                unsafe_allow_html=True)
         else:
             st.markdown("# 🏁 BF1 - Bolão de F1")
-        
-        st.markdown("<h4 style='text-align: center; color: #666;'>Sistema de Apostas e Ranking</h4>", unsafe_allow_html=True)
+
+        st.markdown(
+            "<h4 style='text-align: center; color: #666;'>Sistema de Apostas e Ranking</h4>",
+            unsafe_allow_html=True)
         st.markdown("---")
-        
+
         # ========== FORMULÁRIO ==========
         with st.form("login_form", clear_on_submit=False):
             st.subheader("Faça Login")
-            
+
             email = st.text_input(
                 "📧 Email",
                 placeholder="seu@email.com",
                 help="Email registrado no sistema"
             )
-            
+
             senha = st.text_input(
                 "🔐 Senha",
                 type="password",
                 placeholder="Sua senha segura",
                 help="Mínimo 8 caracteres"
             )
-            
+
             submit_button = st.form_submit_button(
                 "🚀 Entrar",
                 width="stretch",
@@ -273,9 +285,10 @@ def login_view():
             )
 
         # fix(1Password): injeta autocomplete="email" / "current-password" via JS
-        # após o render do formulário — gerenciadores de senha reconhecem o form.
+        # após o render do formulário — gerenciadores de senha reconhecem o
+        # form.
         _injetar_autocomplete_login()
-        
+
         # ========== PROCESSAMENTO DO LOGIN ==========
         if submit_button:
             if not email or not senha:
@@ -290,7 +303,7 @@ def login_view():
                 st.error("❌ Email ou senha inválidos")
                 logger.warning("Tentativa de login com payload invalido")
                 return
-            
+
             # Verificar rate limiting
             client_ip = get_client_ip() or "LOCAL"
             falhas, falhas_ip, bloqueado = obter_tentativas_recentes(
@@ -300,7 +313,7 @@ def login_view():
                 LOCKOUT_DURATION,
                 "login",
             )
-            
+
             if bloqueado:
                 tempo_bloqueio = LOCKOUT_DURATION // 60  # Converter para minutos
                 st.error(
@@ -308,7 +321,8 @@ def login_view():
                     f"Muitas tentativas de login falhadas. "
                     f"Tente novamente em {tempo_bloqueio} minutos."
                 )
-                motivo = _classificar_motivo_bloqueio(falhas, falhas_ip, MAX_LOGIN_ATTEMPTS)
+                motivo = _classificar_motivo_bloqueio(
+                    falhas, falhas_ip, MAX_LOGIN_ATTEMPTS)
                 logger.warning(
                     "[SECURITY_AUDIT] login_blocked email=%s ip=%s motivo=%s falhas_email=%d falhas_ip=%d limite_email=%d limite_ip=%d",
                     email,
@@ -317,7 +331,8 @@ def login_view():
                     falhas,
                     falhas_ip,
                     MAX_LOGIN_ATTEMPTS,
-                    MAX_LOGIN_ATTEMPTS * 3,
+                    MAX_LOGIN_ATTEMPTS *
+                    3,
                 )
                 registrar_evento_acesso(
                     evento="login_bloqueado",
@@ -329,32 +344,37 @@ def login_view():
                         f"limite_email={MAX_LOGIN_ATTEMPTS};limite_ip={MAX_LOGIN_ATTEMPTS * 3}"
                     ),
                 )
-                registrar_tentativa_login(email, False, ip_address=client_ip, action="login")
+                registrar_tentativa_login(
+                    email, False, ip_address=client_ip, action="login")
                 return
-            
+
             # Buscar usuário
             usuario = get_user_by_email(email)
-            
+
             if not usuario:
                 st.error("❌ Email ou senha incorretos")
-                logger.warning("Tentativa de login com usuario inexistente: %s", redact_identifier(email))
+                logger.warning(
+                    "Tentativa de login com usuario inexistente: %s",
+                    redact_identifier(email))
                 registrar_evento_acesso(
                     evento="login_usuario_inexistente",
                     sucesso=False,
                     email=email,
                     ip_address=client_ip,
                 )
-                registrar_tentativa_login(email, False, ip_address=client_ip, action="login")
+                registrar_tentativa_login(
+                    email, False, ip_address=client_ip, action="login")
                 return
-            
+
             # Usuários inativos podem autenticar; o controle fino de páginas/abas
             # é aplicado no roteamento/menu.
-            
+
             # Verificar senha com bcrypt
-            # fix(crítico): coluna real é `senha_hash` — confirmado via dump de produção.
+            # fix(crítico): coluna real é `senha_hash` — confirmado via dump de
+            # produção.
             if not check_password(senha, usuario['senha_hash']):
                 tentativas_restantes = MAX_LOGIN_ATTEMPTS - falhas - 1
-                
+
                 if tentativas_restantes > 0:
                     st.warning(
                         f"⚠️  Email ou senha incorretos.\n"
@@ -362,11 +382,12 @@ def login_view():
                     )
                 else:
                     st.error(
-                        f"🔒 Muitas tentativas falhadas. "
-                        f"Conta bloqueada por {LOCKOUT_DURATION // 60} minutos."
-                    )
-                
-                logger.warning("Falha de autenticacao para: %s", redact_identifier(email))
+                        f"🔒 Muitas tentativas falhadas. " f"Conta bloqueada por {
+                            LOCKOUT_DURATION // 60} minutos.")
+
+                logger.warning(
+                    "Falha de autenticacao para: %s",
+                    redact_identifier(email))
                 registrar_evento_acesso(
                     evento="login_senha_incorreta",
                     sucesso=False,
@@ -376,9 +397,10 @@ def login_view():
                     perfil=usuario.get('perfil'),
                     ip_address=client_ip,
                 )
-                registrar_tentativa_login(email, False, ip_address=client_ip, action="login")
+                registrar_tentativa_login(
+                    email, False, ip_address=client_ip, action="login")
                 return
-            
+
             # ========== LOGIN SUCESSO ==========
             try:
                 token = create_token(
@@ -402,12 +424,19 @@ def login_view():
                 st.error("❌ Erro ao gerar token de autenticação.")
                 return
 
-            # Garante troca limpa de conta (evita herdar perfil/token anterior).
+            # Garante troca limpa de conta (evita herdar perfil/token
+            # anterior).
             try:
                 clear_auth_cookies()
             except Exception:
                 pass
-            for key in ("token", "user_id", "user_email", "user_nome", "user_role", "user_status"):
+            for key in (
+                "token",
+                "user_id",
+                "user_email",
+                "user_nome",
+                "user_role",
+                    "user_status"):
                 st.session_state.pop(key, None)
 
             # Armazenar no session_state
@@ -415,47 +444,71 @@ def login_view():
             st.session_state['user_id'] = usuario['id']
             st.session_state['user_email'] = usuario['email']
             st.session_state['user_nome'] = usuario['nome']
-            perfil_usuario = str(usuario.get('perfil', 'participante')).strip().lower()
-            status_usuario = str(usuario.get('status', 'Ativo')).strip().lower()
-            st.session_state['user_role'] = 'inativo' if (status_usuario != 'ativo' or perfil_usuario == 'inativo') else perfil_usuario
+            perfil_usuario = str(
+                usuario.get(
+                    'perfil',
+                    'participante')).strip().lower()
+            status_usuario = str(
+                usuario.get(
+                    'status',
+                    'Ativo')).strip().lower()
+            st.session_state['user_role'] = 'inativo' if (
+                status_usuario != 'ativo' or perfil_usuario == 'inativo') else perfil_usuario
             st.session_state['user_status'] = usuario.get('status', 'Ativo')
             st.session_state['pagina'] = "Painel do Participante"
-            st.session_state['force_password_change'] = bool(usuario.get('must_change_password', 0))
+            st.session_state['force_password_change'] = bool(
+                usuario.get('must_change_password', 0))
 
             try:
                 set_auth_cookies(token)
             except Exception as cookie_error:
                 # Não bloquear login por falha de persistência do cookie.
-                logger.warning("Falha ao persistir cookie de sessao no login: %s", cookie_error)
+                logger.warning(
+                    "Falha ao persistir cookie de sessao no login: %s",
+                    cookie_error)
 
             # Registrar sucesso
-            registrar_tentativa_login(email, True, ip_address=client_ip, action="login")
+            registrar_tentativa_login(
+                email, True, ip_address=client_ip, action="login")
             registrar_evento_acesso(
                 evento="login_sucesso",
                 sucesso=True,
                 user_id=usuario.get('id'),
-                email=usuario.get('email', email),
+                email=usuario.get(
+                    'email',
+                    email),
                 nome=usuario.get('nome'),
                 perfil=usuario.get('perfil'),
                 ip_address=client_ip,
-                detalhes="status=Inativo" if (status_usuario != 'ativo' or perfil_usuario == 'inativo') else None,
+                detalhes="status=Inativo" if (
+                    status_usuario != 'ativo' or perfil_usuario == 'inativo') else None,
             )
 
-            logger.info("Login bem-sucedido: %s perfil=%s status=%s", redact_identifier(email), usuario['perfil'], usuario.get('status', 'Ativo'))
+            logger.info(
+                "Login bem-sucedido: %s perfil=%s status=%s",
+                redact_identifier(email),
+                usuario['perfil'],
+                usuario.get(
+                    'status',
+                    'Ativo'))
 
             st.success(f"✅ Bem-vindo, {usuario['nome']}!")
             if status_usuario != 'ativo' or perfil_usuario == 'inativo':
-                st.info("Seu acesso está em modo inativo e foi limitado para consulta.")
+                st.info(
+                    "Seu acesso está em modo inativo e foi limitado para consulta.")
 
             # Rerun para carregar próxima página
             st.rerun()
 
         # ========== ESQUECI A SENHA ==========
         with st.expander("Esqueci a senha"):
-            st.write("Informe seu email para receber um token único de redefinição.")
+            st.write(
+                "Informe seu email para receber um token único de redefinição.")
             with st.form("forgot_password_form", clear_on_submit=True):
-                email_reset = st.text_input("📧 Email", placeholder="seu@email.com", key="reset_email")
-                reset_submit = st.form_submit_button("Enviar token de redefinição", width="stretch")
+                email_reset = st.text_input(
+                    "📧 Email", placeholder="seu@email.com", key="reset_email")
+                reset_submit = st.form_submit_button(
+                    "Enviar token de redefinição", width="stretch")
 
             if reset_submit:
                 if not email_reset:
@@ -467,12 +520,7 @@ def login_view():
                         return
                     reset_ip = get_client_ip() or "LOCAL"
                     falhas_email_reset, falhas_ip_reset, bloqueado = obter_tentativas_recentes(
-                        email_reset,
-                        reset_ip,
-                        MAX_RESET_ATTEMPTS,
-                        RESET_LOCKOUT_DURATION,
-                        "password_reset"
-                    )
+                        email_reset, reset_ip, MAX_RESET_ATTEMPTS, RESET_LOCKOUT_DURATION, "password_reset")
                     if bloqueado:
                         motivo_reset = _classificar_motivo_bloqueio(
                             falhas_email_reset,
@@ -487,16 +535,20 @@ def login_view():
                             falhas_email_reset,
                             falhas_ip_reset,
                             MAX_RESET_ATTEMPTS,
-                            MAX_RESET_ATTEMPTS * 3,
+                            MAX_RESET_ATTEMPTS *
+                            3,
                         )
-                        st.info("Se o email estiver cadastrado, você receberá um token de redefinição em instantes.")
-                        registrar_tentativa_login(email_reset, False, ip_address=reset_ip, action="password_reset")
+                        st.info(
+                            "Se o email estiver cadastrado, você receberá um token de redefinição em instantes.")
+                        registrar_tentativa_login(
+                            email_reset, False, ip_address=reset_ip, action="password_reset")
                     else:
                         ok, payload = redefinir_senha_usuario(email_reset)
                         if ok:
                             nome_usuario, reset_token, exp_minutes = payload
                             try:
-                                enviar_email_recuperacao_senha(email_reset, nome_usuario, reset_token, exp_minutes)
+                                enviar_email_recuperacao_senha(
+                                    email_reset, nome_usuario, reset_token, exp_minutes)
                             except Exception as e:
                                 logger.warning(
                                     "Falha ao enviar email de recuperacao para %s: %s",
@@ -504,16 +556,25 @@ def login_view():
                                     e,
                                 )
                         # Resposta genérica para evitar enumeração
-                        st.info("Se o email estiver cadastrado, você receberá um token de redefinição em instantes.")
-                        registrar_tentativa_login(email_reset, False, ip_address=reset_ip, action="password_reset")
+                        st.info(
+                            "Se o email estiver cadastrado, você receberá um token de redefinição em instantes.")
+                        registrar_tentativa_login(
+                            email_reset, False, ip_address=reset_ip, action="password_reset")
 
             with st.form("forgot_password_token_form", clear_on_submit=True):
                 st.caption("Já recebeu o token? Defina uma nova senha abaixo.")
-                email_token = st.text_input("📧 Email da conta", key="reset_email_token")
-                token_reset = st.text_input("🔐 Token de redefinição", key="reset_token_input")
-                nova_senha = st.text_input("🔒 Nova senha", type="password", key="reset_new_password")
-                confirma_senha = st.text_input("🔒 Confirmar nova senha", type="password", key="reset_confirm_password")
-                token_submit = st.form_submit_button("Redefinir senha com token", width="stretch")
+                email_token = st.text_input(
+                    "📧 Email da conta", key="reset_email_token")
+                token_reset = st.text_input(
+                    "🔐 Token de redefinição", key="reset_token_input")
+                nova_senha = st.text_input(
+                    "🔒 Nova senha", type="password", key="reset_new_password")
+                confirma_senha = st.text_input(
+                    "🔒 Confirmar nova senha",
+                    type="password",
+                    key="reset_confirm_password")
+                token_submit = st.form_submit_button(
+                    "Redefinir senha com token", width="stretch")
 
             if token_submit:
                 if not email_token or not token_reset or not nova_senha or not confirma_senha:
@@ -527,8 +588,10 @@ def login_view():
                     if not valido:
                         st.error("❌ Email inválido.")
                     else:
-                        ok, msg = redefinir_senha_com_token(email_token, token_reset, nova_senha)
+                        ok, msg = redefinir_senha_com_token(
+                            email_token, token_reset, nova_senha)
                         if ok:
-                            st.success("✅ Senha redefinida com sucesso. Faça login com a nova senha.")
+                            st.success(
+                                "✅ Senha redefinida com sucesso. Faça login com a nova senha.")
                         else:
                             st.error(f"❌ {msg}")

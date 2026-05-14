@@ -8,24 +8,23 @@ from db.db_utils import (
     get_horario_prova,
     db_connect,
     get_pilotos_df,
-    registrar_log_aposta,
-    log_aposta_existe,
-    get_apostas_df,
-    get_provas_df,
-    get_resultados_df
+    registrar_log_aposta
 )
 from services.email_service import enviar_email
+
 
 def salvar_aposta(
     usuario_id, prova_id, pilotos, fichas, piloto_11, nome_prova,
     automatica=0, horario_forcado=None
 ):
-    # Garante tipo correto para os argumentos IDs (resolve erro de usuário não encontrado)
+    # Garante tipo correto para os argumentos IDs (resolve erro de usuário não
+    # encontrado)
     try:
         usuario_id = int(usuario_id)
         prova_id = int(prova_id)
     except Exception as e:
-        st.error(f"IDs inválidos: usuario_id={usuario_id}, prova_id={prova_id} ({e})")
+        st.error(
+            f"IDs inválidos: usuario_id={usuario_id}, prova_id={prova_id} ({e})")
         return False
 
     nome_prova_bd, data_prova, horario_prova = get_horario_prova(prova_id)
@@ -33,8 +32,10 @@ def salvar_aposta(
         st.error("Prova não encontrada ou horário/nome/data não cadastrados.")
         return False
 
-    if not pilotos or not fichas or not piloto_11 or len(pilotos) < 3 or sum(fichas) != 15:
-        st.error("Dados insuficientes para gerar aposta automática. Revise cadastro de pilotos e equipes.")
+    if not pilotos or not fichas or not piloto_11 or len(
+            pilotos) < 3 or sum(fichas) != 15:
+        st.error(
+            "Dados insuficientes para gerar aposta automática. Revise cadastro de pilotos e equipes.")
         return False
 
     horario_limite = datetime.strptime(
@@ -42,20 +43,28 @@ def salvar_aposta(
     ).replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
     agora_sp = horario_forcado or datetime.now(ZoneInfo("America/Sao_Paulo"))
     tipo_aposta = 0 if agora_sp <= horario_limite else 1
-    dados_aposta = f"Pilotos: {', '.join(pilotos)} | Fichas: {', '.join(map(str, fichas))}"
+    dados_aposta = f"Pilotos: {
+        ', '.join(pilotos)} | Fichas: {
+        ', '.join(
+            map(
+                str,
+                fichas))}"
 
     usuario = get_user_by_id(usuario_id)
     if not usuario:
         st.error(f"Usuário não encontrado: id={usuario_id}")
         return False
 
-    #if tipo_aposta == 0:
+    # if tipo_aposta == 0:
     #    return True
     conn = None
     try:
         conn = db_connect()
         c = conn.cursor()
-        c.execute('DELETE FROM apostas WHERE usuario_id=? AND prova_id=?', (usuario_id, prova_id))
+        c.execute(
+            'DELETE FROM apostas WHERE usuario_id=? AND prova_id=?',
+            (usuario_id,
+             prova_id))
         if tipo_aposta == 0:
             data_envio = agora_sp.isoformat()
             c.execute(
@@ -84,7 +93,10 @@ def salvar_aposta(
             <p>Boa sorte!</p>
             """
 
-            enviar_email(usuario[2], f"Aposta registrada - {nome_prova_bd}", corpo_email)
+            enviar_email(
+                usuario[2],
+                f"Aposta registrada - {nome_prova_bd}",
+                corpo_email)
 
     except Exception as e:
         st.error(f"Erro ao salvar aposta: {str(e)}")
@@ -107,21 +119,28 @@ def salvar_aposta(
     if automatica:
         conn = db_connect()
         c = conn.cursor()
-        c.execute('UPDATE usuarios SET faltas = faltas + 1 WHERE id=?', (usuario_id,))
+        c.execute(
+            'UPDATE usuarios SET faltas = faltas + 1 WHERE id=?', (usuario_id,))
         conn.commit()
         conn.close()
     return True
 
+
 def gerar_aposta_aleatoria(pilotos_df):
     import random
     equipes_unicas = [e for e in pilotos_df['equipe'].unique().tolist() if e]
-    if len(equipes_unicas) < 3 or pilotos_df.empty or len(pilotos_df['nome'].unique()) < 3:
-        st.error(f"Base inválida. Equipes únicas: {equipes_unicas}, Pilotos únicos: {len(pilotos_df['nome'].unique())}")
+    if len(equipes_unicas) < 3 or pilotos_df.empty or len(
+            pilotos_df['nome'].unique()) < 3:
+        st.error(
+            f"Base inválida. Equipes únicas: {equipes_unicas}, Pilotos únicos: {
+                len(
+                    pilotos_df['nome'].unique())}")
         return [], [], None
     equipes_selecionadas = random.sample(equipes_unicas, 3)
     pilotos_sel = []
     for equipe in equipes_selecionadas:
-        pilotos_equipe = pilotos_df[pilotos_df['equipe'] == equipe]['nome'].tolist()
+        pilotos_equipe = pilotos_df[pilotos_df['equipe']
+                                    == equipe]['nome'].tolist()
         if pilotos_equipe:
             piloto_escolhido = random.choice(pilotos_equipe)
             if piloto_escolhido not in pilotos_sel:
@@ -141,10 +160,17 @@ def gerar_aposta_aleatoria(pilotos_df):
         total_fichas -= add
     todos_pilotos = pilotos_df['nome'].tolist()
     candidatos_11 = [p for p in todos_pilotos if p not in pilotos_sel]
-    piloto_11 = random.choice(candidatos_11) if candidatos_11 else random.choice(todos_pilotos)
+    piloto_11 = random.choice(
+        candidatos_11) if candidatos_11 else random.choice(todos_pilotos)
     return pilotos_sel, fichas, piloto_11
 
-def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas_df):
+
+def gerar_aposta_automatica(
+        usuario_id,
+        prova_id,
+        nome_prova,
+        apostas_df,
+        provas_df):
     try:
         usuario_id = int(usuario_id)
         prova_id = int(prova_id)
@@ -155,7 +181,10 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
         return False, "Prova não encontrada."
     data_prova = prova_atual['data'].iloc[0]
     horario_prova = prova_atual['horario_prova'].iloc[0]
-    horario_limite = datetime.strptime(f"{data_prova} {horario_prova}", '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+    horario_limite = datetime.strptime(
+        f"{data_prova} {horario_prova}",
+        '%Y-%m-%d %H:%M:%S').replace(
+        tzinfo=ZoneInfo("America/Sao_Paulo"))
     pilotos_df = get_pilotos_df()
     aposta_existente = apostas_df[
         (apostas_df["usuario_id"] == usuario_id) &
@@ -178,20 +207,29 @@ def gerar_aposta_automatica(usuario_id, prova_id, nome_prova, apostas_df, provas
             fichas_ant = list(map(int, ap_ant['fichas'].split(",")))
             piloto_11_ant = ap_ant['piloto_11']
     if not pilotos_ant or not fichas_ant or not piloto_11_ant:
-        pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(pilotos_df)
+        pilotos_ant, fichas_ant, piloto_11_ant = gerar_aposta_aleatoria(
+            pilotos_df)
     if not pilotos_ant or not fichas_ant or not piloto_11_ant:
         return False, "Não há dados válidos para gerar aposta automática."
     conn = db_connect()
     c = conn.cursor()
-    c.execute('SELECT MAX(automatica) FROM apostas WHERE usuario_id=?', (usuario_id,))
+    c.execute(
+        'SELECT MAX(automatica) FROM apostas WHERE usuario_id=?', (usuario_id,))
     max_automatica = c.fetchone()[0]
     conn.close()
     nova_automatica = 1 if max_automatica is None else max_automatica + 1
     sucesso = salvar_aposta(
-        usuario_id, prova_id, pilotos_ant, fichas_ant,
-        piloto_11_ant, nome_prova, automatica=nova_automatica, horario_forcado=horario_limite
-    )
-    return (True, "Aposta automática gerada com sucesso!") if sucesso else (False, "Falha ao salvar aposta automática.")
+        usuario_id,
+        prova_id,
+        pilotos_ant,
+        fichas_ant,
+        piloto_11_ant,
+        nome_prova,
+        automatica=nova_automatica,
+        horario_forcado=horario_limite)
+    return (True, "Aposta automática gerada com sucesso!") if sucesso else (
+        False, "Falha ao salvar aposta automática.")
+
 
 def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     import ast
@@ -201,7 +239,11 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
     resultados = {}
     for _, row in resultados_df.iterrows():
         resultados[row['prova_id']] = ast.literal_eval(row['posicoes'])
-    tipos_prova = dict(zip(provas_df['id'], provas_df['tipo'] if 'tipo' in provas_df.columns else ['Normal']*len(provas_df)))
+    tipos_prova = dict(
+        zip(
+            provas_df['id'],
+            provas_df['tipo'] if 'tipo' in provas_df.columns else ['Normal'] *
+            len(provas_df)))
     pontos = []
     for _, aposta in apostas_df.iterrows():
         prova_id = aposta['prova_id']
@@ -236,6 +278,7 @@ def calcular_pontuacao_lote(apostas_df, resultados_df, provas_df):
         pontos.append(pt)
     return pontos
 
+
 def salvar_classificacao_prova(prova_id, df_classificacao):
     conn = db_connect()
     cursor = conn.cursor()
@@ -245,16 +288,18 @@ def salvar_classificacao_prova(prova_id, df_classificacao):
         pontos_val = float(row['pontos'])
         data_registro = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
         cursor.execute('''
-            INSERT OR REPLACE INTO posicoes_participantes 
+            INSERT OR REPLACE INTO posicoes_participantes
             (prova_id, usuario_id, posicao, pontos, data_registro)
             VALUES (?, ?, ?, ?, ?)
         ''', (prova_id, usuario_id, posicao, pontos_val, data_registro))
     conn.commit()
     conn.close()
 
+
 def atualizar_classificacoes_todas_as_provas():
     conn = db_connect()
-    usuarios_df = pd.read_sql('SELECT * FROM usuarios WHERE status = "Ativo"', conn)
+    usuarios_df = pd.read_sql(
+        'SELECT * FROM usuarios WHERE status = "Ativo"', conn)
     provas_df = pd.read_sql('SELECT * FROM provas', conn)
     apostas_df = pd.read_sql('SELECT * FROM apostas', conn)
     resultados_df = pd.read_sql('SELECT * FROM resultados', conn)
@@ -268,13 +313,15 @@ def atualizar_classificacoes_todas_as_provas():
             continue
         tabela = []
         for _, usuario in usuarios_df.iterrows():
-            aposta = apostas_prova[apostas_prova['usuario_id'] == usuario['id']]
+            aposta = apostas_prova[apostas_prova['usuario_id']
+                                   == usuario['id']]
             if aposta.empty:
                 pontos = 0
                 data_envio = None
                 acerto_11 = 0
             else:
-                pontos = calcular_pontuacao_lote(aposta, resultados_df, provas_df)
+                pontos = calcular_pontuacao_lote(
+                    aposta, resultados_df, provas_df)
                 pontos = pontos[0] if pontos and pontos[0] is not None else 0
                 data_envio = aposta.iloc[0]['data_envio'] if 'data_envio' in aposta.columns else None
                 acerto_11 = 0
@@ -282,7 +329,8 @@ def atualizar_classificacoes_todas_as_provas():
                     resultado = resultados_df[resultados_df['prova_id'] == prova_id]
                     if not resultado.empty:
                         import ast
-                        posicoes = ast.literal_eval(resultado.iloc[0]['posicoes'])
+                        posicoes = ast.literal_eval(
+                            resultado.iloc[0]['posicoes'])
                         piloto_11_real = posicoes.get(11, "")
                         piloto_11_apostado = aposta.iloc[0]['piloto_11']
                         if piloto_11_apostado == piloto_11_real:
@@ -294,7 +342,8 @@ def atualizar_classificacoes_todas_as_provas():
                 'acerto_11': acerto_11
             })
         df_classificacao = pd.DataFrame(tabela)
-        df_classificacao['data_envio'] = pd.to_datetime(df_classificacao['data_envio'], errors='coerce')
+        df_classificacao['data_envio'] = pd.to_datetime(
+            df_classificacao['data_envio'], errors='coerce')
         df_classificacao = df_classificacao.sort_values(
             by=['pontos', 'acerto_11', 'data_envio'],
             ascending=[False, False, True]

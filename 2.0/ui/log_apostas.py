@@ -5,11 +5,13 @@ import extra_streamlit_components as stx
 import jwt
 import os
 
+
 def carregar_logs():
     conn = db_connect()
     df = pd.read_sql('SELECT * FROM log_apostas ORDER BY id DESC', conn)
     conn.close()
     return df
+
 
 def get_nome_from_cookie():
     cookie_manager = stx.CookieManager()
@@ -18,12 +20,14 @@ def get_nome_from_cookie():
     nome_do_cookie = None
     if token:
         try:
-            JWT_SECRET = st.secrets["JWT_SECRET"] or os.environ.get("JWT_SECRET")
+            JWT_SECRET = st.secrets["JWT_SECRET"] or os.environ.get(
+                "JWT_SECRET")
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             nome_do_cookie = payload.get("nome")
         except Exception:
             pass
     return nome_do_cookie
+
 
 def main():
     st.title("📜 Log de Apostas")
@@ -35,7 +39,8 @@ def main():
     if perfil not in ("admin", "master"):
         nome_usuario = get_nome_from_cookie()
     else:
-        nome_usuario = st.session_state.get("user_name")  # ou pode não usar, depende dos filtros
+        # ou pode não usar, depende dos filtros
+        nome_usuario = st.session_state.get("user_name")
 
     df = carregar_logs()
     if df.empty:
@@ -53,7 +58,8 @@ def main():
 
     if "apostador" in colunas_filtro:
         apostador_opcoes = ["Todos"] + sorted(df["apostador"].unique())
-        apostador_sel = cols[idx_filtro].selectbox("Apostador", apostador_opcoes)
+        apostador_sel = cols[idx_filtro].selectbox(
+            "Apostador", apostador_opcoes)
         idx_filtro += 1
     else:
         apostador_sel = nome_usuario
@@ -66,7 +72,8 @@ def main():
         "Data", ["Todas"] + sorted(df["data"].unique(), reverse=True)
     )
 
-    mostrar_automaticas = st.checkbox("Mostrar apenas apostas automáticas (automatica > 0)", value=False)
+    mostrar_automaticas = st.checkbox(
+        "Mostrar apenas apostas automáticas (automatica > 0)", value=False)
 
     filtro = df.copy()
     # st.write("nome_usuario do cookie:", nome_usuario)
@@ -96,11 +103,18 @@ def main():
 
     filtro_show = filtro.copy()
     filtro_show["Tipo de Aposta"] = filtro["tipo_aposta"].map(tipos_map)
-    filtro_show["Automática"] = filtro["automatica"].apply(lambda x: "Sim" if x > 0 else "Não")
+    filtro_show["Automática"] = filtro["automatica"].apply(
+        lambda x: "Sim" if x > 0 else "Não")
 
     colunas_exibir = [
-        "data", "horario", "apostador", "nome_prova", "aposta", "piloto_11", "Tipo de Aposta", "Automática"
-    ]
+        "data",
+        "horario",
+        "apostador",
+        "nome_prova",
+        "aposta",
+        "piloto_11",
+        "Tipo de Aposta",
+        "Automática"]
     if "automatica" in filtro_show.columns and "tipo_aposta" in filtro_show.columns:
         st.dataframe(
             filtro_show[colunas_exibir].rename(columns={
@@ -116,7 +130,9 @@ def main():
     else:
         st.dataframe(filtro_show, use_container_width=True)
 
-    st.caption("*O campo 'Automática' indica apostas geradas automaticamente pelo sistema (qualquer valor > 0 no campo).*")
+    st.caption(
+        "*O campo 'Automática' indica apostas geradas automaticamente pelo sistema (qualquer valor > 0 no campo).*")
+
 
 if __name__ == "__main__":
     main()

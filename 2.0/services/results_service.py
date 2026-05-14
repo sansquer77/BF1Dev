@@ -1,6 +1,6 @@
 import pandas as pd
-from datetime import datetime
 from db.db_utils import db_connect, get_provas_df, get_resultados_df
+
 
 def salvar_resultado_prova(prova_id: int, posicoes: dict) -> bool:
     """
@@ -22,9 +22,11 @@ def salvar_resultado_prova(prova_id: int, posicoes: dict) -> bool:
     finally:
         conn.close()
 
+
 def obter_resultados():
     """Retorna todos os resultados de todas as provas como DataFrame pandas."""
     return get_resultados_df()
+
 
 def obter_resultado_prova(prova_id: int):
     """Retorna o resultado de uma prova específica (dict) ou None."""
@@ -39,6 +41,7 @@ def obter_resultado_prova(prova_id: int):
         except Exception:
             return None
     return None
+
 
 def listar_resultados_completos():
     """
@@ -61,6 +64,7 @@ def listar_resultados_completos():
             linha[f"{pos}º"] = posicoes.get(pos, "")
         lista.append(linha)
     return pd.DataFrame(lista)
+
 
 def validar_resultado(posicoes: dict, pilotos_ativos=None) -> tuple:
     """

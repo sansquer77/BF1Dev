@@ -2,13 +2,13 @@
 Utilitários para Gestão de Regras de Temporada
 """
 
-import sqlite3
 import logging
 import json
 from typing import Optional, Dict, List
 from db.connection_pool import get_pool
 
 logger = logging.getLogger(__name__)
+
 
 def init_rules_table():
     """Cria a tabela de regras se não existir"""
@@ -18,31 +18,31 @@ def init_rules_table():
             CREATE TABLE IF NOT EXISTS regras (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nome_regra TEXT NOT NULL UNIQUE,
-                
+
                 -- Parâmetros de Apostas (12, 13, 14, 15)
                 quantidade_fichas INTEGER NOT NULL DEFAULT 15,
                 fichas_por_piloto INTEGER NOT NULL DEFAULT 15,
                 mesma_equipe INTEGER NOT NULL DEFAULT 0,
                 descarte INTEGER NOT NULL DEFAULT 0,
-                
+
                 -- Pontuações Fixas (2, 3, 4)
                 pontos_pole INTEGER NOT NULL DEFAULT 0,
                 pontos_vr INTEGER NOT NULL DEFAULT 0,
                 pontos_posicoes TEXT DEFAULT '[25, 18, 15, 12, 10, 8, 6, 4, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]',
                 pontos_11_colocado INTEGER NOT NULL DEFAULT 25,
-                
+
                 -- Regras Sprint (5, 6, 7)
                 regra_sprint INTEGER NOT NULL DEFAULT 0,
                 pontos_sprint_pole INTEGER NOT NULL DEFAULT 0,
                 pontos_sprint_vr INTEGER NOT NULL DEFAULT 0,
                 pontos_sprint_posicoes TEXT DEFAULT '[8, 7, 6, 5, 4, 3, 2, 1]',
-                
+
                 -- Bônus e Extras (8, 9, 10, 11)
                 pontos_dobrada INTEGER NOT NULL DEFAULT 0, -- Corrida Final
                 bonus_vencedor INTEGER NOT NULL DEFAULT 0,
                 bonus_podio_completo INTEGER NOT NULL DEFAULT 0,
                 bonus_podio_qualquer INTEGER NOT NULL DEFAULT 0,
-                
+
                 -- Outros (Legado/Suporte)
                 qtd_minima_pilotos INTEGER NOT NULL DEFAULT 3,
                 penalidade_abandono INTEGER NOT NULL DEFAULT 0,
@@ -51,12 +51,12 @@ def init_rules_table():
                 pontos_campeao INTEGER NOT NULL DEFAULT 150,
                 pontos_vice INTEGER NOT NULL DEFAULT 100,
                 pontos_equipe INTEGER NOT NULL DEFAULT 80,
-                
+
                 criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         c.execute('''
             CREATE TABLE IF NOT EXISTS temporadas_regras (
                 temporada TEXT PRIMARY KEY,
@@ -64,9 +64,10 @@ def init_rules_table():
                 FOREIGN KEY(regra_id) REFERENCES regras(id)
             )
         ''')
-        
+
         conn.commit()
         logger.info("✓ Tabelas de regras inicializadas")
+
 
 def criar_regra(
     nome_regra: str,
@@ -96,14 +97,16 @@ def criar_regra(
 ) -> bool:
     """Cria uma nova regra"""
     if pontos_posicoes is None:
-        pontos_posicoes = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        pontos_posicoes = [25, 18, 15, 12, 10, 8, 6,
+                           4, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     if pontos_sprint_posicoes is None:
         pontos_sprint_posicoes = [8, 7, 6, 5, 4, 3, 2, 1]
-        
+
     try:
         with get_pool().get_connection() as conn:
             c = conn.cursor()
-            c.execute('''
+            c.execute(
+                '''
                 INSERT INTO regras (
                     nome_regra, quantidade_fichas, fichas_por_piloto, mesma_equipe,
                     descarte, pontos_pole, pontos_vr, pontos_posicoes, pontos_11_colocado,
@@ -112,19 +115,37 @@ def criar_regra(
                     qtd_minima_pilotos, penalidade_abandono, pontos_penalidade, penalidade_auto_percent,
                     pontos_campeao, pontos_vice, pontos_equipe
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                nome_regra, quantidade_fichas, fichas_por_piloto, int(mesma_equipe),
-                int(descarte), pontos_pole, pontos_vr, json.dumps(pontos_posicoes), pontos_11_colocado,
-                int(regra_sprint), pontos_sprint_pole, pontos_sprint_vr, json.dumps(pontos_sprint_posicoes),
-                int(pontos_dobrada), bonus_vencedor, bonus_podio_completo, bonus_podio_qualquer,
-                qtd_minima_pilotos, int(penalidade_abandono), pontos_penalidade, penalidade_auto_percent,
-                pontos_campeao, pontos_vice, pontos_equipe
-            ))
+            ''',
+                (nome_regra,
+                 quantidade_fichas,
+                 fichas_por_piloto,
+                 int(mesma_equipe),
+                    int(descarte),
+                    pontos_pole,
+                    pontos_vr,
+                    json.dumps(pontos_posicoes),
+                    pontos_11_colocado,
+                    int(regra_sprint),
+                    pontos_sprint_pole,
+                    pontos_sprint_vr,
+                    json.dumps(pontos_sprint_posicoes),
+                    int(pontos_dobrada),
+                    bonus_vencedor,
+                    bonus_podio_completo,
+                    bonus_podio_qualquer,
+                    qtd_minima_pilotos,
+                    int(penalidade_abandono),
+                    pontos_penalidade,
+                    penalidade_auto_percent,
+                    pontos_campeao,
+                    pontos_vice,
+                    pontos_equipe))
             conn.commit()
             return True
     except Exception as e:
         logger.error(f"Erro ao criar regra: {e}")
         return False
+
 
 def atualizar_regra(
     regra_id: int,
@@ -157,7 +178,8 @@ def atualizar_regra(
     try:
         with get_pool().get_connection() as conn:
             c = conn.cursor()
-            c.execute('''
+            c.execute(
+                '''
                 UPDATE regras SET
                     nome_regra = ?, quantidade_fichas = ?, fichas_por_piloto = ?, mesma_equipe = ?,
                     descarte = ?, pontos_pole = ?, pontos_vr = ?, pontos_posicoes = ?, pontos_11_colocado = ?,
@@ -167,26 +189,46 @@ def atualizar_regra(
                     pontos_campeao = ?, pontos_vice = ?, pontos_equipe = ?,
                     atualizado_em = CURRENT_TIMESTAMP
                 WHERE id = ?
-            ''', (
-                nome_regra, quantidade_fichas, fichas_por_piloto, int(mesma_equipe),
-                int(descarte), pontos_pole, pontos_vr, json.dumps(pontos_posicoes), pontos_11_colocado,
-                int(regra_sprint), pontos_sprint_pole, pontos_sprint_vr, json.dumps(pontos_sprint_posicoes),
-                int(pontos_dobrada), bonus_vencedor, bonus_podio_completo, bonus_podio_qualquer,
-                qtd_minima_pilotos, int(penalidade_abandono), pontos_penalidade, penalidade_auto_percent,
-                pontos_campeao, pontos_vice, pontos_equipe, regra_id
-            ))
+            ''',
+                (nome_regra,
+                 quantidade_fichas,
+                 fichas_por_piloto,
+                 int(mesma_equipe),
+                    int(descarte),
+                    pontos_pole,
+                    pontos_vr,
+                    json.dumps(pontos_posicoes),
+                    pontos_11_colocado,
+                    int(regra_sprint),
+                    pontos_sprint_pole,
+                    pontos_sprint_vr,
+                    json.dumps(pontos_sprint_posicoes),
+                    int(pontos_dobrada),
+                    bonus_vencedor,
+                    bonus_podio_completo,
+                    bonus_podio_qualquer,
+                    qtd_minima_pilotos,
+                    int(penalidade_abandono),
+                    pontos_penalidade,
+                    penalidade_auto_percent,
+                    pontos_campeao,
+                    pontos_vice,
+                    pontos_equipe,
+                    regra_id))
             conn.commit()
             return True
     except Exception as e:
         logger.error(f"Erro ao atualizar regra: {e}")
         return False
 
+
 def excluir_regra(regra_id: int) -> bool:
     """Exclui uma regra (apenas se não estiver em uso)"""
     try:
         with get_pool().get_connection() as conn:
             c = conn.cursor()
-            c.execute('SELECT COUNT(*) FROM temporadas_regras WHERE regra_id = ?', (regra_id,))
+            c.execute(
+                'SELECT COUNT(*) FROM temporadas_regras WHERE regra_id = ?', (regra_id,))
             if c.fetchone()[0] > 0:
                 return False
             c.execute('DELETE FROM regras WHERE id = ?', (regra_id,))
@@ -196,6 +238,7 @@ def excluir_regra(regra_id: int) -> bool:
         logger.error(f"Erro ao excluir regra: {e}")
         return False
 
+
 def get_regra_by_id(regra_id: int) -> Optional[Dict]:
     """Retorna uma regra pelo ID"""
     with get_pool().get_connection() as conn:
@@ -204,10 +247,13 @@ def get_regra_by_id(regra_id: int) -> Optional[Dict]:
         row = c.fetchone()
         if row:
             d = dict(row)
-            d['pontos_posicoes'] = json.loads(d['pontos_posicoes']) if d.get('pontos_posicoes') else []
-            d['pontos_sprint_posicoes'] = json.loads(d['pontos_sprint_posicoes']) if d.get('pontos_sprint_posicoes') else []
+            d['pontos_posicoes'] = json.loads(
+                d['pontos_posicoes']) if d.get('pontos_posicoes') else []
+            d['pontos_sprint_posicoes'] = json.loads(
+                d['pontos_sprint_posicoes']) if d.get('pontos_sprint_posicoes') else []
             return d
         return None
+
 
 def get_regra_by_nome(nome_regra: str) -> Optional[Dict]:
     """Retorna uma regra pelo nome"""
@@ -217,18 +263,23 @@ def get_regra_by_nome(nome_regra: str) -> Optional[Dict]:
         row = c.fetchone()
         if row:
             d = dict(row)
-            d['pontos_posicoes'] = json.loads(d['pontos_posicoes']) if d.get('pontos_posicoes') else []
-            d['pontos_sprint_posicoes'] = json.loads(d['pontos_sprint_posicoes']) if d.get('pontos_sprint_posicoes') else []
+            d['pontos_posicoes'] = json.loads(
+                d['pontos_posicoes']) if d.get('pontos_posicoes') else []
+            d['pontos_sprint_posicoes'] = json.loads(
+                d['pontos_sprint_posicoes']) if d.get('pontos_sprint_posicoes') else []
             return d
         return None
+
 
 def listar_temporadas_por_regra(regra_id: int) -> List[str]:
     """Retorna lista de temporadas associadas a uma regra específica."""
     with get_pool().get_connection() as conn:
         c = conn.cursor()
-        c.execute('SELECT temporada FROM temporadas_regras WHERE regra_id = ?', (regra_id,))
+        c.execute(
+            'SELECT temporada FROM temporadas_regras WHERE regra_id = ?', (regra_id,))
         rows = c.fetchall()
         return [str(r[0]) for r in rows] if rows else []
+
 
 def clonar_regra(regra_id: int, novo_nome: str) -> Optional[int]:
     """Clona uma regra existente com um novo nome. Retorna o novo ID ou None."""
@@ -263,6 +314,7 @@ def clonar_regra(regra_id: int, novo_nome: str) -> Optional[int]:
         logger.error(f"Erro ao clonar regra: {e}")
         return None
 
+
 def listar_regras():
     """Lista todas as regras cadastradas"""
     with get_pool().get_connection() as conn:
@@ -272,22 +324,29 @@ def listar_regras():
         regras = []
         for row in rows:
             d = dict(row)
-            d['pontos_posicoes'] = json.loads(d['pontos_posicoes']) if d.get('pontos_posicoes') else []
-            d['pontos_sprint_posicoes'] = json.loads(d['pontos_sprint_posicoes']) if d.get('pontos_sprint_posicoes') else []
+            d['pontos_posicoes'] = json.loads(
+                d['pontos_posicoes']) if d.get('pontos_posicoes') else []
+            d['pontos_sprint_posicoes'] = json.loads(
+                d['pontos_sprint_posicoes']) if d.get('pontos_sprint_posicoes') else []
             regras.append(d)
         return regras
+
 
 def associar_regra_temporada(temporada: str, regra_id: int) -> bool:
     """Associa uma regra a uma temporada"""
     try:
         with get_pool().get_connection() as conn:
             c = conn.cursor()
-            c.execute('INSERT OR REPLACE INTO temporadas_regras (temporada, regra_id) VALUES (?, ?)', (temporada, regra_id))
+            c.execute(
+                'INSERT OR REPLACE INTO temporadas_regras (temporada, regra_id) VALUES (?, ?)',
+                (temporada,
+                 regra_id))
             conn.commit()
             return True
     except Exception as e:
         logger.error(f"Erro ao associar regra: {e}")
         return False
+
 
 def get_regra_temporada(temporada: str) -> Optional[Dict]:
     """Retorna a regra associada a uma temporada"""
@@ -301,10 +360,13 @@ def get_regra_temporada(temporada: str) -> Optional[Dict]:
         row = c.fetchone()
         if row:
             d = dict(row)
-            d['pontos_posicoes'] = json.loads(d['pontos_posicoes']) if d.get('pontos_posicoes') else []
-            d['pontos_sprint_posicoes'] = json.loads(d['pontos_sprint_posicoes']) if d.get('pontos_sprint_posicoes') else []
+            d['pontos_posicoes'] = json.loads(
+                d['pontos_posicoes']) if d.get('pontos_posicoes') else []
+            d['pontos_sprint_posicoes'] = json.loads(
+                d['pontos_sprint_posicoes']) if d.get('pontos_sprint_posicoes') else []
             return d
         return None
+
 
 def criar_regra_padrao():
     """Cria regra padrão caso não exista"""
@@ -315,10 +377,37 @@ def criar_regra_padrao():
             fichas_por_piloto=15,
             mesma_equipe=False,
             descarte=False,
-            pontos_posicoes=[25, 18, 15, 12, 10, 8, 6, 4, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            pontos_sprint_posicoes=[8, 7, 6, 5, 4, 3, 2, 1],
+            pontos_posicoes=[
+                25,
+                18,
+                15,
+                12,
+                10,
+                8,
+                6,
+                4,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0],
+            pontos_sprint_posicoes=[
+                8,
+                7,
+                6,
+                5,
+                4,
+                3,
+                2,
+                1],
             pontos_11_colocado=25,
             pontos_campeao=150,
             pontos_vice=100,
-            pontos_equipe=80
-        )
+            pontos_equipe=80)

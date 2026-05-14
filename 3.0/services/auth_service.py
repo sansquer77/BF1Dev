@@ -1,3 +1,5 @@
+import string
+import secrets
 import jwt
 from datetime import datetime, timedelta, timezone
 import streamlit as st
@@ -6,13 +8,23 @@ import os
 import logging
 
 # Funções de hash/check de senha - importadas de db_utils para evitar duplicação
-# Re-exportadas aqui para manter compatibilidade com módulos que importam de auth_service
+# Re-exportadas aqui para manter compatibilidade com módulos que importam
+# de auth_service
 from db.db_utils import db_connect, hash_password, check_password
 
 # Exportar explicitamente para manter compatibilidade
-__all__ = ['hash_password', 'check_password', 'autenticar_usuario', 'generate_token', 
-           'decode_token', 'create_token', 'cadastrar_usuario', 'get_user_by_email',
-           'get_user_by_id', 'set_auth_cookies', 'clear_auth_cookies']
+__all__ = [
+    'hash_password',
+    'check_password',
+    'autenticar_usuario',
+    'generate_token',
+    'decode_token',
+    'create_token',
+    'cadastrar_usuario',
+    'get_user_by_email',
+    'get_user_by_id',
+    'set_auth_cookies',
+    'clear_auth_cookies']
 
 logger = logging.getLogger(__name__)
 
@@ -20,59 +32,69 @@ logger = logging.getLogger(__name__)
 # JWT_SECRET DEVE ser configurado via st.secrets ou variável de ambiente
 # Em produção, NUNCA usar fallback hardcoded
 
+
 def _get_jwt_secret() -> str:
     """Obtém JWT_SECRET de forma segura. Lança erro se não configurado em produção."""
     secret = None
-    
+
     # Tentar obter de st.secrets primeiro
     try:
         secret = st.secrets.get("JWT_SECRET")
     except (FileNotFoundError, KeyError, AttributeError):
         pass
-    
+
     # Fallback para variável de ambiente
     if not secret:
         secret = os.environ.get("JWT_SECRET")
-    
-    # Verificar se está em ambiente de produção (Digital Ocean / Streamlit Cloud)
+
+    # Verificar se está em ambiente de produção (Digital Ocean / Streamlit
+    # Cloud)
     is_production = (
-        os.environ.get("STREAMLIT_SHARING") or 
+        os.environ.get("STREAMLIT_SHARING") or
         os.environ.get("DIGITALOCEAN_APP_PLATFORM") or
         os.environ.get("PRODUCTION") == "true"
     )
-    
+
     if not secret:
         if is_production:
-            logger.critical("JWT_SECRET não configurado em ambiente de produção!")
+            logger.critical(
+                "JWT_SECRET não configurado em ambiente de produção!")
             raise RuntimeError(
                 "ERRO CRÍTICO DE SEGURANÇA: JWT_SECRET não está configurado. "
-                "Configure a variável de ambiente JWT_SECRET ou adicione em st.secrets."
-            )
-        
+                "Configure a variável de ambiente JWT_SECRET ou adicione em st.secrets.")
+
         # 🔴 ERRO CRÍTICO - JWT_SECRET SEMPRE OBRIGATÓRIO
-        logger.critical("🔴 JWT_SECRET não configurado - SEGURANÇA COMPROMETIDA!")
+        logger.critical(
+            "🔴 JWT_SECRET não configurado - SEGURANÇA COMPROMETIDA!")
         raise RuntimeError(
             "ERRO CRÍTICO DE SEGURANÇA: JWT_SECRET não está configurado.\n"
             "Este é um valor obrigatório que deve ser definido ANTES do deployment.\n"
-            "Configure em: Digital Ocean > App Settings > Environment Variables > JWT_SECRET"
-        )
+            "Configure em: Digital Ocean > App Settings > Environment Variables > JWT_SECRET")
     return secret
+
 
 JWT_SECRET = _get_jwt_secret()
 JWT_EXP_MINUTES = 120
 
 # --- AUTENTICAÇÃO ---
+
+
 def autenticar_usuario(email: str, senha: str):
     """Retorna o usuário autenticado (tupla de dados) ou None."""
     with db_connect() as conn:
         c = conn.cursor()
-        c.execute("SELECT id, nome, email, senha_hash, perfil, status FROM usuarios WHERE email=?", (email,))
+        c.execute(
+            "SELECT id, nome, email, senha_hash, perfil, status FROM usuarios WHERE email=?",
+            (email,
+             ))
         user = c.fetchone()
     if user and check_password(senha, user[3]):
         return user
     return None
 
 # --- GERAÇÃO E DECODIFICAÇÃO DE TOKEN JWT ---
+
+
 def generate_token(user_id: int, nome: str, perfil: str, status: str) -> str:
     """Gera um JWT para o usuário autenticado, incluindo o nome."""
     payload = {
@@ -87,6 +109,7 @@ def generate_token(user_id: int, nome: str, perfil: str, status: str) -> str:
         token = token.decode("utf-8")
     return token
 
+
 def decode_token(token: str):
     """Decodifica e valida um JWT; retorna o payload, ou None se inválido/expirado."""
     try:
@@ -98,7 +121,14 @@ def decode_token(token: str):
         return None
 
 # --- REGISTRO DE USUÁRIO ---
-def cadastrar_usuario(nome: str, email: str, senha: str, perfil="participante", status="Ativo") -> bool:
+
+
+def cadastrar_usuario(
+        nome: str,
+        email: str,
+        senha: str,
+        perfil="participante",
+        status="Ativo") -> bool:
     """Cria novo usuário, garantindo unicidade de email."""
     try:
         senha_hash = hash_password(senha)
@@ -125,6 +155,8 @@ def cadastrar_usuario(nome: str, email: str, senha: str, perfil="participante", 
         return False
 
 # --- BUSCA DE USUÁRIOS ---
+
+
 def get_user_by_email(email: str):
     with db_connect() as conn:
         c = conn.cursor()
@@ -134,6 +166,7 @@ def get_user_by_email(email: str):
         )
         user = c.fetchone()
     return user
+
 
 def get_user_by_id(user_id):
     with db_connect() as conn:
@@ -146,6 +179,8 @@ def get_user_by_id(user_id):
     return user
 
 # --- GESTÃO DE COOKIES (para login) ---
+
+
 def set_auth_cookies(token, expires_minutes=JWT_EXP_MINUTES):
     """Salva o token JWT em cookie para restaurar a sessão."""
     cookie_manager = stx.CookieManager()
@@ -169,16 +204,19 @@ def set_auth_cookies(token, expires_minutes=JWT_EXP_MINUTES):
             expires_at=expires_at
         )
 
+
 def clear_auth_cookies():
     cookie_manager = stx.CookieManager()
     cookie_manager.delete("session_token")
 
+
 # --- RECUPERAÇÃO DE SENHA SEGURA ---
-import secrets
-import string
+
+
 def gerar_senha_temporaria(tamanho=10):
     chars = string.ascii_letters + string.digits
     return ''.join(secrets.choice(chars) for _ in range(tamanho))
+
 
 def redefinir_senha_usuario(email: str):
     usuario = get_user_by_email(email)
@@ -197,11 +235,14 @@ def redefinir_senha_usuario(email: str):
                 (senha_hash, email)
             )
         else:
-            c.execute("UPDATE usuarios SET senha_hash=? WHERE email=?", (senha_hash, email))
+            c.execute(
+                "UPDATE usuarios SET senha_hash=? WHERE email=?", (senha_hash, email))
         conn.commit()
     return True, (usuario[1], nova_senha)  # nome, nova_senha
 
 # --- CRIAÇÃO AUTOMÁTICA DO MASTER ---
+
+
 def _get_secret_value(*keys):
     """Busca valor em múltiplas chaves (maiúscula/minúscula) em st.secrets e os.environ"""
     for key in keys:
@@ -209,12 +250,13 @@ def _get_secret_value(*keys):
             value = st.secrets.get(key)
             if value:
                 return value
-        except:
+        except BaseException:
             pass
         value = os.environ.get(key)
         if value:
             return value
     return None
+
 
 def criar_master_se_nao_existir():
     nome = _get_secret_value('USUARIO_MASTER', 'usuario_master')
@@ -235,6 +277,8 @@ def criar_master_se_nao_existir():
             conn.commit()
 
 # Alias para compatibilidade
+
+
 def create_token(user_id: int, nome: str, perfil: str, status: str) -> str:
     """Alias para generate_token - cria um JWT para o usuário autenticado."""
     return generate_token(user_id, nome, perfil, status)

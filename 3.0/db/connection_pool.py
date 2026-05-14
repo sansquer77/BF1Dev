@@ -4,26 +4,30 @@ Reduz overhead de conexões frequentes ao banco de dados
 """
 
 import sqlite3
-from pathlib import Path
 from typing import Optional
 import threading
 from contextlib import contextmanager
 
+
 class ConnectionPool:
     """
     Pool de Conexões Thread-Safe para SQLite
-    
+
     Uso:
         pool = ConnectionPool("banco.db", pool_size=5)
         with pool.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM usuarios")
     """
-    
-    def __init__(self, db_path: str, pool_size: int = 5, timeout: float = 30.0):
+
+    def __init__(
+            self,
+            db_path: str,
+            pool_size: int = 5,
+            timeout: float = 30.0):
         """
         Inicializa o pool de conexões
-        
+
         Args:
             db_path: Caminho do arquivo SQLite
             pool_size: Número máximo de conexões no pool
@@ -36,14 +40,14 @@ class ConnectionPool:
         self._lock = threading.RLock()
         self._semaphore = threading.Semaphore(pool_size)
         self._initialize_pool()
-    
+
     def _initialize_pool(self):
         """Cria as conexões iniciais"""
         with self._lock:
             for _ in range(self.pool_size):
                 conn = self._create_connection()
                 self._connections.append(conn)
-    
+
     def _create_connection(self) -> sqlite3.Connection:
         """Cria uma nova conexão com SQLite"""
         conn = sqlite3.connect(
@@ -52,16 +56,18 @@ class ConnectionPool:
             check_same_thread=False
         )
         conn.row_factory = sqlite3.Row  # Permite acessar colunas por nome
-        conn.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging para melhor concorrência
-        conn.execute("PRAGMA synchronous=NORMAL")  # Menos lento que FULL, mais seguro que OFF
+        # Write-Ahead Logging para melhor concorrência
+        conn.execute("PRAGMA journal_mode=WAL")
+        # Menos lento que FULL, mais seguro que OFF
+        conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA cache_size=-64000")  # 64MB de cache
         return conn
-    
+
     @contextmanager
     def get_connection(self):
         """
         Context manager para obter uma conexão do pool
-        
+
         Exemplo:
             with pool.get_connection() as conn:
                 cursor = conn.cursor()
@@ -73,12 +79,12 @@ class ConnectionPool:
             with self._lock:
                 if self._connections:
                     conn = self._connections.pop()
-            
+
             if conn is None:
                 conn = self._create_connection()
-            
+
             yield conn
-            
+
         finally:
             if conn:
                 with self._lock:
@@ -87,7 +93,7 @@ class ConnectionPool:
                     else:
                         conn.close()
             self._semaphore.release()
-    
+
     def close_all(self):
         """Fecha todas as conexões do pool"""
         with self._lock:
@@ -99,6 +105,7 @@ class ConnectionPool:
 # Instância global do pool
 _pool: Optional[ConnectionPool] = None
 
+
 def init_pool(db_path: str = None, pool_size: int = 5):
     """Inicializa o pool global"""
     global _pool
@@ -106,6 +113,7 @@ def init_pool(db_path: str = None, pool_size: int = 5):
         from db.db_config import DB_PATH
         db_path = str(DB_PATH)
     _pool = ConnectionPool(db_path, pool_size)
+
 
 def get_pool() -> ConnectionPool:
     """Retorna o pool global"""
@@ -115,6 +123,7 @@ def get_pool() -> ConnectionPool:
         from db.db_config import DB_PATH
         init_pool(str(DB_PATH))
     return _pool
+
 
 def close_pool():
     """Fecha o pool global"""

@@ -7,7 +7,7 @@ from typing import Optional
 
 import pandas as pd
 
-from db.db_schema import db_connect, get_table_columns, table_exists
+from db.db_schema import db_connect, table_exists
 
 
 def _query_to_df(query: str, params: tuple | None = None) -> pd.DataFrame:
@@ -25,24 +25,28 @@ def _query_to_df(query: str, params: tuple | None = None) -> pd.DataFrame:
 
 def get_apostas_df(temporada: Optional[str] = None) -> pd.DataFrame:
     if temporada:
-        return _query_to_df("SELECT * FROM apostas WHERE temporada = %s", (temporada,))
+        return _query_to_df(
+            "SELECT * FROM apostas WHERE temporada = %s", (temporada,))
     return _query_to_df("SELECT * FROM apostas")
 
 
-def get_posicoes_participantes_df(temporada: Optional[str] = None) -> pd.DataFrame:
+def get_posicoes_participantes_df(
+        temporada: Optional[str] = None) -> pd.DataFrame:
     if temporada:
         return _query_to_df(
             "SELECT * FROM posicoes_participantes WHERE temporada = %s ORDER BY prova_id, posicao",
             (temporada,),
         )
-    return _query_to_df("SELECT * FROM posicoes_participantes ORDER BY prova_id, posicao")
+    return _query_to_df(
+        "SELECT * FROM posicoes_participantes ORDER BY prova_id, posicao")
 
 
 def _usuarios_status_historico_exists(conn) -> bool:
     return table_exists(conn, "usuarios_status_historico")
 
 
-def get_participantes_temporada_df(temporada: Optional[str] = None) -> pd.DataFrame:
+def get_participantes_temporada_df(
+        temporada: Optional[str] = None) -> pd.DataFrame:
     if temporada is None:
         temporada = str(datetime.now().year)
     season_start = f"{temporada}-01-01 00:00:00"
@@ -51,13 +55,15 @@ def get_participantes_temporada_df(temporada: Optional[str] = None) -> pd.DataFr
     with db_connect() as conn:
         has_hist = _usuarios_status_historico_exists(conn)
         if not has_hist:
-            return _query_to_df("SELECT * FROM usuarios WHERE lower(trim(coalesce(status,''))) = 'ativo'")
+            return _query_to_df(
+                "SELECT * FROM usuarios WHERE lower(trim(coalesce(status,''))) = 'ativo'")
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) AS cnt FROM usuarios_status_historico")
         row = cur.fetchone()
         cur.close()
         if not row or int(row["cnt"]) == 0:
-            return _query_to_df("SELECT * FROM usuarios WHERE lower(trim(coalesce(status,''))) = 'ativo'")
+            return _query_to_df(
+                "SELECT * FROM usuarios WHERE lower(trim(coalesce(status,''))) = 'ativo'")
 
     df = _query_to_df(
         """
@@ -72,7 +78,9 @@ def get_participantes_temporada_df(temporada: Optional[str] = None) -> pd.DataFr
     )
     if not df.empty:
         return df
-    return _query_to_df("SELECT * FROM usuarios WHERE lower(trim(coalesce(status,''))) = 'ativo'")
+    return _query_to_df(
+        "SELECT * FROM usuarios WHERE lower(trim(coalesce(status,''))) = 'ativo'")
+
 
 __all__ = [
     "get_apostas_df",

@@ -22,7 +22,10 @@ from utils.helpers import render_page_header
 from utils.season_utils import get_season_options, get_default_season_index
 
 
-def _table_height(total_rows: int, row_height: int = 36, max_height: int = 560) -> int:
+def _table_height(
+        total_rows: int,
+        row_height: int = 36,
+        max_height: int = 560) -> int:
     return min(max_height, 42 + (max(total_rows, 1) * row_height))
 
 
@@ -45,7 +48,11 @@ def _extrair_ids_validos(df: pd.DataFrame, column: str = "id") -> list[int]:
     return ids.tolist()
 
 
-def _plot_colunas(df: pd.DataFrame, x_col: str, y_col: str, title: str) -> None:
+def _plot_colunas(
+        df: pd.DataFrame,
+        x_col: str,
+        y_col: str,
+        title: str) -> None:
     """Renderiza gráfico de barras adaptando orientação para melhorar legibilidade."""
     if df.empty or x_col not in df.columns or y_col not in df.columns:
         return
@@ -54,7 +61,8 @@ def _plot_colunas(df: pd.DataFrame, x_col: str, y_col: str, title: str) -> None:
     usar_horizontal = categorias >= 10
 
     if usar_horizontal:
-        # Em listas longas, barras horizontais evitam corte de rótulos no eixo categórico.
+        # Em listas longas, barras horizontais evitam corte de rótulos no eixo
+        # categórico.
         plot_df = plot_df.sort_values(y_col, ascending=True)
         fig = px.bar(
             plot_df,
@@ -101,7 +109,10 @@ def _plot_colunas(df: pd.DataFrame, x_col: str, y_col: str, title: str) -> None:
 
 
 def _is_restricted_individual_profile() -> bool:
-    role = str(st.session_state.get("user_role", "participante")).strip().lower()
+    role = str(
+        st.session_state.get(
+            "user_role",
+            "participante")).strip().lower()
     return role in {"participante", "inativo"}
 
 
@@ -116,7 +127,9 @@ def _get_logged_user_id() -> Optional[int]:
     except (TypeError, ValueError):
         return None
 
-def _get_participantes_temporada(temporada: Optional[str] = None) -> pd.DataFrame:
+
+def _get_participantes_temporada(
+        temporada: Optional[str] = None) -> pd.DataFrame:
     participantes_df = get_participantes_temporada_df(temporada)
     if participantes_df.empty:
         return participantes_df
@@ -124,7 +137,8 @@ def _get_participantes_temporada(temporada: Optional[str] = None) -> pd.DataFram
     if participantes_df.empty:
         return participantes_df
     if 'perfil' in participantes_df.columns:
-        participantes_df = participantes_df[participantes_df['perfil'].str.lower() != 'master']
+        participantes_df = participantes_df[participantes_df['perfil'].str.lower(
+        ) != 'master']
     else:
         participantes_df = participantes_df[participantes_df['nome'] != 'Master']
     return participantes_df
@@ -149,11 +163,14 @@ def _get_log_apostas_df(
         conditions.append("temporada = %s")
         params.append(temporada)
 
-    id_placeholders = ','.join(['%s'] * len(participantes_ids)) if participantes_ids else ''
-    nome_placeholders = ','.join(['%s'] * len(participantes_nomes)) if participantes_nomes else ''
+    id_placeholders = ','.join(
+        ['%s'] * len(participantes_ids)) if participantes_ids else ''
+    nome_placeholders = ','.join(
+        ['%s'] * len(participantes_nomes)) if participantes_nomes else ''
 
     if participantes_ids and 'usuario_id' in cols and participantes_nomes and 'apostador' in cols:
-        conditions.append(f"(usuario_id IN ({id_placeholders}) OR apostador IN ({nome_placeholders}))")
+        conditions.append(
+            f"(usuario_id IN ({id_placeholders}) OR apostador IN ({nome_placeholders}))")
         params.extend(participantes_ids)
         params.extend(participantes_nomes)
     elif participantes_ids and 'usuario_id' in cols:
@@ -180,7 +197,8 @@ def _get_log_apostas_df(
     return pd.DataFrame([dict(r) for r in rows])
 
 
-def get_apostas_por_piloto(temporada: Optional[str] = None, participantes_df: Optional[pd.DataFrame] = None):
+def get_apostas_por_piloto(
+        temporada: Optional[str] = None, participantes_df: Optional[pd.DataFrame] = None):
     """
     Agrupa apostas por participante e piloto para análise da distribuição de apostas.
     Retorna DataFrame: participante | piloto | total_apostas
@@ -222,19 +240,17 @@ def get_apostas_por_piloto(temporada: Optional[str] = None, participantes_df: Op
             cur.execute(query, params)
             rows = cur.fetchall() or []
             cur.close()
-            df = pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
+            df = pd.DataFrame([dict(r)
+                              for r in rows]) if rows else pd.DataFrame()
             if df.empty:
                 df = _get_log_apostas_df(
-                    conn,
-                    temporada,
-                    participantes_ids,
-                    participantes_nomes,
-                    ['usuario_id AS user_id', 'apostador AS participante', 'pilotos']
-                )
+                    conn, temporada, participantes_ids, participantes_nomes, [
+                        'usuario_id AS user_id', 'apostador AS participante', 'pilotos'])
             if not df.empty and 'pilotos' in df.columns:
                 df['piloto'] = df['pilotos'].str.split(',')
                 df = df.explode('piloto')
-                df = df.groupby(['user_id', 'participante', 'piloto'], dropna=False).size().reset_index(name='total_apostas')
+                df = df.groupby(['user_id', 'participante', 'piloto'], dropna=False).size(
+                ).reset_index(name='total_apostas')
             else:
                 df = pd.DataFrame()
     except Exception as e:
@@ -242,7 +258,9 @@ def get_apostas_por_piloto(temporada: Optional[str] = None, participantes_df: Op
         df = pd.DataFrame()
     return df
 
-def get_distribuicao_piloto_11(temporada: Optional[str] = None, participantes_df: Optional[pd.DataFrame] = None):
+
+def get_distribuicao_piloto_11(
+        temporada: Optional[str] = None, participantes_df: Optional[pd.DataFrame] = None):
     """
     Distribuição de apostas para o 11º colocado por participante.
     Retorna DataFrame: participante | piloto_11
@@ -286,19 +304,17 @@ def get_distribuicao_piloto_11(temporada: Optional[str] = None, participantes_df
             cur.execute(query, params)
             rows = cur.fetchall() or []
             cur.close()
-            df = pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
+            df = pd.DataFrame([dict(r)
+                              for r in rows]) if rows else pd.DataFrame()
             if df.empty:
                 df = _get_log_apostas_df(
-                    conn,
-                    temporada,
-                    participantes_ids,
-                    participantes_nomes,
-                    ['usuario_id AS user_id', 'apostador AS participante', 'piloto_11']
-                )
+                    conn, temporada, participantes_ids, participantes_nomes, [
+                        'usuario_id AS user_id', 'apostador AS participante', 'piloto_11'])
     except Exception as e:
         st.error(f"Erro ao buscar distribuição do 11º colocado: {str(e)}")
         df = pd.DataFrame()
     return df
+
 
 def main():
     render_page_header(st, "Análise Detalhada das Apostas")
@@ -306,16 +322,20 @@ def main():
     if not usuarios_status_historico_disponivel():
         st.warning(
             "⚠️ Aviso técnico: histórico de status de usuários indisponível. "
-            "As análises por temporada podem considerar o status atual de participantes."
-        )
+            "As análises por temporada podem considerar o status atual de participantes.")
 
     # Seletor de temporada para diagnósticos
     season_options = get_season_options()
     if not season_options:
-        st.info("Não há temporadas disponíveis para consulta no seu histórico de status.")
+        st.info(
+            "Não há temporadas disponíveis para consulta no seu histórico de status.")
         return
     season_default_idx = get_default_season_index(season_options)
-    season = st.selectbox("Temporada", season_options, index=season_default_idx, key="analysis_season")
+    season = st.selectbox(
+        "Temporada",
+        season_options,
+        index=season_default_idx,
+        key="analysis_season")
     participantes_df = _get_participantes_temporada(season)
 
     apostas_pilotos = get_apostas_por_piloto(season, participantes_df)
@@ -326,7 +346,8 @@ def main():
     participante_logado_id = _get_logged_user_id()
 
     if participante_only_mode and not participante_logado and participante_logado_id is None:
-        st.warning("Não foi possível identificar o usuário logado para limitar as análises individuais.")
+        st.warning(
+            "Não foi possível identificar o usuário logado para limitar as análises individuais.")
         return
 
     def _apply_participante_scope(df: pd.DataFrame) -> pd.DataFrame:
@@ -337,10 +358,12 @@ def main():
             ids = pd.to_numeric(df['user_id'], errors='coerce')
             mask = mask | (ids == participante_logado_id)
         if participante_logado and 'participante' in df.columns:
-            mask = mask | (df['participante'].astype(str).str.strip() == participante_logado)
+            mask = mask | (df['participante'].astype(
+                str).str.strip() == participante_logado)
         return df[mask].copy()
 
-    if participante_only_mode and (participante_logado or participante_logado_id is not None):
+    if participante_only_mode and (
+            participante_logado or participante_logado_id is not None):
         apostas_pilotos = _apply_participante_scope(apostas_pilotos)
         df_11 = _apply_participante_scope(df_11)
 
@@ -361,17 +384,20 @@ def main():
         if apostas_pilotos.empty:
             st.info("Sem dados para análise por piloto.")
         else:
-            participantes = sorted(apostas_pilotos['participante'].unique().tolist())
+            participantes = sorted(
+                apostas_pilotos['participante'].unique().tolist())
             if participante_only_mode and participante_logado:
                 participante_sel = participante_logado
-                st.caption(f"Exibindo estatísticas individuais de: {participante_sel}")
+                st.caption(
+                    f"Exibindo estatísticas individuais de: {participante_sel}")
             else:
                 participante_sel = st.selectbox(
                     "Participante",
                     participantes,
                     key=f"analysis_piloto_participante_{season}"
                 )
-            df_filtrado = apostas_pilotos[apostas_pilotos['participante'] == participante_sel]
+            df_filtrado = apostas_pilotos[apostas_pilotos['participante']
+                                          == participante_sel]
             _plot_colunas(
                 df_filtrado,
                 x_col='piloto',
@@ -385,7 +411,8 @@ def main():
             participantes_11 = sorted(df_11['participante'].unique().tolist())
             if participante_only_mode and participante_logado:
                 participante_11_sel = participante_logado
-                st.caption(f"Exibindo estatísticas individuais (11º) de: {participante_11_sel}")
+                st.caption(
+                    f"Exibindo estatísticas individuais (11º) de: {participante_11_sel}")
             else:
                 participante_11_sel = st.selectbox(
                     "Participante (11º)",
@@ -402,22 +429,19 @@ def main():
                 title=f"Pilotos apostados como 11º por {participante_11_sel}"
             )
             st.dataframe(
-                contagem,
-                width="stretch",
-                hide_index=True,
-                height=_table_height(len(contagem)),
-                column_config={
-                    "Piloto": st.column_config.TextColumn("Piloto", width="medium"),
-                    "Total": st.column_config.NumberColumn("Total", format="%d", width="small"),
-                },
-            )
+                contagem, width="stretch", hide_index=True, height=_table_height(
+                    len(contagem)), column_config={
+                    "Piloto": st.column_config.TextColumn(
+                        "Piloto", width="medium"), "Total": st.column_config.NumberColumn(
+                        "Total", format="%d", width="small"), }, )
         else:
             st.info("Nenhuma aposta registrada para o 11º colocado.")
 
     with tab3:
         st.subheader("Consolidado de Apostas por Piloto")
         if not apostas_pilotos.empty:
-            consolidado_pilotos = apostas_pilotos.groupby('piloto')['total_apostas'].sum().reset_index()
+            consolidado_pilotos = apostas_pilotos.groupby(
+                'piloto')['total_apostas'].sum().reset_index()
             _plot_colunas(
                 consolidado_pilotos,
                 x_col='piloto',
@@ -425,15 +449,11 @@ def main():
                 title="Distribuição Geral de Apostas por Piloto"
             )
             st.dataframe(
-                consolidado_pilotos,
-                width="stretch",
-                hide_index=True,
-                height=_table_height(len(consolidado_pilotos)),
-                column_config={
-                    "piloto": st.column_config.TextColumn("Piloto", width="medium"),
-                    "total_apostas": st.column_config.NumberColumn("Total de apostas", format="%d", width="small"),
-                },
-            )
+                consolidado_pilotos, width="stretch", hide_index=True, height=_table_height(
+                    len(consolidado_pilotos)), column_config={
+                    "piloto": st.column_config.TextColumn(
+                        "Piloto", width="medium"), "total_apostas": st.column_config.NumberColumn(
+                        "Total de apostas", format="%d", width="small"), }, )
         else:
             st.info("Nenhuma aposta registrada para pilotos.")
 
@@ -449,15 +469,11 @@ def main():
                 title="Distribuição Geral de Pilotos apostados como 11º"
             )
             st.dataframe(
-                consolidado_11,
-                width="stretch",
-                hide_index=True,
-                height=_table_height(len(consolidado_11)),
-                column_config={
-                    "Piloto": st.column_config.TextColumn("Piloto", width="medium"),
-                    "Total": st.column_config.NumberColumn("Total", format="%d", width="small"),
-                },
-            )
+                consolidado_11, width="stretch", hide_index=True, height=_table_height(
+                    len(consolidado_11)), column_config={
+                    "Piloto": st.column_config.TextColumn(
+                        "Piloto", width="medium"), "Total": st.column_config.NumberColumn(
+                        "Total", format="%d", width="small"), }, )
         else:
             st.info("Nenhuma aposta registrada para o 11º colocado.")
 
@@ -474,9 +490,12 @@ def main():
             # Resolver tipo Sprint/Normal por linha
             tipos_resolvidos = []
             for _, pr in provas_df.iterrows():
-                tipo = pr['tipo'] if 'tipo' in provas_df.columns and pd.notna(pr.get('tipo')) else None
+                tipo = pr['tipo'] if 'tipo' in provas_df.columns and pd.notna(
+                    pr.get('tipo')) else None
                 nome = pr.get('nome', '')
-                is_sprint = (str(tipo).strip().lower() == 'sprint') or ('sprint' in str(nome).lower())
+                is_sprint = (
+                    str(tipo).strip().lower() == 'sprint') or (
+                    'sprint' in str(nome).lower())
                 tipos_resolvidos.append('Sprint' if is_sprint else 'Normal')
             provas_df = provas_df.copy()
             provas_df['tipo_resolvido'] = tipos_resolvidos
@@ -524,7 +543,9 @@ def main():
                     "qtd_apostas": st.column_config.NumberColumn("Qtd Apostas", format="%d", width="small"),
                 },
             )
-            st.caption("Tipo resolvido usa coluna 'tipo' ou contém 'Sprint' no nome. Pontos e parâmetros vêm das regras da temporada.")
+            st.caption(
+                "Tipo resolvido usa coluna 'tipo' ou contém 'Sprint' no nome. Pontos e parâmetros vêm das regras da temporada.")
+
 
 if __name__ == "__main__":
     main()

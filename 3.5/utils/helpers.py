@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
+
 def normalize_str(text: str) -> str:
     """
     Remove acentos/diacríticos, espaços extras e converte string para minúsculas.
@@ -14,7 +15,8 @@ def normalize_str(text: str) -> str:
     if not isinstance(text, str):
         return ""
     nfkd = unicodedata.normalize("NFKD", text)
-    return "".join([c for c in nfkd if not unicodedata.combining(c)]).strip().lower()
+    return "".join(
+        [c for c in nfkd if not unicodedata.combining(c)]).strip().lower()
 
 
 def contains_html(text: str) -> bool:
@@ -94,17 +96,17 @@ def _bf1_logo_data_uri() -> str:
     if not logo_path.exists():
         # Fallback para BF1.jpg se o novo não existir
         logo_path = Path(__file__).resolve().parents[1] / "BF1.jpg"
-    
+
     if not logo_path.exists():
         return ""
-    
+
     content = logo_path.read_bytes()
     encoded = base64.b64encode(content).decode("ascii")
-    
+
     # Determinar tipo MIME baseado na extensão
     file_ext = logo_path.suffix.lower()
     mime_type = "image/png" if file_ext == ".png" else "image/jpeg"
-    
+
     return f"data:{mime_type};base64,{encoded}"
 
 
@@ -120,17 +122,20 @@ def render_bf1_logo_html(width: int = 75, alt: str = "BF1") -> str:
 
 def get_bf1_logo_data_uri() -> str:
     """Retorna o logo BF1 como data URI para uso em emails e outras aplicações.
-    
+
     O data URI contém a imagem codificada em base64 e pode ser usada diretamente
     em tags <img> sem depender de URLs externas.
-    
+
     Returns:
         str: Data URI da imagem BF1 (ex: data:image/png;base64,...)
     """
     return _bf1_logo_data_uri()
 
 
-def render_page_header(st_module: Any, title: str, logo_width: int = 75) -> None:
+def render_page_header(
+        st_module: Any,
+        title: str,
+        logo_width: int = 75) -> None:
     """Renderiza cabeçalho padronizado com logo BF1 + título da página."""
     col_logo, col_title = st_module.columns([1, 16])
     with col_logo:
@@ -141,7 +146,10 @@ def render_page_header(st_module: Any, title: str, logo_width: int = 75) -> None
         st_module.title(title)
 
     # Aviso explícito para perfis inativos nas telas de consulta.
-    user_status = str(st_module.session_state.get("user_status", "")).strip().lower()
+    user_status = str(
+        st_module.session_state.get(
+            "user_status",
+            "")).strip().lower()
     if user_status and user_status != "ativo":
-        st_module.warning("Você está inativo e visualiza apenas temporadas em que esteve ativo.")
-
+        st_module.warning(
+            "Você está inativo e visualiza apenas temporadas em que esteve ativo.")

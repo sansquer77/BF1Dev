@@ -33,13 +33,16 @@ def _normalizar_df_usuarios(df: pd.DataFrame) -> pd.DataFrame:
         df_norm["id"] = df_norm["id"].astype(int)
 
     if "perfil" in df_norm.columns:
-        df_norm["perfil"] = df_norm["perfil"].astype(str).str.strip().str.lower()
+        df_norm["perfil"] = df_norm["perfil"].astype(
+            str).str.strip().str.lower()
 
     if "status" in df_norm.columns:
-        df_norm["status"] = df_norm["status"].astype(str).str.strip().str.title()
+        df_norm["status"] = df_norm["status"].astype(
+            str).str.strip().str.title()
 
     if "faltas" in df_norm.columns:
-        df_norm["faltas"] = pd.to_numeric(df_norm["faltas"], errors="coerce").fillna(0).astype(int)
+        df_norm["faltas"] = pd.to_numeric(
+            df_norm["faltas"], errors="coerce").fillna(0).astype(int)
 
     return df_norm
 
@@ -81,7 +84,8 @@ def _get_pagamentos_temporada(temporada: str) -> dict[int, bool]:
     return {int(r['usuario_id']): bool(int(r['pago'])) for r in rows}
 
 
-def _salvar_pagamentos_temporada(temporada: str, pagamentos: dict[int, bool]) -> None:
+def _salvar_pagamentos_temporada(
+        temporada: str, pagamentos: dict[int, bool]) -> None:
     _ensure_gestao_financeira_table()
     with db_connect() as conn:
         c = conn.cursor()
@@ -137,7 +141,14 @@ def _salvar_valor_taxa_temporada(temporada: str, valor_taxa: float) -> None:
 
 def _fmt_brl(valor: float) -> str:
     try:
-        return f"R$ {float(valor):,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+        return f"R$ {
+            float(valor):,.2f}".replace(
+            ",",
+            "v").replace(
+            ".",
+            ",").replace(
+                "v",
+            ".")
     except Exception:
         return "R$ 0,00"
 
@@ -154,7 +165,8 @@ def _render_gestao_usuarios_tab(perfil: str):
         base_cols = ["id", "nome", "email", "perfil", "status"]
         base_labels = ["ID", "Nome", "Email", "Perfil", "Status"]
 
-        # Inclui 'faltas' de forma defensiva: só se a coluna existir no banco real.
+        # Inclui 'faltas' de forma defensiva: só se a coluna existir no banco
+        # real.
         if "faltas" in df.columns:
             base_cols.append("faltas")
             base_labels.append("Faltas")
@@ -179,7 +191,8 @@ def _render_gestao_usuarios_tab(perfil: str):
 
     status_opts = ["Ativo", "Inativo"]
     status_atual = str(user_row.get("status", "Ativo")).strip().title()
-    status_index = status_opts.index(status_atual) if status_atual in status_opts else 0
+    status_index = status_opts.index(
+        status_atual) if status_atual in status_opts else 0
     novo_status = st.selectbox("Status", status_opts, index=status_index)
 
     # fix: campo de edição de faltas — ausente antes, forçando workaround
@@ -240,19 +253,23 @@ def _render_gestao_usuarios_tab(perfil: str):
             st.session_state["alterar_senha"] = True
 
         if st.session_state["alterar_senha"]:
-            nova_senha = st.text_input("Nova senha", type="password", key="senha_reset")
+            nova_senha = st.text_input(
+                "Nova senha", type="password", key="senha_reset")
             if st.button("Salvar nova senha"):
                 if not nova_senha:
                     st.error("Digite a nova senha.")
                 else:
                     nova_hash = hash_password(nova_senha)
-                    ok = update_user_password(int(user_row["id"]), nova_hash, must_change_password=True)
+                    ok = update_user_password(
+                        int(user_row["id"]), nova_hash, must_change_password=True)
                     if ok:
-                        st.success("Senha atualizada com sucesso! O usuário deverá trocar a senha no próximo acesso.")
+                        st.success(
+                            "Senha atualizada com sucesso! O usuário deverá trocar a senha no próximo acesso.")
                         st.session_state["alterar_senha"] = False
                         st.rerun()
                     else:
-                        st.error("Não foi possível atualizar a senha deste usuário.")
+                        st.error(
+                            "Não foi possível atualizar a senha deste usuário.")
             if st.button("Cancelar alteração de senha"):
                 st.session_state["alterar_senha"] = False
 
@@ -264,7 +281,8 @@ def _render_gestao_usuarios_tab(perfil: str):
             else:
                 with db_connect() as conn:
                     c = conn.cursor()
-                    c.execute("DELETE FROM usuarios WHERE id=%s", (int(user_row["id"]),))
+                    c.execute("DELETE FROM usuarios WHERE id=%s",
+                              (int(user_row["id"]),))
                     conn.commit()
                 st.success("Usuário excluído com sucesso!")
                 st.cache_data.clear()
@@ -275,21 +293,29 @@ def _render_gestao_usuarios_tab(perfil: str):
     nome_novo = st.text_input("Nome completo", key="novo_nome")
     email_novo = st.text_input("Email", key="novo_email")
     senha_novo = st.text_input("Senha", type="password", key="nova_senha")
-    perfil_novo = st.selectbox("Perfil", ["participante", "inativo", "admin", "master"], key="novo_perfil")
-    status_novo = st.selectbox("Status", ["Ativo", "Inativo"], key="novo_status")
+    perfil_novo = st.selectbox(
+        "Perfil", [
+            "participante", "inativo", "admin", "master"], key="novo_perfil")
+    status_novo = st.selectbox(
+        "Status", ["Ativo", "Inativo"], key="novo_status")
 
     if st.button("Adicionar usuário"):
         if not nome_novo or not email_novo or not senha_novo:
             st.error("Preencha todos os campos obrigatórios.")
         else:
-          from services.auth_service import cadastrar_usuario
-          sucesso = cadastrar_usuario(nome_novo, email_novo, senha_novo, perfil=perfil_novo, status=status_novo)
-          if sucesso:
-              st.success("Usuário adicionado com sucesso!")
-              st.cache_data.clear()
-              st.rerun()
-          else:
-              st.error("Email já cadastrado.")
+            from services.auth_service import cadastrar_usuario
+            sucesso = cadastrar_usuario(
+                nome_novo,
+                email_novo,
+                senha_novo,
+                perfil=perfil_novo,
+                status=status_novo)
+            if sucesso:
+                st.success("Usuário adicionado com sucesso!")
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.error("Email já cadastrado.")
 
 
 def _render_gestao_financeira_tab():
@@ -298,15 +324,16 @@ def _render_gestao_financeira_tab():
     if not usuarios_status_historico_disponivel():
         st.warning(
             "⚠️ Aviso técnico: a tabela de histórico de status de usuários não foi encontrada. "
-            "Para temporadas anteriores, a lista pode refletir o status atual em vez do status histórico da temporada."
-        )
+            "Para temporadas anteriores, a lista pode refletir o status atual em vez do status histórico da temporada.")
 
     current_year = str(datetime.now().year)
     season_options = get_season_options()
     temporada = st.selectbox(
         "Temporada",
         season_options,
-        index=get_default_season_index(season_options, current_year=current_year),
+        index=get_default_season_index(
+            season_options,
+            current_year=current_year),
         key="usuarios_finance_temporada",
     )
 
@@ -325,10 +352,10 @@ def _render_gestao_financeira_tab():
 
     participantes = get_participantes_temporada_df(temporada)
     if not participantes.empty and "perfil" in participantes.columns:
-        participantes = participantes[
-            participantes["perfil"].astype(str).str.strip().str.lower() != "master"
-        ]
-    participantes = participantes.sort_values("nome") if not participantes.empty else participantes
+        participantes = participantes[participantes["perfil"].astype(
+            str).str.strip().str.lower() != "master"]
+    participantes = participantes.sort_values(
+        "nome") if not participantes.empty else participantes
 
     if participantes.empty:
         st.info("Não há participantes ativos nesta temporada.")
@@ -425,10 +452,10 @@ def _render_gestao_financeira_tab():
             disabled=not bool(pendentes_preview),
         ):
             assunto = f"💳 Lembrete de pagamento: Taxa da temporada {temporada}"
-            
+
             # Obter logo BF1 como data URI para embutir no email
             bf1_logo_uri = get_bf1_logo_data_uri()
-            
+
             corpo = f"""
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -530,24 +557,30 @@ def _render_gestao_financeira_tab():
                 cco=[d["E-mail"] for d in pendentes_preview],
             )
             if ok:
-                st.success(f"Lembrete enviado em CCO para {len(pendentes_preview)} participante(s).")
+                st.success(
+                    f"Lembrete enviado em CCO para {
+                        len(pendentes_preview)} participante(s).")
             else:
                 st.error("Falha ao enviar lembrete financeiro.")
+
 
 def main():
     render_page_header(st, "Gestão de Usuários")
 
-    # Definir permissões necessárias: apenas master pode editar tudo, admin pode ver; participante não acessa
+    # Definir permissões necessárias: apenas master pode editar tudo, admin
+    # pode ver; participante não acessa
     perfil = st.session_state.get("user_role", "participante")
     if perfil not in ("admin", "master"):
         st.warning("Acesso restrito a administradores.")
         return
 
-    aba_usuarios, aba_financeira = st.tabs(["Gestão de Usuários", "Gestão financeira"])
+    aba_usuarios, aba_financeira = st.tabs(
+        ["Gestão de Usuários", "Gestão financeira"])
     with aba_usuarios:
         _render_gestao_usuarios_tab(perfil)
     with aba_financeira:
         _render_gestao_financeira_tab()
+
 
 if __name__ == "__main__":
     main()

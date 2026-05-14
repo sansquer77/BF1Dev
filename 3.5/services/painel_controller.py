@@ -68,7 +68,9 @@ def get_proxima_prova_id(provas_df: pd.DataFrame):
         prova_id = row.get("id")
         if prova_id is None or not row.get("data"):
             continue
-        evento_dt = parse_evento_prova_dt(row.get("data"), row.get("horario_prova", "00:00"), tzinfo)
+        evento_dt = parse_evento_prova_dt(
+            row.get("data"), row.get(
+                "horario_prova", "00:00"), tzinfo)
         if evento_dt is None:
             continue
         if evento_dt >= agora_sp:

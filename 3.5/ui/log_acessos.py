@@ -7,7 +7,10 @@ from utils.helpers import render_page_header
 from utils.timezone_utils import convert_utc_to_client_tz
 
 
-def _table_height(total_rows: int, row_height: int = 36, max_height: int = 620) -> int:
+def _table_height(
+        total_rows: int,
+        row_height: int = 36,
+        max_height: int = 620) -> int:
     return min(max_height, 42 + (max(total_rows, 1) * row_height))
 
 
@@ -49,7 +52,8 @@ def _load_access_logs(
         params.append(f"%{ip_contains.lower()}%")
 
     if usuario_contains:
-        where.append("(LOWER(COALESCE(email, '')) LIKE %s OR LOWER(COALESCE(nome, '')) LIKE %s)")
+        where.append(
+            "(LOWER(COALESCE(email, '')) LIKE %s OR LOWER(COALESCE(nome, '')) LIKE %s)")
         token = f"%{usuario_contains.lower()}%"
         params.extend([token, token])
 
@@ -73,7 +77,8 @@ def _load_access_logs(
     """
 
     # pd.read_sql_query nao e compativel com psycopg3 (dict_row);
-    # usamos cursor manual e construimos o DataFrame a partir da lista de dicts.
+    # usamos cursor manual e construimos o DataFrame a partir da lista de
+    # dicts.
     with db_connect() as conn:
         cur = conn.cursor()
         cur.execute(query, params)
@@ -112,8 +117,10 @@ def _get_filter_options() -> tuple[list[str], list[str]]:
         )
         eventos_rows = cur.fetchall() or []
 
-    perfis: list[str] = [str(r["perfil"]).strip() for r in perfis_rows if r and r.get("perfil")]
-    eventos: list[str] = [str(r["evento"]).strip() for r in eventos_rows if r and r.get("evento")]
+    perfis: list[str] = [str(r["perfil"]).strip()
+                         for r in perfis_rows if r and r.get("perfil")]
+    eventos: list[str] = [str(r["evento"]).strip()
+                          for r in eventos_rows if r and r.get("evento")]
     return perfis, eventos
 
 
@@ -130,11 +137,14 @@ def main() -> None:
 
     col_data_i, col_data_f, col_status = st.columns([1, 1, 1])
     with col_data_i:
-        data_inicial = st.date_input("Data inicial", value=data_inicial_default)
+        data_inicial = st.date_input(
+            "Data inicial", value=data_inicial_default)
     with col_data_f:
         data_final = st.date_input("Data final", value=data_final_default)
     with col_status:
-        sucesso_sel = st.selectbox("Resultado", ["Todos", "Sucesso", "Falha"], index=0)
+        sucesso_sel = st.selectbox(
+            "Resultado", [
+                "Todos", "Sucesso", "Falha"], index=0)
 
     if data_inicial > data_final:
         st.warning("A data inicial não pode ser maior que a data final.")
@@ -150,7 +160,8 @@ def main() -> None:
     with col_ip:
         ip_contains = st.text_input("IP contém", value="").strip()
     with col_usuario:
-        usuario_contains = st.text_input("Usuário/Email contém", value="").strip()
+        usuario_contains = st.text_input(
+            "Usuário/Email contém", value="").strip()
 
     df = _load_access_logs(
         data_inicial=data_inicial,
@@ -176,8 +187,9 @@ def main() -> None:
     m3.metric("Falhas", total_falha)
 
     df_show = df.copy()
-    df_show["sucesso"] = df_show["sucesso"].apply(lambda x: "Sucesso" if bool(x) else "Falha")
-    
+    df_show["sucesso"] = df_show["sucesso"].apply(
+        lambda x: "Sucesso" if bool(x) else "Falha")
+
     # Converte timestamp para timezone do cliente
     client_tz = st.session_state.get("client_timezone", "UTC")
     df_show["created_at"] = df_show["created_at"].apply(

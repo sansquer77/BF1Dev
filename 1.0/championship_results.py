@@ -3,6 +3,7 @@ import pandas as pd
 from championship_utils import save_final_results, get_final_results
 from db_utils import championship_db_connect  # Importe a conexão correta
 
+
 def get_championship_bets():
     """Retorna DataFrame com todas as apostas do campeonato, incluindo o nome do participante."""
     try:
@@ -12,7 +13,15 @@ def get_championship_bets():
         return df
     except Exception as e:
         st.error(f"Erro ao buscar apostas do campeonato: {str(e)}")
-        return pd.DataFrame(columns=["user_id", "user_nome", "champion", "vice", "team", "bet_time"])
+        return pd.DataFrame(
+            columns=[
+                "user_id",
+                "user_nome",
+                "champion",
+                "vice",
+                "team",
+                "bet_time"])
+
 
 def main():
     if st.session_state.get("user_role", "").strip().lower() != "master":
@@ -47,8 +56,8 @@ def main():
     st.subheader("Resultado Atual Armazenado")
     if resultado:
         st.markdown(f"""
-        **Campeão:** {resultado['champion']}  
-        **Vice:** {resultado['vice']}  
+        **Campeão:** {resultado['champion']}
+        **Vice:** {resultado['vice']}
         **Equipe Campeã:** {resultado['team']}
         """)
     else:

@@ -3,7 +3,6 @@ Sistema de Migrations para Criar e Otimizar Tabelas
 Adiciona índices para melhor performance
 """
 
-from pathlib import Path
 import datetime
 from db.connection_pool import get_pool
 from db.db_config import INDICES
@@ -25,9 +24,9 @@ def add_temporada_columns_if_missing():
         'resultados': 'Adiciona temporada aos resultados',
         'posicoes_participantes': 'Adiciona temporada às posições'
     }
-    
+
     current_year = str(datetime.datetime.now().year)
-    
+
     with pool.get_connection() as conn:
         cursor = conn.cursor()
         for table_name, description in tables_to_update.items():
@@ -35,18 +34,19 @@ def add_temporada_columns_if_missing():
                 # Check if table exists and if temporada column is missing
                 cursor.execute(f"PRAGMA table_info('{table_name}')")
                 cols = [r[1] for r in cursor.fetchall()]
-                
+
                 if 'temporada' not in cols:
                     # Add temporada column with default value
                     cursor.execute(
-                        f"ALTER TABLE {table_name} ADD COLUMN temporada TEXT DEFAULT '{current_year}'"
-                    )
-                    logger.info(f"✓ Coluna `temporada` adicionada a `{table_name}`")
+                        f"ALTER TABLE {table_name} ADD COLUMN temporada TEXT DEFAULT '{current_year}'")
+                    logger.info(
+                        f"✓ Coluna `temporada` adicionada a `{table_name}`")
                 else:
-                    logger.debug(f"  Coluna `temporada` já existe em `{table_name}`, pulando...")
+                    logger.debug(
+                        f"  Coluna `temporada` já existe em `{table_name}`, pulando...")
             except Exception as e:
                 logger.debug(f"  Skipping {table_name}: {e}")
-        
+
         conn.commit()
 
 
@@ -62,14 +62,18 @@ def add_abandono_column_if_missing():
             cursor.execute("PRAGMA table_info('resultados')")
             cols = [r[1] for r in cursor.fetchall()]
             if 'abandono_pilotos' not in cols:
-                cursor.execute("ALTER TABLE resultados ADD COLUMN abandono_pilotos TEXT DEFAULT ''")
-                logger.info("✓ Coluna `abandono_pilotos` adicionada a `resultados`")
+                cursor.execute(
+                    "ALTER TABLE resultados ADD COLUMN abandono_pilotos TEXT DEFAULT ''")
+                logger.info(
+                    "✓ Coluna `abandono_pilotos` adicionada a `resultados`")
             else:
-                logger.debug("  Coluna `abandono_pilotos` já existe em `resultados`, pulando...")
+                logger.debug(
+                    "  Coluna `abandono_pilotos` já existe em `resultados`, pulando...")
             conn.commit()
         except Exception as e:
             logger.debug(f"Erro ao adicionar coluna abandono_pilotos: {e}")
             conn.rollback()
+
 
 def add_legacy_columns_if_missing():
     """
@@ -86,29 +90,35 @@ def add_legacy_columns_if_missing():
             cursor.execute("PRAGMA table_info('pilotos')")
             cols = [r[1] for r in cursor.fetchall()]
             if 'equipe' not in cols:
-                cursor.execute("ALTER TABLE pilotos ADD COLUMN equipe TEXT DEFAULT ''")
+                cursor.execute(
+                    "ALTER TABLE pilotos ADD COLUMN equipe TEXT DEFAULT ''")
                 logger.info("✓ Coluna `equipe` adicionada a `pilotos`")
             if 'status' not in cols:
-                cursor.execute("ALTER TABLE pilotos ADD COLUMN status TEXT DEFAULT 'Ativo'")
+                cursor.execute(
+                    "ALTER TABLE pilotos ADD COLUMN status TEXT DEFAULT 'Ativo'")
                 logger.info("✓ Coluna `status` adicionada a `pilotos`")
             if 'numero' not in cols:
-                cursor.execute("ALTER TABLE pilotos ADD COLUMN numero INTEGER DEFAULT 0")
+                cursor.execute(
+                    "ALTER TABLE pilotos ADD COLUMN numero INTEGER DEFAULT 0")
                 logger.info("✓ Coluna `numero` adicionada a `pilotos`")
 
             # Provas
             cursor.execute("PRAGMA table_info('provas')")
             cols = [r[1] for r in cursor.fetchall()]
             if 'horario_prova' not in cols:
-                cursor.execute("ALTER TABLE provas ADD COLUMN horario_prova TEXT DEFAULT ''")
+                cursor.execute(
+                    "ALTER TABLE provas ADD COLUMN horario_prova TEXT DEFAULT ''")
                 logger.info("✓ Coluna `horario_prova` adicionada a `provas`")
             if 'tipo' not in cols:
-                cursor.execute("ALTER TABLE provas ADD COLUMN tipo TEXT DEFAULT 'Normal'")
+                cursor.execute(
+                    "ALTER TABLE provas ADD COLUMN tipo TEXT DEFAULT 'Normal'")
                 logger.info("✓ Coluna `tipo` adicionada a `provas`")
 
             conn.commit()
         except Exception as e:
             logger.debug(f"Erro ao adicionar colunas legadas: {e}")
             conn.rollback()
+
 
 def add_password_reset_flag_if_missing():
     """Adiciona coluna `must_change_password` à tabela `usuarios`."""
@@ -119,14 +129,18 @@ def add_password_reset_flag_if_missing():
             cursor.execute("PRAGMA table_info('usuarios')")
             cols = [r[1] for r in cursor.fetchall()]
             if 'must_change_password' not in cols:
-                cursor.execute("ALTER TABLE usuarios ADD COLUMN must_change_password INTEGER DEFAULT 0")
-                logger.info("✓ Coluna `must_change_password` adicionada a `usuarios`")
+                cursor.execute(
+                    "ALTER TABLE usuarios ADD COLUMN must_change_password INTEGER DEFAULT 0")
+                logger.info(
+                    "✓ Coluna `must_change_password` adicionada a `usuarios`")
             else:
-                logger.debug("  Coluna `must_change_password` já existe em `usuarios`, pulando...")
+                logger.debug(
+                    "  Coluna `must_change_password` já existe em `usuarios`, pulando...")
             conn.commit()
         except Exception as e:
             logger.debug(f"Erro ao adicionar coluna must_change_password: {e}")
             conn.rollback()
+
 
 def add_login_attempts_action_if_missing():
     """Adiciona coluna `action` à tabela `login_attempts`."""
@@ -137,14 +151,18 @@ def add_login_attempts_action_if_missing():
             cursor.execute("PRAGMA table_info('login_attempts')")
             cols = [r[1] for r in cursor.fetchall()]
             if 'action' not in cols:
-                cursor.execute("ALTER TABLE login_attempts ADD COLUMN action TEXT DEFAULT 'login'")
+                cursor.execute(
+                    "ALTER TABLE login_attempts ADD COLUMN action TEXT DEFAULT 'login'")
                 logger.info("✓ Coluna `action` adicionada a `login_attempts`")
             else:
-                logger.debug("  Coluna `action` já existe em `login_attempts`, pulando...")
+                logger.debug(
+                    "  Coluna `action` já existe em `login_attempts`, pulando...")
             conn.commit()
         except Exception as e:
-            logger.debug(f"Erro ao adicionar coluna action em login_attempts: {e}")
+            logger.debug(
+                f"Erro ao adicionar coluna action em login_attempts: {e}")
             conn.rollback()
+
 
 def add_penalidade_auto_percent_if_missing():
     """Adiciona coluna `penalidade_auto_percent` à tabela `regras`."""
@@ -155,13 +173,17 @@ def add_penalidade_auto_percent_if_missing():
             cursor.execute("PRAGMA table_info('regras')")
             cols = [r[1] for r in cursor.fetchall()]
             if 'penalidade_auto_percent' not in cols:
-                cursor.execute("ALTER TABLE regras ADD COLUMN penalidade_auto_percent INTEGER NOT NULL DEFAULT 20")
-                logger.info("✓ Coluna `penalidade_auto_percent` adicionada a `regras`")
+                cursor.execute(
+                    "ALTER TABLE regras ADD COLUMN penalidade_auto_percent INTEGER NOT NULL DEFAULT 20")
+                logger.info(
+                    "✓ Coluna `penalidade_auto_percent` adicionada a `regras`")
             else:
-                logger.debug("  Coluna `penalidade_auto_percent` já existe em `regras`, pulando...")
+                logger.debug(
+                    "  Coluna `penalidade_auto_percent` já existe em `regras`, pulando...")
             conn.commit()
         except Exception as e:
-            logger.debug(f"Erro ao adicionar coluna penalidade_auto_percent: {e}")
+            logger.debug(
+                f"Erro ao adicionar coluna penalidade_auto_percent: {e}")
             conn.rollback()
 
 
@@ -214,6 +236,7 @@ def create_usuarios_status_historico_if_missing():
             logger.debug(f"Erro ao criar historico de status de usuarios: {e}")
             conn.rollback()
 
+
 def create_missing_tables_if_needed():
     """
     Cria tabelas faltando se necessário (championship_bets, championship_results, log_apostas).
@@ -224,7 +247,8 @@ def create_missing_tables_if_needed():
     with pool.get_connection() as conn:
         cursor = conn.cursor()
         try:
-            # Tabela championship_bets (agora com coluna season e UNIQUE por usuário+season)
+            # Tabela championship_bets (agora com coluna season e UNIQUE por
+            # usuário+season)
             cursor.execute("PRAGMA table_info('championship_bets')")
             bets_cols = cursor.fetchall()
             has_bets = bool(bets_cols)
@@ -260,12 +284,17 @@ def create_missing_tables_if_needed():
                         UNIQUE(user_id, season)
                     )
                 ''')
-                logger.info("✓ Tabela `championship_bets` criada com coluna season")
+                logger.info(
+                    "✓ Tabela `championship_bets` criada com coluna season")
             else:
-                # Se não tiver season ou a UNIQUE antiga (apenas user_id), recria com o novo esquema
-                needs_rebuild = (not bets_has_season) or (not has_user_season_unique) or has_old_user_unique
+                # Se não tiver season ou a UNIQUE antiga (apenas user_id),
+                # recria com o novo esquema
+                needs_rebuild = (
+                    not bets_has_season) or (
+                    not has_user_season_unique) or has_old_user_unique
                 if needs_rebuild:
-                    logger.info("↻ Atualizando `championship_bets` para suportar temporadas...")
+                    logger.info(
+                        "↻ Atualizando `championship_bets` para suportar temporadas...")
                     cursor.execute("PRAGMA foreign_keys=OFF")
                     cursor.execute("BEGIN")
                     cursor.execute('''
@@ -289,12 +318,15 @@ def create_missing_tables_if_needed():
                         FROM championship_bets
                     ''', (current_year,))
                     cursor.execute("DROP TABLE championship_bets")
-                    cursor.execute("ALTER TABLE championship_bets__new RENAME TO championship_bets")
+                    cursor.execute(
+                        "ALTER TABLE championship_bets__new RENAME TO championship_bets")
                     cursor.execute("COMMIT")
                     cursor.execute("PRAGMA foreign_keys=ON")
-                    logger.info("✓ `championship_bets` agora tem coluna season e UNIQUE(user_id, season)")
+                    logger.info(
+                        "✓ `championship_bets` agora tem coluna season e UNIQUE(user_id, season)")
                 else:
-                    logger.debug("  `championship_bets` já compatível com temporadas")
+                    logger.debug(
+                        "  `championship_bets` já compatível com temporadas")
 
             # Tabela championship_results
             cursor.execute('''
@@ -329,11 +361,15 @@ def create_missing_tables_if_needed():
             logger.info("✓ Tabela `championship_bets_log` criada ou já existe")
             if log_cols and not log_has_season:
                 try:
-                    cursor.execute(f"ALTER TABLE championship_bets_log ADD COLUMN season INTEGER NOT NULL DEFAULT {current_year}")
-                    cursor.execute(f"UPDATE championship_bets_log SET season = {current_year} WHERE season IS NULL")
-                    logger.info("✓ Coluna season adicionada a `championship_bets_log`")
+                    cursor.execute(
+                        f"ALTER TABLE championship_bets_log ADD COLUMN season INTEGER NOT NULL DEFAULT {current_year}")
+                    cursor.execute(
+                        f"UPDATE championship_bets_log SET season = {current_year} WHERE season IS NULL")
+                    logger.info(
+                        "✓ Coluna season adicionada a `championship_bets_log`")
                 except Exception as e:
-                    logger.debug(f"  Falha ao adicionar season em championship_bets_log: {e}")
+                    logger.debug(
+                        f"  Falha ao adicionar season em championship_bets_log: {e}")
 
             # Tabela log_apostas (garante colunas compatíveis com UI de log)
             cursor.execute(f'''
@@ -363,10 +399,20 @@ def create_missing_tables_if_needed():
             # Rebuild log_apostas if legacy columns missing
             cursor.execute("PRAGMA table_info('log_apostas')")
             log_cols = [r[1] for r in cursor.fetchall()]
-            required_cols = {"apostador", "aposta", "nome_prova", "tipo_aposta", "automatica", "data", "horario", "ip_address", "temporada"}
+            required_cols = {
+                "apostador",
+                "aposta",
+                "nome_prova",
+                "tipo_aposta",
+                "automatica",
+                "data",
+                "horario",
+                "ip_address",
+                "temporada"}
             has_required = required_cols.issubset(set(log_cols))
             if not has_required:
-                logger.info("↻ Atualizando `log_apostas` para incluir colunas de temporada e metadados de aposta...")
+                logger.info(
+                    "↻ Atualizando `log_apostas` para incluir colunas de temporada e metadados de aposta...")
                 cursor.execute("PRAGMA foreign_keys=OFF")
                 cursor.execute("BEGIN")
                 cursor.execute(f'''
@@ -394,10 +440,10 @@ def create_missing_tables_if_needed():
                 # Copia dados legados, mapeando o que existir
                 cursor.execute("PRAGMA table_info('log_apostas')")
                 legacy_cols = [r[1] for r in cursor.fetchall()]
-                has_col = lambda name: name in legacy_cols
+                def has_col(name): return name in legacy_cols
                 insert_sql = '''
                     INSERT INTO log_apostas__new (usuario_id, prova_id, apostador, aposta, nome_prova, pilotos, piloto_11, tipo_aposta, automatica, data, horario, ip_address, temporada, status, data_criacao)
-                    SELECT 
+                    SELECT
                         usuario_id,
                         prova_id,
                         NULL,
@@ -423,10 +469,12 @@ def create_missing_tables_if_needed():
                 )
                 cursor.execute(insert_sql)
                 cursor.execute("DROP TABLE log_apostas")
-                cursor.execute("ALTER TABLE log_apostas__new RENAME TO log_apostas")
+                cursor.execute(
+                    "ALTER TABLE log_apostas__new RENAME TO log_apostas")
                 cursor.execute("COMMIT")
                 cursor.execute("PRAGMA foreign_keys=ON")
-                logger.info("✓ `log_apostas` atualizada para estrutura completa")
+                logger.info(
+                    "✓ `log_apostas` atualizada para estrutura completa")
 
             conn.commit()
         except Exception as e:
@@ -441,12 +489,12 @@ def run_migrations():
     """
     # Primeiro, criar tabelas base se não existirem
     init_db()
-    
+
     pool = get_pool()
-    
+
     with pool.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         try:
             # Criar tabelas faltando
             create_missing_tables_if_needed()
@@ -464,34 +512,43 @@ def run_migrations():
             add_penalidade_auto_percent_if_missing()
             # Criar historico de status de usuarios
             create_usuarios_status_historico_if_missing()
-            
+
             # Criar índices para usuários
             for idx in INDICES.get("usuarios", []):
                 cursor.execute(idx)
-                logger.info(f"✓ Índice criado: {idx.split('IF NOT EXISTS')[1].strip()}")
-            
+                logger.info(
+                    f"✓ Índice criado: {
+                        idx.split('IF NOT EXISTS')[1].strip()}")
+
             # Criar índices para apostas
             for idx in INDICES.get("apostas", []):
                 cursor.execute(idx)
-                logger.info(f"✓ Índice criado: {idx.split('IF NOT EXISTS')[1].strip()}")
-            
+                logger.info(
+                    f"✓ Índice criado: {
+                        idx.split('IF NOT EXISTS')[1].strip()}")
+
             # Criar índices para provas
             for idx in INDICES.get("provas", []):
                 cursor.execute(idx)
-                logger.info(f"✓ Índice criado: {idx.split('IF NOT EXISTS')[1].strip()}")
-            
+                logger.info(
+                    f"✓ Índice criado: {
+                        idx.split('IF NOT EXISTS')[1].strip()}")
+
             # Criar índices para resultados
             for idx in INDICES.get("resultados", []):
                 cursor.execute(idx)
-                logger.info(f"✓ Índice criado: {idx.split('IF NOT EXISTS')[1].strip()}")
-            
+                logger.info(
+                    f"✓ Índice criado: {
+                        idx.split('IF NOT EXISTS')[1].strip()}")
+
             conn.commit()
             logger.info("✓ Todas as migrations executadas com sucesso!")
-            
+
         except Exception as e:
             logger.error(f"✗ Erro ao executar migrations: {e}")
             conn.rollback()
             raise
+
 
 def create_hall_da_fama_table():
     """
@@ -517,8 +574,9 @@ def create_hall_da_fama_table():
         logger.error(f"Erro ao criar tabela hall_da_fama: {e}")
         raise
 
+
 # Executar quando o módulo é importado
 try:
     create_hall_da_fama_table()
-except:
+except BaseException:
     pass

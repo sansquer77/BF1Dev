@@ -1,3 +1,20 @@
+from services.auth_service import decode_token
+from ui.sobre import main as sobre_view
+from ui.dashboard import main as dashboard_view
+from ui.backup import main as backup_view
+from ui.gestao_pilotos import main as gestao_pilotos_view
+from ui.gestao_provas import main as gestao_provas_view
+from ui.log_apostas import main as log_apostas_view
+from ui.classificacao import main as classificacao_view
+from ui.regulamento import main as regulamento_view
+from ui.analysis import main as analysis_view
+from ui.gestao_apostas import main as gestao_apostas_view
+from ui.championship_results import main as championship_results_view
+from ui.championship_bets import main as championship_bets_view
+from ui.gestao_resultados import resultados_view
+from ui.usuarios import main as usuarios_view
+from ui.painel import participante_view
+from ui.login import login_view
 import streamlit as st
 import os
 import os
@@ -6,6 +23,7 @@ import os
 from db.db_utils import init_db, db_connect, hash_password
 
 init_db()
+
 
 def criar_master_se_nao_existir():
     nome = os.environ.get('usuario_master') or st.secrets.get('usuario_master')
@@ -26,26 +44,10 @@ def criar_master_se_nao_existir():
         conn.commit()
     conn.close()
 
+
 criar_master_se_nao_existir()
 
 # IMPORTAÇÃO DAS VIEWS/MÓDULOS DE INTERFACE
-from ui.login import login_view
-from ui.painel import participante_view
-from ui.usuarios import main as usuarios_view
-from ui.gestao_resultados import resultados_view
-from ui.championship_bets import main as championship_bets_view
-from ui.championship_results import main as championship_results_view
-from ui.gestao_apostas import main as gestao_apostas_view
-from ui.analysis import main as analysis_view
-from ui.regulamento import main as regulamento_view
-from ui.classificacao import main as classificacao_view
-from ui.log_apostas import main as log_apostas_view
-from ui.gestao_provas import main as gestao_provas_view
-from ui.gestao_pilotos import main as gestao_pilotos_view
-from ui.backup import main as backup_view
-from ui.dashboard import main as dashboard_view
-from ui.sobre import main as sobre_view
-from services.auth_service import decode_token
 
 # ESTADO INICIAL DA SESSÃO
 if 'pagina' not in st.session_state:
@@ -54,6 +56,8 @@ if 'token' not in st.session_state:
     st.session_state['token'] = None
 
 # MENUS POR PERFIL
+
+
 def menu_master():
     return [
         "Painel do Participante",
@@ -75,6 +79,7 @@ def menu_master():
         "Logout"
     ]
 
+
 def menu_admin():
     return [
         "Painel do Participante",
@@ -94,6 +99,7 @@ def menu_admin():
         "Logout"
     ]
 
+
 def menu_participante():
     return [
         "Painel do Participante",
@@ -107,6 +113,7 @@ def menu_participante():
         "Logout"
     ]
 
+
 def get_payload():
     token = st.session_state.get('token')
     if not token:
@@ -118,6 +125,7 @@ def get_payload():
         st.session_state['token'] = None
         st.stop()
     return payload
+
 
 # DICIONÁRIO DE ROTAS
 PAGES = {
@@ -141,6 +149,8 @@ PAGES = {
 }
 
 # MENU LATERAL POR PERFIL
+
+
 def sidebar_menu():
     token = st.session_state.get("token")
     if not token:
@@ -157,6 +167,8 @@ def sidebar_menu():
     st.session_state["pagina"] = escolha
 
 # APP PRINCIPAL
+
+
 def main():
     st.set_page_config(
         page_title="BF1Dev",
@@ -179,6 +191,7 @@ def main():
         PAGES[pagina]()
     else:
         st.error("Página não encontrada.")
+
 
 if __name__ == "__main__":
     main()

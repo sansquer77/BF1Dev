@@ -4,12 +4,12 @@ from services.auth_service import (
     cadastrar_usuario,
     generate_token,
     get_user_by_email,
-    hash_password,
     redefinir_senha_usuario
 )
 from services.email_service import enviar_email_recuperacao_senha
 from datetime import datetime, timedelta
 import extra_streamlit_components as stx
+
 
 def logout():
     cookie_manager = stx.CookieManager()
@@ -20,13 +20,15 @@ def logout():
     st.success("Logout realizado com sucesso!")
     st.experimental_rerun()
 
+
 def login_view():
-    col1, col2 = st.columns([1, 16])  # Proporção ajustável conforme aparência desejada
+    # Proporção ajustável conforme aparência desejada
+    col1, col2 = st.columns([1, 16])
     with col1:
         st.image("BF1.jpg", width=75)
     with col2:
         st.title("Login do BF1")
-    
+
     if "esqueceu_senha" not in st.session_state:
         st.session_state["esqueceu_senha"] = False
     if "criar_usuario" not in st.session_state:
@@ -52,8 +54,10 @@ def login_view():
                 user = autenticar_usuario(email, senha)
                 if user:
                     token = generate_token(
-                        user_id=user[0], nome=user[1], perfil=user[4], status=user[5]
-                    )
+                        user_id=user[0],
+                        nome=user[1],
+                        perfil=user[4],
+                        status=user[5])
                     expire_time = datetime.now() + timedelta(minutes=120)
                     cookie_manager.set(
                         "session_token",
@@ -96,7 +100,8 @@ def login_view():
             if ok:
                 nome, nova_senha = result
                 enviar_email_recuperacao_senha(rec_email, nome, nova_senha)
-                st.success("Senha temporária gerada e enviada! Verifique seu e-mail.")
+                st.success(
+                    "Senha temporária gerada e enviada! Verifique seu e-mail.")
             else:
                 st.error(result)
         if st.button("Voltar"):
@@ -124,6 +129,7 @@ def login_view():
                     st.error("Erro ao cadastrar o usuário. Tente novamente.")
         if st.button("Voltar "):
             st.session_state["criar_usuario"] = False
+
 
 if __name__ == '__main__':
     login_view()

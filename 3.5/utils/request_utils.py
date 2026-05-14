@@ -41,10 +41,12 @@ def get_client_ip() -> Optional[str]:
 
         # --- 1. X-Forwarded-For: pega o ULTIMO segmento (confiavel no DO/Heroku)
         if headers:
-            xff = headers.get("x-forwarded-for") or headers.get("X-Forwarded-For")
+            xff = headers.get(
+                "x-forwarded-for") or headers.get("X-Forwarded-For")
             if xff:
                 # strip de cada segmento para lidar com espacos extras
-                segments = [s.strip() for s in str(xff).split(",") if s.strip()]
+                segments = [s.strip()
+                            for s in str(xff).split(",") if s.strip()]
                 if segments:
                     return segments[-1]
 

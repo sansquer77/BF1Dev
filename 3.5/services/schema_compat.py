@@ -33,7 +33,9 @@ def has_coluna_temporada_tabela(conn, tabela: str) -> bool:
 # Normalização de DataFrames
 # ---------------------------------------------------------------------------
 
-def normalizar_apostas(ap_df: pd.DataFrame, temporada_fallback: str | None = None) -> pd.DataFrame:
+def normalizar_apostas(
+        ap_df: pd.DataFrame,
+        temporada_fallback: str | None = None) -> pd.DataFrame:
     """Garante que o DataFrame de apostas sempre possua a coluna 'temporada'.
 
     Se a coluna não existir, é criada com o valor de *temporada_fallback*.
@@ -48,7 +50,9 @@ def normalizar_apostas(ap_df: pd.DataFrame, temporada_fallback: str | None = Non
     return df
 
 
-def normalizar_provas(prov_df: pd.DataFrame, temporada_fallback: str | None = None) -> pd.DataFrame:
+def normalizar_provas(
+        prov_df: pd.DataFrame,
+        temporada_fallback: str | None = None) -> pd.DataFrame:
     """Garante que o DataFrame de provas sempre possua a coluna 'temporada'."""
     from datetime import datetime
     fallback = temporada_fallback or str(datetime.now().year)

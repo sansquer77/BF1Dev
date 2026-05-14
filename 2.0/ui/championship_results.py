@@ -1,10 +1,10 @@
 import streamlit as st
-import pandas as pd
 
-from db.db_utils import db_connect, get_pilotos_df
+from db.db_utils import get_pilotos_df
 from services.championship_service import (
     get_final_results, save_final_results
 )
+
 
 def main():
     st.title("Cadastrar/Atualizar Resultado Oficial do Campeonato")
@@ -22,22 +22,19 @@ def main():
     col1, col2, col3 = st.columns(3)
     with col1:
         champion = st.selectbox(
-            "Piloto Campeão",
-            pilotos,
-            index=pilotos.index(resultado_atual['champion']) if (resultado_atual and resultado_atual['champion'] in pilotos) else 0
-        )
+            "Piloto Campeão", pilotos, index=pilotos.index(
+                resultado_atual['champion']) if (
+                resultado_atual and resultado_atual['champion'] in pilotos) else 0)
     with col2:
         vice = st.selectbox(
-            "Piloto Vice",
-            pilotos,
-            index=pilotos.index(resultado_atual['vice']) if (resultado_atual and resultado_atual['vice'] in pilotos) else 0
-        )
+            "Piloto Vice", pilotos, index=pilotos.index(
+                resultado_atual['vice']) if (
+                resultado_atual and resultado_atual['vice'] in pilotos) else 0)
     with col3:
         team = st.selectbox(
-            "Equipe Campeã",
-            equipes,
-            index=equipes.index(resultado_atual['team']) if (resultado_atual and resultado_atual['team'] in equipes) else 0
-        )
+            "Equipe Campeã", equipes, index=equipes.index(
+                resultado_atual['team']) if (
+                resultado_atual and resultado_atual['team'] in equipes) else 0)
 
     erro = None
     if st.button("Salvar resultado oficial"):
@@ -64,6 +61,7 @@ def main():
             """,
             unsafe_allow_html=True
         )
+
 
 if __name__ == "__main__":
     main()

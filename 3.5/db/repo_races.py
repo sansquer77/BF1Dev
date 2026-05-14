@@ -11,8 +11,10 @@ from db.db_schema import db_connect, get_table_columns
 
 logger = logging.getLogger(__name__)
 
-_COLUNAS_PILOTOS_VALIDAS: frozenset[str] = frozenset({"nome", "equipe", "status", "numero"})
-_COLUNAS_PROVAS_VALIDAS: frozenset[str] = frozenset({"nome", "data", "horario_prova", "tipo", "status", "temporada"})
+_COLUNAS_PILOTOS_VALIDAS: frozenset[str] = frozenset(
+    {"nome", "equipe", "status", "numero"})
+_COLUNAS_PROVAS_VALIDAS: frozenset[str] = frozenset(
+    {"nome", "data", "horario_prova", "tipo", "status", "temporada"})
 
 
 def _query_to_df(query: str, params: tuple | None = None) -> pd.DataFrame:
@@ -63,7 +65,8 @@ def get_resultados_df(temporada: Optional[str] = None) -> pd.DataFrame:
                 (temporada,),
             )
         else:
-            cur.execute(f"SELECT prova_id, posicoes, abandono_pilotos{extra} FROM resultados")
+            cur.execute(
+                f"SELECT prova_id, posicoes, abandono_pilotos{extra} FROM resultados")
 
         rows = cur.fetchall() or []
         if not rows:
@@ -75,7 +78,11 @@ def get_resultados_df(temporada: Optional[str] = None) -> pd.DataFrame:
     return pd.DataFrame([dict(r) for r in rows])
 
 
-def add_piloto(nome: str, equipe: str = "", status: str = "Ativo", numero: int = 0) -> bool:
+def add_piloto(
+        nome: str,
+        equipe: str = "",
+        status: str = "Ativo",
+        numero: int = 0) -> bool:
     try:
         with db_connect() as conn:
             cur = conn.cursor()
@@ -96,14 +103,19 @@ def update_piloto(piloto_id: int, **campos) -> bool:
         return False
     campos_invalidos = set(campos) - _COLUNAS_PILOTOS_VALIDAS
     if campos_invalidos:
-        logger.error("update_piloto: colunas não permitidas rejeitadas: %s", campos_invalidos)
-        raise ValueError(f"Colunas não permitidas em update_piloto: {campos_invalidos}")
+        logger.error(
+            "update_piloto: colunas não permitidas rejeitadas: %s",
+            campos_invalidos)
+        raise ValueError(
+            f"Colunas não permitidas em update_piloto: {campos_invalidos}")
     set_clause = ", ".join(f"{k} = %s" for k in campos)
     values = list(campos.values()) + [piloto_id]
     try:
         with db_connect() as conn:
             cur = conn.cursor()
-            cur.execute(f"UPDATE pilotos SET {set_clause} WHERE id = %s", values)
+            cur.execute(
+                f"UPDATE pilotos SET {set_clause} WHERE id = %s",
+                values)
             cur.close()
             conn.commit()
         return True
@@ -154,14 +166,19 @@ def update_prova(prova_id: int, **campos) -> bool:
         return False
     campos_invalidos = set(campos) - _COLUNAS_PROVAS_VALIDAS
     if campos_invalidos:
-        logger.error("update_prova: colunas não permitidas rejeitadas: %s", campos_invalidos)
-        raise ValueError(f"Colunas não permitidas em update_prova: {campos_invalidos}")
+        logger.error(
+            "update_prova: colunas não permitidas rejeitadas: %s",
+            campos_invalidos)
+        raise ValueError(
+            f"Colunas não permitidas em update_prova: {campos_invalidos}")
     set_clause = ", ".join(f"{k} = %s" for k in campos)
     values = list(campos.values()) + [prova_id]
     try:
         with db_connect() as conn:
             cur = conn.cursor()
-            cur.execute(f"UPDATE provas SET {set_clause} WHERE id = %s", values)
+            cur.execute(
+                f"UPDATE provas SET {set_clause} WHERE id = %s",
+                values)
             cur.close()
             conn.commit()
         return True
@@ -183,10 +200,12 @@ def delete_prova(prova_id: int) -> bool:
         return False
 
 
-def get_horario_prova(prova_id: int) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def get_horario_prova(
+        prova_id: int) -> tuple[Optional[str], Optional[str], Optional[str]]:
     with db_connect() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT nome, data, horario_prova FROM provas WHERE id = %s", (prova_id,))
+        cur.execute(
+            "SELECT nome, data, horario_prova FROM provas WHERE id = %s", (prova_id,))
         row = cur.fetchone()
         cur.close()
     if row:
@@ -194,7 +213,10 @@ def get_horario_prova(prova_id: int) -> tuple[Optional[str], Optional[str], Opti
     return None, None, None
 
 
-def salvar_resultado(prova_id: int, posicoes: str, abandono_pilotos: str = "") -> bool:
+def salvar_resultado(
+        prova_id: int,
+        posicoes: str,
+        abandono_pilotos: str = "") -> bool:
     try:
         with db_connect() as conn:
             cur = conn.cursor()
@@ -214,6 +236,7 @@ def salvar_resultado(prova_id: int, posicoes: str, abandono_pilotos: str = "") -
     except Exception as exc:
         logger.error("salvar_resultado falhou: %s", exc)
         return False
+
 
 __all__ = [
     "get_pilotos_df",

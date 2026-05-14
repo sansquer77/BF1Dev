@@ -10,7 +10,11 @@ def main():
     temporadas = get_season_options()
     default_index = get_default_season_index(temporadas)
 
-    temporada = st.selectbox("Temporada", temporadas, index=default_index, key="calendario_temporada")
+    temporada = st.selectbox(
+        "Temporada",
+        temporadas,
+        index=default_index,
+        key="calendario_temporada")
 
     provas_df = get_provas_df(temporada)
     if provas_df.empty:

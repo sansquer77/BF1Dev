@@ -3,9 +3,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import ast
 
-from services.data_access_core import (
-    db_connect,
-)
 from services.data_access_apostas import (
     get_apostas_df,
     get_posicoes_participantes_df,
@@ -54,6 +51,7 @@ def _ordenar_provas_por_calendario(provas_df: pd.DataFrame) -> pd.DataFrame:
     """Ordena provas por data/hora do calendário (ascendente), com fallback estável."""
     return _controller_ordenar_provas_por_calendario(provas_df)
 
+
 def participante_view():
     if 'token' not in st.session_state or 'user_id' not in st.session_state:
         st.warning("Você precisa estar logado para acessar essa página.")
@@ -66,15 +64,29 @@ def participante_view():
 
     render_page_header(st, "Painel do Participante")
 
-    user_role = str(st.session_state.get("user_role", user.get("perfil", "participante"))).strip().lower()
-    is_inactive_profile = user_role == "inativo" or str(user.get("status", "")).strip().lower() != "ativo"
-    inactive_has_history = bool(st.session_state.get("inactive_has_history", False) or st.session_state.get("allowed_seasons", []))
+    user_role = str(
+        st.session_state.get(
+            "user_role",
+            user.get(
+                "perfil",
+                "participante"))).strip().lower()
+    is_inactive_profile = user_role == "inativo" or str(
+        user.get("status", "")).strip().lower() != "ativo"
+    inactive_has_history = bool(
+        st.session_state.get(
+            "inactive_has_history",
+            False) or st.session_state.get(
+            "allowed_seasons",
+            []))
 
     allowed_seasons = [
-        str(s).strip() for s in (st.session_state.get("allowed_seasons", []) or []) if str(s).strip()
-    ]
+        str(s).strip() for s in (
+            st.session_state.get(
+                "allowed_seasons",
+                []) or []) if str(s).strip()]
     if is_inactive_profile and inactive_has_history:
-        # Para inativo com histórico, a lista deve refletir apenas temporadas do próprio participante.
+        # Para inativo com histórico, a lista deve refletir apenas temporadas
+        # do próprio participante.
         season_options = sorted(set(allowed_seasons))
     else:
         season_options = get_season_options(fallback_years=["2025", "2026"])
@@ -88,37 +100,47 @@ def participante_view():
             season = allowed_seasons[-1]
             st.session_state['temporada'] = season
         else:
-            season = st.session_state.get('temporada', str(now_sao_paulo().year))
+            season = st.session_state.get(
+                'temporada', str(now_sao_paulo().year))
 
         if is_inactive_profile and not inactive_has_history:
             st.info("Não há temporadas com histórico para este usuário inativo.")
         else:
-            st.info("Não há temporadas disponíveis para consulta no seu histórico de status.")
+            st.info(
+                "Não há temporadas disponíveis para consulta no seu histórico de status.")
 
-    st.write(f"Bem-vindo, {user['nome']} ({user['email']}) - Status: {user['perfil']}")
+    st.write(
+        f"Bem-vindo, {user['nome']} ({user['email']}) - Status: {user['perfil']}")
 
-    force_change = bool(user.get('must_change_password', 0) or st.session_state.get('force_password_change'))
-    show_apostas_tab = (not force_change) and (not is_inactive_profile) and has_season_data
+    force_change = bool(user.get('must_change_password', 0)
+                        or st.session_state.get('force_password_change'))
+    show_apostas_tab = (not force_change) and (
+        not is_inactive_profile) and has_season_data
     show_historico_tab = (not force_change) and (
         ((not is_inactive_profile) and has_season_data)
         or (is_inactive_profile and inactive_has_history)
     )
-    # Aba "Histórico" (consolidado) aparece sempre que o participante tem ao menos uma aposta
+    # Aba "Histórico" (consolidado) aparece sempre que o participante tem ao
+    # menos uma aposta
     show_historico_geral_tab = not force_change
 
     if force_change:
-        st.warning("⚠️ Você precisa alterar sua senha temporária antes de continuar.")
+        st.warning(
+            "⚠️ Você precisa alterar sua senha temporária antes de continuar.")
     elif is_inactive_profile and not inactive_has_history:
-        st.info("Usuário inativo sem histórico: apenas Minha Conta está disponível no Painel do Participante.")
+        st.info(
+            "Usuário inativo sem histórico: apenas Minha Conta está disponível no Painel do Participante.")
 
     tab_labels = []
     if show_apostas_tab:
         tab_labels.append("Apostas")
     if show_historico_tab:
-        # Aba de histórico por temporada, com nome dinâmico mostrando o ano selecionado
+        # Aba de histórico por temporada, com nome dinâmico mostrando o ano
+        # selecionado
         tab_labels.append(f"Apostas - {season}")
     if show_historico_geral_tab:
-        # Aba principal de histórico: consolida todas as temporadas do participante.
+        # Aba principal de histórico: consolida todas as temporadas do
+        # participante.
         tab_labels.append("Histórico")
     tab_labels.append("Minha Conta")
     tabs = st.tabs(tab_labels)
@@ -134,7 +156,9 @@ def participante_view():
         is_sprint = str(tipo_prova_sel).strip().lower() == 'sprint'
         regra_sprint = bool(regras.get('regra_sprint'))
         fichas_exibir = regras.get('quantidade_fichas', 15)
-        min_pilotos_exibir = regras.get('qtd_minima_pilotos', regras.get('min_pilotos', 3))
+        min_pilotos_exibir = regras.get(
+            'qtd_minima_pilotos', regras.get(
+                'min_pilotos', 3))
         if is_sprint and regra_sprint:
             fichas_exibir = 10
             min_pilotos_exibir = 2
@@ -143,12 +167,16 @@ def participante_view():
         st.markdown(f"**Tipo de prova:** {tipo_prova_sel}")
         st.markdown(f"**Fichas:** {fichas_exibir}")
         st.markdown(f"**Mín. pilotos:** {min_pilotos_exibir}")
-        st.markdown(f"**Fichas por piloto:** {regras.get('fichas_por_piloto', '-')}")
+        st.markdown(
+            f"**Fichas por piloto:** {regras.get('fichas_por_piloto', '-')}")
         st.markdown(f"**Bônus 11º:** {regras.get('pontos_11_colocado', 25)}")
-        st.markdown(f"**Pontos dobrados (Sprint):** {'Sim' if regras.get('pontos_dobrada') else 'Não'}")
-        st.markdown(f"**Penalidade abandono:** {'Sim' if regras.get('penalidade_abandono') else 'Não'}")
+        st.markdown(
+            f"**Pontos dobrados (Sprint):** {'Sim' if regras.get('pontos_dobrada') else 'Não'}")
+        st.markdown(
+            f"**Penalidade abandono:** {'Sim' if regras.get('penalidade_abandono') else 'Não'}")
         if regras.get('penalidade_abandono'):
-            st.markdown(f"**Pontos penalidade:** {regras.get('pontos_penalidade', 0)}")
+            st.markdown(
+                f"**Pontos penalidade:** {regras.get('pontos_penalidade', 0)}")
 
     # fix: inicializa apostas_part, provas_df e resultados_df antes do bloco
     # condicional para evitar NameError nas seções 'Regra de Descarte' e
@@ -162,7 +190,8 @@ def participante_view():
     # ------------------ Aba: Apostas ----------------------
     if show_apostas_tab:
         with tab_map["Apostas"]:
-            temporada = st.session_state.get('temporada', str(now_sao_paulo().year))
+            temporada = st.session_state.get(
+                'temporada', str(now_sao_paulo().year))
 
             # fix(itens 4 e 5): cada DataFrame é buscado UMA única vez por render
             # e reutilizado em todo o escopo da aba — elimina as 2x get_apostas_df
@@ -173,12 +202,10 @@ def participante_view():
 
             try:
                 if not provas_df.empty and 'data' in provas_df.columns:
-                    provas_ordenadas = _ordenar_provas_por_calendario(provas_df)
-                    provas = provas_ordenadas[
-                        provas_ordenadas['__data_dt'].apply(
-                            lambda x: str(x.year) == str(temporada) if pd.notna(x) else False
-                        )
-                    ]
+                    provas_ordenadas = _ordenar_provas_por_calendario(
+                        provas_df)
+                    provas = provas_ordenadas[provas_ordenadas['__data_dt'].apply(
+                        lambda x: str(x.year) == str(temporada) if pd.notna(x) else False)]
                     if not provas.empty:
                         provas = provas.reset_index(drop=True)
                 else:
@@ -193,8 +220,10 @@ def participante_view():
                 else:
                     pilotos_ativos_df = pilotos_df
 
-                pilotos = pilotos_ativos_df['nome'].tolist() if not pilotos_ativos_df.empty else []
-                equipes = pilotos_ativos_df['equipe'].tolist() if not pilotos_ativos_df.empty else []
+                pilotos = pilotos_ativos_df['nome'].tolist(
+                ) if not pilotos_ativos_df.empty else []
+                equipes = pilotos_ativos_df['equipe'].tolist(
+                ) if not pilotos_ativos_df.empty else []
                 pilotos_equipe = dict(zip(pilotos, equipes))
             else:
                 pilotos = []
@@ -202,255 +231,296 @@ def participante_view():
                 pilotos_equipe = {}
 
             if len(provas) > 0 and len(pilotos_df) > 2:
-                    prova_ids_validos = set(provas['id'].tolist())
-                    proxima_prova_id = _get_proxima_prova_id(provas.to_frame() if isinstance(provas, pd.Series) else provas)
-                    temporada_default_aposta = st.session_state.get("aposta_default_temporada")
-                    prova_atual_sel = st.session_state.get("sel_prova_aposta")
+                prova_ids_validos = set(provas['id'].tolist())
+                proxima_prova_id = _get_proxima_prova_id(
+                    provas.to_frame() if isinstance(
+                        provas, pd.Series) else provas)
+                temporada_default_aposta = st.session_state.get(
+                    "aposta_default_temporada")
+                prova_atual_sel = st.session_state.get("sel_prova_aposta")
 
-                    st.markdown("### Etapa 1 de 3 - Selecione a prova")
+                st.markdown("### Etapa 1 de 3 - Selecione a prova")
 
-                    if proxima_prova_id is not None:
-                        if temporada_default_aposta != temporada:
-                            st.session_state["sel_prova_aposta"] = proxima_prova_id
-                            st.session_state["aposta_default_temporada"] = temporada
-                        elif prova_atual_sel not in prova_ids_validos:
-                            st.session_state["sel_prova_aposta"] = proxima_prova_id
+                if proxima_prova_id is not None:
+                    if temporada_default_aposta != temporada:
+                        st.session_state["sel_prova_aposta"] = proxima_prova_id
+                        st.session_state["aposta_default_temporada"] = temporada
+                    elif prova_atual_sel not in prova_ids_validos:
+                        st.session_state["sel_prova_aposta"] = proxima_prova_id
 
-                    col_sel, col_btn, col_sem_ideias = st.columns([6, 1.2, 1.4])
-                    with col_sel:
-                        prova_id = st.selectbox(
-                            "Escolha a prova",
-                            provas['id'],
-                            format_func=lambda x: f"{x} - {provas[provas['id'] == x]['nome'].values[0]}"[:40],
-                            key="sel_prova_aposta",
-                            on_change=_on_prova_change
+                col_sel, col_btn, col_sem_ideias = st.columns([6, 1.2, 1.4])
+                with col_sel:
+                    prova_id = st.selectbox(
+                        "Escolha a prova",
+                        provas['id'],
+                        format_func=lambda x: f"{x} - {provas[provas['id'] == x]['nome'].values[0]}"[:40],
+                        key="sel_prova_aposta",
+                        on_change=_on_prova_change
+                    )
+                with col_btn:
+                    st.write("")
+                    if st.button("Ver regras"):
+                        prova_nome_sel = provas[provas['id']
+                                                == prova_id]['nome'].values[0]
+                        tipo_raw = provas[provas['id'] == prova_id]['tipo'].values[0] if not provas[provas['id']
+                                                                                                    == prova_id].empty else 'Normal'
+                        tipo_sel = 'Sprint' if str(tipo_raw).strip().lower(
+                        ) == 'sprint' or 'sprint' in str(prova_nome_sel).lower() else 'Normal'
+                        regras_sel = get_regras_aplicaveis(temporada, tipo_sel)
+                        _mostrar_regras_dialog(regras_sel, temporada, tipo_sel)
+                with col_sem_ideias:
+                    st.write("")
+                    if st.button("Sem ideias"):
+                        nome_prova_sem_ideias = provas[provas['id']
+                                                       == prova_id]['nome'].values[0]
+                        ok_auto, msg_auto = gerar_aposta_sem_ideias(
+                            usuario_id=user['id'],
+                            prova_id=prova_id,
+                            nome_prova=nome_prova_sem_ideias,
+                            temporada=temporada,
                         )
-                    with col_btn:
-                        st.write("")
-                        if st.button("Ver regras"):
-                            prova_nome_sel = provas[provas['id'] == prova_id]['nome'].values[0]
-                            tipo_raw = provas[provas['id'] == prova_id]['tipo'].values[0] if not provas[provas['id'] == prova_id].empty else 'Normal'
-                            tipo_sel = 'Sprint' if str(tipo_raw).strip().lower() == 'sprint' or 'sprint' in str(prova_nome_sel).lower() else 'Normal'
-                            regras_sel = get_regras_aplicaveis(temporada, tipo_sel)
-                            _mostrar_regras_dialog(regras_sel, temporada, tipo_sel)
-                    with col_sem_ideias:
-                        st.write("")
-                        if st.button("Sem ideias"):
-                            nome_prova_sem_ideias = provas[provas['id'] == prova_id]['nome'].values[0]
-                            ok_auto, msg_auto = gerar_aposta_sem_ideias(
-                                usuario_id=user['id'],
-                                prova_id=prova_id,
-                                nome_prova=nome_prova_sem_ideias,
-                                temporada=temporada,
-                            )
-                            if ok_auto:
-                                st.success(msg_auto)
-                                st.session_state["aposta_form_force_reload"] = True
-                                st.rerun()
-                            else:
-                                st.error(msg_auto)
-                    nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
-                    tipo_raw = provas[provas['id'] == prova_id]['tipo'].values[0] if not provas[provas['id'] == prova_id].empty else 'Normal'
-                    tipo_prova = 'Sprint' if str(tipo_raw).strip().lower() == 'sprint' or 'sprint' in str(nome_prova).lower() else 'Normal'
-                    regras = get_regras_aplicaveis(temporada, tipo_prova)
-                    quantidade_fichas = int(regras.get('quantidade_fichas', 15))
-                    min_pilotos_regra = int(regras.get('qtd_minima_pilotos', regras.get('min_pilotos', 3)))
-                    fichas_max_por_piloto = int(regras.get('fichas_por_piloto', quantidade_fichas))
-                    permite_mesma_equipe = bool(regras.get('mesma_equipe', False))
-                    aposta_existente = apostas_df[
-                        (apostas_df['usuario_id'] == user['id']) & (apostas_df['prova_id'] == prova_id)
-                    ]
-                    max_linhas = max(10, int(min_pilotos_regra))
-                    pilotos_apostados_ant, fichas_ant, piloto_11_ant = [], [], ""
-                    if not aposta_existente.empty:
-                        aposta_existente = aposta_existente.iloc[0]
-                        pilotos_apostados_ant = aposta_existente['pilotos'].split(",")
-                        fichas_ant = list(map(int, aposta_existente['fichas'].split(",")))
-                        piloto_11_ant = aposta_existente['piloto_11']
-                    else:
-                        fichas_ant = []
-                        piloto_11_ant = ""
+                        if ok_auto:
+                            st.success(msg_auto)
+                            st.session_state["aposta_form_force_reload"] = True
+                            st.rerun()
+                        else:
+                            st.error(msg_auto)
+                nome_prova = provas[provas['id'] == prova_id]['nome'].values[0]
+                tipo_raw = provas[provas['id'] == prova_id]['tipo'].values[0] if not provas[provas['id']
+                                                                                            == prova_id].empty else 'Normal'
+                tipo_prova = 'Sprint' if str(tipo_raw).strip().lower(
+                ) == 'sprint' or 'sprint' in str(nome_prova).lower() else 'Normal'
+                regras = get_regras_aplicaveis(temporada, tipo_prova)
+                quantidade_fichas = int(regras.get('quantidade_fichas', 15))
+                min_pilotos_regra = int(
+                    regras.get(
+                        'qtd_minima_pilotos',
+                        regras.get(
+                            'min_pilotos',
+                            3)))
+                fichas_max_por_piloto = int(
+                    regras.get(
+                        'fichas_por_piloto',
+                        quantidade_fichas))
+                permite_mesma_equipe = bool(regras.get('mesma_equipe', False))
+                aposta_existente = apostas_df[(apostas_df['usuario_id'] == user['id']) & (
+                    apostas_df['prova_id'] == prova_id)]
+                max_linhas = max(10, int(min_pilotos_regra))
+                pilotos_apostados_ant, fichas_ant, piloto_11_ant = [], [], ""
+                if not aposta_existente.empty:
+                    aposta_existente = aposta_existente.iloc[0]
+                    pilotos_apostados_ant = aposta_existente['pilotos'].split(
+                        ",")
+                    fichas_ant = list(
+                        map(int, aposta_existente['fichas'].split(",")))
+                    piloto_11_ant = aposta_existente['piloto_11']
+                else:
+                    fichas_ant = []
+                    piloto_11_ant = ""
 
-                    prova_id_form = st.session_state.get("aposta_form_prova_id")
-                    force_reload_form = bool(st.session_state.get("aposta_form_force_reload", False))
-                    if prova_id_form != prova_id or force_reload_form:
-                        for i in range(max_linhas):
-                            st.session_state[f"piloto_aposta_{i}"] = (
-                                pilotos_apostados_ant[i]
-                                if i < len(pilotos_apostados_ant) and pilotos_apostados_ant[i] in pilotos
-                                else "Nenhum"
-                            )
-                            st.session_state[f"fichas_aposta_{i}"] = int(fichas_ant[i]) if i < len(fichas_ant) else 0
-
-                        if piloto_11_ant in pilotos:
-                            st.session_state["piloto_11"] = piloto_11_ant
-                        elif pilotos:
-                            st.session_state["piloto_11"] = pilotos[0]
-
-                        st.session_state["aposta_form_prova_id"] = prova_id
-                        st.session_state["aposta_form_force_reload"] = False
-
-                    erros_box = st.empty()
-                    erros_atuais = st.session_state.get("aposta_erros", [])
-                    if erros_atuais:
-                        with erros_box:
-                            for msg in erros_atuais:
-                                st.error(msg)
-
-                    st.markdown("### Etapa 2 de 3 - Monte sua aposta")
-                    st.write(
-                        f"Escolha seus pilotos e distribua suas fichas entre eles de acordo com as regras "
-                        f"(mínimo de {min_pilotos_regra} pilotos com fichas > 0)."
-                    )
-                    pilotos_aposta, fichas_aposta = [], []
-                    min_campos_visiveis = max(1, min(int(min_pilotos_regra), int(max_linhas)))
+                prova_id_form = st.session_state.get("aposta_form_prova_id")
+                force_reload_form = bool(
+                    st.session_state.get(
+                        "aposta_form_force_reload", False))
+                if prova_id_form != prova_id or force_reload_form:
                     for i in range(max_linhas):
-                        mostrar = False
-                        if i < min_campos_visiveis:
-                            mostrar = True
-                        elif i < max_linhas and len([p for p in pilotos_aposta if p != "Nenhum"]) == i and sum(fichas_aposta) < quantidade_fichas:
-                            mostrar = True
-                        if mostrar:
-                            col1, col2 = st.columns([3, 1])
-                            with col1:
-                                key_piloto = f"piloto_aposta_{i}"
-                                if key_piloto not in st.session_state:
-                                    st.session_state[key_piloto] = (
-                                        pilotos_apostados_ant[i]
-                                        if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos
-                                        else "Nenhum"
-                                    )
-                                piloto_sel = st.selectbox(
-                                    f"Piloto {i+1}",
-                                    ["Nenhum"] + pilotos,
-                                    key=key_piloto
+                        st.session_state[f"piloto_aposta_{i}"] = (
+                            pilotos_apostados_ant[i]
+                            if i < len(pilotos_apostados_ant) and pilotos_apostados_ant[i] in pilotos
+                            else "Nenhum"
+                        )
+                        st.session_state[f"fichas_aposta_{i}"] = int(
+                            fichas_ant[i]) if i < len(fichas_ant) else 0
+
+                    if piloto_11_ant in pilotos:
+                        st.session_state["piloto_11"] = piloto_11_ant
+                    elif pilotos:
+                        st.session_state["piloto_11"] = pilotos[0]
+
+                    st.session_state["aposta_form_prova_id"] = prova_id
+                    st.session_state["aposta_form_force_reload"] = False
+
+                erros_box = st.empty()
+                erros_atuais = st.session_state.get("aposta_erros", [])
+                if erros_atuais:
+                    with erros_box:
+                        for msg in erros_atuais:
+                            st.error(msg)
+
+                st.markdown("### Etapa 2 de 3 - Monte sua aposta")
+                st.write(
+                    f"Escolha seus pilotos e distribua suas fichas entre eles de acordo com as regras "
+                    f"(mínimo de {min_pilotos_regra} pilotos com fichas > 0)."
+                )
+                pilotos_aposta, fichas_aposta = [], []
+                min_campos_visiveis = max(
+                    1, min(int(min_pilotos_regra), int(max_linhas)))
+                for i in range(max_linhas):
+                    mostrar = False
+                    if i < min_campos_visiveis:
+                        mostrar = True
+                    elif i < max_linhas and len([p for p in pilotos_aposta if p != "Nenhum"]) == i and sum(fichas_aposta) < quantidade_fichas:
+                        mostrar = True
+                    if mostrar:
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            key_piloto = f"piloto_aposta_{i}"
+                            if key_piloto not in st.session_state:
+                                st.session_state[key_piloto] = (
+                                    pilotos_apostados_ant[i]
+                                    if len(pilotos_apostados_ant) > i and pilotos_apostados_ant[i] in pilotos
+                                    else "Nenhum"
                                 )
-                            with col2:
-                                if piloto_sel != "Nenhum":
-                                    key_fichas = f"fichas_aposta_{i}"
-                                    if key_fichas not in st.session_state:
-                                        st.session_state[key_fichas] = int(fichas_ant[i]) if len(fichas_ant) > i else 0
-                                    valor_ficha = st.number_input(
-                                        f"Fichas para {piloto_sel}", min_value=0, max_value=fichas_max_por_piloto,
-                                        key=key_fichas
-                                    )
-                                else:
-                                    valor_ficha = 0
-                            pilotos_aposta.append(piloto_sel)
-                            fichas_aposta.append(valor_ficha)
-                        else:
-                            pilotos_aposta.append("Nenhum")
-                            fichas_aposta.append(0)
-
-                    pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
-                    fichas_validas = [f for i, f in enumerate(fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
-                    pilotos_com_ficha = [
-                        p for i, p in enumerate(pilotos_aposta)
-                        if p != "Nenhum" and int(fichas_aposta[i]) > 0
-                    ]
-                    fichas_com_ficha = [
-                        int(f) for i, f in enumerate(fichas_aposta)
-                        if pilotos_aposta[i] != "Nenhum" and int(f) > 0
-                    ]
-                    equipes_apostadas = [pilotos_equipe[p] for p in pilotos_validos]
-                    total_fichas = sum(fichas_validas)
-
-                    total_ok = total_fichas == quantidade_fichas
-                    total_cor = "#1f9d55" if total_ok else "#c62828"
-                    total_status = "Correto" if total_ok else "Incorreto"
-                    diferenca_fichas = quantidade_fichas - total_fichas
-                    if total_ok:
-                        total_detalhe = "total exato"
-                    elif diferenca_fichas > 0:
-                        total_detalhe = f"faltam {diferenca_fichas}"
+                            piloto_sel = st.selectbox(
+                                f"Piloto {i + 1}",
+                                ["Nenhum"] + pilotos,
+                                key=key_piloto
+                            )
+                        with col2:
+                            if piloto_sel != "Nenhum":
+                                key_fichas = f"fichas_aposta_{i}"
+                                if key_fichas not in st.session_state:
+                                    st.session_state[key_fichas] = int(
+                                        fichas_ant[i]) if len(fichas_ant) > i else 0
+                                valor_ficha = st.number_input(
+                                    f"Fichas para {piloto_sel}",
+                                    min_value=0,
+                                    max_value=fichas_max_por_piloto,
+                                    key=key_fichas)
+                            else:
+                                valor_ficha = 0
+                        pilotos_aposta.append(piloto_sel)
+                        fichas_aposta.append(valor_ficha)
                     else:
-                        total_detalhe = f"sobram {abs(diferenca_fichas)}"
-                    st.markdown(
-                        (
-                            "<div style=\"padding:10px 12px;border-radius:8px;"
-                            "border:1px solid #d0d7de;background:#f8f9fa;margin:8px 0 12px 0;\">"
-                            "<strong>Total de fichas:</strong> "
-                            f"<span style='color:{total_cor};font-weight:700'>{total_fichas}/{quantidade_fichas}</span> "
-                            f"<span style='color:{total_cor};font-weight:600'>({total_status})</span> "
-                            f"<span style='color:{total_cor};font-weight:600'>- {total_detalhe}</span>"
-                            "</div>"
-                        ),
-                        unsafe_allow_html=True,
-                    )
+                        pilotos_aposta.append("Nenhum")
+                        fichas_aposta.append(0)
 
-                    passo2_ok = total_ok and len(pilotos_com_ficha) >= min_pilotos_regra
-                    st.progress(1.0 if passo2_ok else 0.67, text="Progresso do preenchimento")
+                pilotos_validos = [p for p in pilotos_aposta if p != "Nenhum"]
+                fichas_validas = [f for i, f in enumerate(
+                    fichas_aposta) if pilotos_aposta[i] != "Nenhum"]
+                pilotos_com_ficha = [
+                    p for i, p in enumerate(pilotos_aposta)
+                    if p != "Nenhum" and int(fichas_aposta[i]) > 0
+                ]
+                fichas_com_ficha = [
+                    int(f) for i, f in enumerate(fichas_aposta)
+                    if pilotos_aposta[i] != "Nenhum" and int(f) > 0
+                ]
+                total_fichas = sum(fichas_validas)
 
-                    pilotos_11_opcoes = [p for p in pilotos if p not in pilotos_validos]
-                    if not pilotos_11_opcoes:
-                        pilotos_11_opcoes = pilotos
-                    if pilotos_11_opcoes:
-                        if st.session_state.get("piloto_11") not in pilotos_11_opcoes:
-                            st.session_state["piloto_11"] = pilotos_11_opcoes[0]
-                    piloto_11 = st.selectbox(
-                        "Palpite para 11º colocado", pilotos_11_opcoes,
-                        key="piloto_11"
-                    )
+                total_ok = total_fichas == quantidade_fichas
+                total_cor = "#1f9d55" if total_ok else "#c62828"
+                total_status = "Correto" if total_ok else "Incorreto"
+                diferenca_fichas = quantidade_fichas - total_fichas
+                if total_ok:
+                    total_detalhe = "total exato"
+                elif diferenca_fichas > 0:
+                    total_detalhe = f"faltam {diferenca_fichas}"
+                else:
+                    total_detalhe = f"sobram {abs(diferenca_fichas)}"
+                st.markdown(
+                    (
+                        "<div style=\"padding:10px 12px;border-radius:8px;"
+                        "border:1px solid #d0d7de;background:#f8f9fa;margin:8px 0 12px 0;\">"
+                        "<strong>Total de fichas:</strong> "
+                        f"<span style='color:{total_cor};font-weight:700'>{total_fichas}/{quantidade_fichas}</span> "
+                        f"<span style='color:{total_cor};font-weight:600'>({total_status})</span> "
+                        f"<span style='color:{total_cor};font-weight:600'>- {total_detalhe}</span>"
+                        "</div>"
+                    ),
+                    unsafe_allow_html=True,
+                )
 
-                    st.markdown("### Etapa 3 de 3 - Revise e confirme")
-                    st.caption(
-                        f"Resumo rapido: {len(pilotos_com_ficha)} pilotos com fichas, "
-                        f"total {total_fichas}/{quantidade_fichas}, 11o: {piloto_11}."
-                    )
+                passo2_ok = total_ok and len(
+                    pilotos_com_ficha) >= min_pilotos_regra
+                st.progress(
+                    1.0 if passo2_ok else 0.67,
+                    text="Progresso do preenchimento")
 
-                    if st.button("Efetivar Aposta"):
-                        erros = []
-                        if len(set(pilotos_com_ficha)) != len(pilotos_com_ficha):
-                            erros.append("Não é permitido apostar em dois pilotos iguais.")
-                        equipes_com_ficha = [pilotos_equipe[p] for p in pilotos_com_ficha]
-                        if not permite_mesma_equipe and len(set(equipes_com_ficha)) < len(equipes_com_ficha):
-                            erros.append("Não é permitido apostar em dois pilotos da mesma equipe.")
-                        if len(pilotos_com_ficha) < min_pilotos_regra:
-                            erros.append(
-                                f"Você deve definir fichas para pelo menos {min_pilotos_regra} pilotos. "
-                                f"(Atual: {len(pilotos_com_ficha)})"
-                            )
-                        if total_fichas > quantidade_fichas:
-                            erros.append(f"A soma das fichas não pode ser maior que {quantidade_fichas}.")
-                        elif total_fichas < quantidade_fichas:
-                            faltam = quantidade_fichas - total_fichas
-                            erros.append(f"A soma das fichas deve ser exatamente {quantidade_fichas} (faltam {faltam}).")
-                        if fichas_com_ficha and max(fichas_com_ficha) > fichas_max_por_piloto:
-                            erros.append(f"Máximo de {fichas_max_por_piloto} fichas por piloto.")
-                        if piloto_11 in pilotos_com_ficha:
-                            erros.append("O 11º colocado não pode ser um dos pilotos apostados.")
+                pilotos_11_opcoes = [
+                    p for p in pilotos if p not in pilotos_validos]
+                if not pilotos_11_opcoes:
+                    pilotos_11_opcoes = pilotos
+                if pilotos_11_opcoes:
+                    if st.session_state.get(
+                            "piloto_11") not in pilotos_11_opcoes:
+                        st.session_state["piloto_11"] = pilotos_11_opcoes[0]
+                piloto_11 = st.selectbox(
+                    "Palpite para 11º colocado", pilotos_11_opcoes,
+                    key="piloto_11"
+                )
 
-                        if erros:
-                            st.session_state["aposta_erros"] = erros
-                            with erros_box:
-                                for msg in erros:
-                                    st.error(msg)
-                        else:
-                            if "aposta_erros" in st.session_state:
-                                del st.session_state["aposta_erros"]
+                st.markdown("### Etapa 3 de 3 - Revise e confirme")
+                st.caption(
+                    f"Resumo rapido: {len(pilotos_com_ficha)} pilotos com fichas, "
+                    f"total {total_fichas}/{quantidade_fichas}, 11o: {piloto_11}."
+                )
 
-                            def _report_aposta_error(msg: str) -> None:
+                if st.button("Efetivar Aposta"):
+                    erros = []
+                    if len(set(pilotos_com_ficha)) != len(pilotos_com_ficha):
+                        erros.append(
+                            "Não é permitido apostar em dois pilotos iguais.")
+                    equipes_com_ficha = [pilotos_equipe[p]
+                                         for p in pilotos_com_ficha]
+                    if not permite_mesma_equipe and len(
+                            set(equipes_com_ficha)) < len(equipes_com_ficha):
+                        erros.append(
+                            "Não é permitido apostar em dois pilotos da mesma equipe.")
+                    if len(pilotos_com_ficha) < min_pilotos_regra:
+                        erros.append(
+                            f"Você deve definir fichas para pelo menos {min_pilotos_regra} pilotos. "
+                            f"(Atual: {len(pilotos_com_ficha)})"
+                        )
+                    if total_fichas > quantidade_fichas:
+                        erros.append(
+                            f"A soma das fichas não pode ser maior que {quantidade_fichas}.")
+                    elif total_fichas < quantidade_fichas:
+                        faltam = quantidade_fichas - total_fichas
+                        erros.append(
+                            f"A soma das fichas deve ser exatamente {quantidade_fichas} (faltam {faltam}).")
+                    if fichas_com_ficha and max(
+                            fichas_com_ficha) > fichas_max_por_piloto:
+                        erros.append(
+                            f"Máximo de {fichas_max_por_piloto} fichas por piloto.")
+                    if piloto_11 in pilotos_com_ficha:
+                        erros.append(
+                            "O 11º colocado não pode ser um dos pilotos apostados.")
+
+                    if erros:
+                        st.session_state["aposta_erros"] = erros
+                        with erros_box:
+                            for msg in erros:
                                 st.error(msg)
+                    else:
+                        if "aposta_erros" in st.session_state:
+                            del st.session_state["aposta_erros"]
 
-                            ok = salvar_aposta(
-                                user['id'], prova_id, pilotos_com_ficha,
-                                fichas_com_ficha, piloto_11, nome_prova,
-                                automatica=0,
-                                temporada=temporada,
-                                error_reporter=_report_aposta_error,
-                            )
-                            if ok:
-                                st.success("Aposta registrada/atualizada!")
-                                st.rerun()
+                        def _report_aposta_error(msg: str) -> None:
+                            st.error(msg)
+
+                        ok = salvar_aposta(
+                            user['id'], prova_id, pilotos_com_ficha,
+                            fichas_com_ficha, piloto_11, nome_prova,
+                            automatica=0,
+                            temporada=temporada,
+                            error_reporter=_report_aposta_error,
+                        )
+                        if ok:
+                            st.success("Aposta registrada/atualizada!")
+                            st.rerun()
             else:
-                st.warning("Administração deve cadastrar provas e pilotos antes das apostas.")
+                st.warning(
+                    "Administração deve cadastrar provas e pilotos antes das apostas.")
 
     if show_historico_tab:
         with tab_map[f"Apostas - {season}"]:
             if is_inactive_profile:
-                st.info("Usuário inativo: você só pode visualizar suas apostas anteriores.")
+                st.info(
+                    "Usuário inativo: você só pode visualizar suas apostas anteriores.")
 
-            temporada = st.session_state.get('temporada', str(now_sao_paulo().year))
+            temporada = st.session_state.get(
+                'temporada', str(now_sao_paulo().year))
             if apostas_df.empty:
                 apostas_df = get_apostas_df(temporada)
             if provas_df.empty:
@@ -466,16 +536,19 @@ def participante_view():
             if 'temporada' in apostas_part.columns:
                 apostas_part = apostas_part[apostas_part['temporada'] == temporada]
             # fix: só aplica filtro por provas_df quando ele não está vazio;
-            # evita descartar todas as apostas quando force_change=True (provas_df = DataFrame()).
+            # evita descartar todas as apostas quando force_change=True
+            # (provas_df = DataFrame()).
             if not provas_df.empty and 'id' in provas_df.columns:
-                apostas_part = apostas_part[apostas_part['prova_id'].isin(provas_df['id'])]
+                apostas_part = apostas_part[apostas_part['prova_id'].isin(
+                    provas_df['id'])]
             if isinstance(apostas_part, pd.DataFrame):
                 apostas_part = apostas_part.sort_values(by='prova_id')
             pontos_f1 = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
             pontos_sprint = [8, 7, 6, 5, 4, 3, 2, 1]
 
             if not apostas_part.empty:
-                nomes_abas = [f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
+                nomes_abas = [
+                    f"{ap['nome_prova']} ({ap['prova_id']})" for _, ap in apostas_part.iterrows()]
                 abas = st.tabs(nomes_abas)
                 for aba, (_, aposta) in zip(abas, apostas_part.iterrows()):
                     with aba:
@@ -485,29 +558,36 @@ def participante_view():
                         pilotos_apostados = aposta['pilotos'].split(',')
                         piloto_11_apostado = aposta['piloto_11']
                         automatica = aposta.get('automatica', 0)
-                        tipo_raw = provas_df[provas_df['id'] == prova_id]['tipo'].values[0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
-                        tipo_prova = 'Sprint' if str(tipo_raw).strip().lower() == 'sprint' or 'sprint' in str(prova_nome).lower() else 'Normal'
+                        tipo_raw = provas_df[provas_df['id'] == prova_id]['tipo'].values[
+                            0] if not provas_df[provas_df['id'] == prova_id].empty else 'Normal'
+                        tipo_prova = 'Sprint' if str(tipo_raw).strip().lower(
+                        ) == 'sprint' or 'sprint' in str(prova_nome).lower() else 'Normal'
                         regras = get_regras_aplicaveis(temporada, tipo_prova)
                         resultado_row = resultados_df[resultados_df['prova_id'] == prova_id]
                         if not resultado_row.empty:
                             try:
-                                posicoes_dict = ast.literal_eval(resultado_row.iloc[0]['posicoes'])
+                                posicoes_dict = ast.literal_eval(
+                                    resultado_row.iloc[0]['posicoes'])
                             except Exception:
                                 posicoes_dict = {}
                         else:
                             posicoes_dict = {}
                         # Extrair dados de abandono antes de montar a tabela
                         abandonos = set()
-                        if regras.get('penalidade_abandono') and not resultado_row.empty and 'abandono_pilotos' in resultado_row.columns:
-                            raw_aband = resultado_row.iloc[0].get('abandono_pilotos', '')
+                        if regras.get(
+                                'penalidade_abandono') and not resultado_row.empty and 'abandono_pilotos' in resultado_row.columns:
+                            raw_aband = resultado_row.iloc[0].get(
+                                'abandono_pilotos', '')
                             if raw_aband is None:
                                 raw_aband = ''
-                            abandonos = {p.strip() for p in str(raw_aband).split(',') if p and p.strip()}
-                        
+                            abandonos = {
+                                p.strip() for p in str(raw_aband).split(',') if p and p.strip()}
+
                         dados = []
                         total_pontos = 0
                         if tipo_prova == 'Sprint':
-                            pontos_lista = regras.get('pontos_sprint_posicoes') or regras.get('pontos_posicoes') or []
+                            pontos_lista = regras.get('pontos_sprint_posicoes') or regras.get(
+                                'pontos_posicoes') or []
                             if not pontos_lista:
                                 pontos_lista = pontos_sprint
                         else:
@@ -515,16 +595,21 @@ def participante_view():
                             if not pontos_lista:
                                 pontos_lista = pontos_f1
                         n_pos = len(pontos_lista)
-                        piloto_para_pos = {str(v).strip(): int(k) for k, v in posicoes_dict.items()}
+                        piloto_para_pos = {
+                            str(v).strip(): int(k) for k,
+                            v in posicoes_dict.items()}
                         for i in range(n_pos):
-                            aposta_piloto = pilotos_apostados[i] if i < len(pilotos_apostados) else ""
+                            aposta_piloto = pilotos_apostados[i] if i < len(
+                                pilotos_apostados) else ""
                             ficha = fichas[i] if i < len(fichas) else 0
-                            pos_real = piloto_para_pos.get(str(aposta_piloto).strip(), None)
+                            pos_real = piloto_para_pos.get(
+                                str(aposta_piloto).strip(), None)
                             pontos = 0
                             if pos_real is not None and 1 <= pos_real <= n_pos:
                                 pontos = ficha * pontos_lista[pos_real - 1]
                                 total_pontos += pontos
-                            dnf_status = "DNF" if str(aposta_piloto).strip() in abandonos else "-"
+                            dnf_status = "DNF" if str(
+                                aposta_piloto).strip() in abandonos else "-"
                             dados.append({
                                 "Piloto Apostado": aposta_piloto,
                                 "Fichas": ficha,
@@ -534,39 +619,51 @@ def participante_view():
                             })
                         piloto_11_real = str(posicoes_dict.get(11, "")).strip()
                         bonus_11 = regras.get('pontos_11_colocado', 25)
-                        pontos_11_col = bonus_11 if str(piloto_11_apostado).strip() == piloto_11_real else 0
+                        pontos_11_col = bonus_11 if str(
+                            piloto_11_apostado).strip() == piloto_11_real else 0
                         total_pontos += pontos_11_col
                         penalidade_abandono = 0
                         pilotos_abandonados = []
                         if abandonos:
-                            pilotos_abandonados = [p for p in pilotos_apostados if p.strip() in abandonos]
+                            pilotos_abandonados = [
+                                p for p in pilotos_apostados if p.strip() in abandonos]
                             num_aband = len(pilotos_abandonados)
-                            penalidade_abandono = int(regras.get('pontos_penalidade', 0)) * num_aband
+                            penalidade_abandono = int(regras.get(
+                                'pontos_penalidade', 0)) * num_aband
                             if penalidade_abandono:
                                 total_pontos -= penalidade_abandono
-                        if tipo_prova == 'Sprint' and regras.get('pontos_dobrada'):
+                        if tipo_prova == 'Sprint' and regras.get(
+                                'pontos_dobrada'):
                             total_pontos = total_pontos * 2
                         penalidade_auto = 0
                         if automatica and int(automatica) >= 2:
-                            penalidade_auto_percent = regras.get('penalidade_auto_percent', 20)
-                            fator = max(0, 1 - (float(penalidade_auto_percent) / 100))
+                            penalidade_auto_percent = regras.get(
+                                'penalidade_auto_percent', 20)
+                            fator = max(
+                                0, 1 - (float(penalidade_auto_percent) / 100))
                             desconto = round(total_pontos * fator, 2)
                             penalidade_auto = round(total_pontos - desconto, 2)
                             total_pontos = desconto
                         st.markdown(f"#### {prova_nome} ({tipo_prova})")
                         if tipo_prova == 'Sprint':
                             if regras.get('pontos_dobrada'):
-                                st.write("**Sprint com pontuação dobrada:** Sim")
+                                st.write(
+                                    "**Sprint com pontuação dobrada:** Sim")
                             else:
-                                st.write("**Sprint com pontuação dobrada:** Não")
+                                st.write(
+                                    "**Sprint com pontuação dobrada:** Não")
                         st.dataframe(pd.DataFrame(dados), hide_index=True)
-                        st.write(f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
+                        st.write(
+                            f"**11º Apostado:** {piloto_11_apostado} | **11º Real:** {piloto_11_real} | **Pontos 11º:** {pontos_11_col}")
                         if penalidade_abandono:
                             pilotos_str = ", ".join(pilotos_abandonados)
-                            st.write(f"**Penalidade por abandono (DNF):** {pilotos_str} → -{penalidade_abandono} pontos")
+                            st.write(
+                                f"**Penalidade por abandono (DNF):** {pilotos_str} → -{penalidade_abandono} pontos")
                         if penalidade_auto:
-                            st.write(f"**Penalidade aposta automática:** -{penalidade_auto:.2f}")
-                        st.write(f"**Total de Pontos na Prova:** {total_pontos:.2f}")
+                            st.write(
+                                f"**Penalidade aposta automática:** -{penalidade_auto:.2f}")
+                        st.write(
+                            f"**Total de Pontos na Prova:** {total_pontos:.2f}")
                         st.markdown("---")
             else:
                 st.info("Nenhuma aposta registrada.")
@@ -578,7 +675,8 @@ def participante_view():
 
             if descarte_ativo:
                 if not apostas_part.empty:
-                    pontos_por_prova = calcular_pontuacao_lote(apostas_part, resultados_df, provas_df, temporada_descarte=temporada)
+                    pontos_por_prova = calcular_pontuacao_lote(
+                        apostas_part, resultados_df, provas_df, temporada_descarte=temporada)
 
                     provas_pontos = []
                     for idx, (_, aposta) in enumerate(apostas_part.iterrows()):
@@ -594,7 +692,8 @@ def participante_view():
 
                     if provas_pontos:
                         df_provas_pontos = pd.DataFrame(provas_pontos)
-                        prova_descarte = df_provas_pontos.loc[df_provas_pontos['pontos'].idxmin()]
+                        prova_descarte = df_provas_pontos.loc[df_provas_pontos['pontos'].idxmin(
+                        )]
 
                         st.info(
                             f"✅ **Regra de Descarte ATIVA para {temporada}**\n\n"
@@ -618,23 +717,29 @@ def participante_view():
                     f"Todas as provas serão contabilizadas no cálculo final do campeonato."
                 )
 
-            # --------- Gráfico de evolução da posição do participante logado ---------
+            # --------- Gráfico de evolução da posição do participante logado -
             st.subheader("Evolução da Posição no Campeonato")
             user_id_logado = user['id']
             user_nome_logado = user['nome']
             try:
                 df_posicoes = get_posicoes_participantes_df(temporada)
             except Exception:
-                st.info("Nenhum histórico de posições disponível ainda. Quando houver dados, eles aparecerão aqui.")
+                st.info(
+                    "Nenhum histórico de posições disponível ainda. Quando houver dados, eles aparecerão aqui.")
                 df_posicoes = pd.DataFrame()
 
-            if not df_posicoes.empty and {'usuario_id', 'prova_id', 'posicao'}.issubset(df_posicoes.columns):
-                posicoes_part = df_posicoes[df_posicoes['usuario_id'] == user_id_logado]
+            if not df_posicoes.empty and {
+                    'usuario_id', 'prova_id', 'posicao'}.issubset(
+                    df_posicoes.columns):
+                posicoes_part = df_posicoes[df_posicoes['usuario_id']
+                                            == user_id_logado]
                 if 'temporada' in df_posicoes.columns:
-                    posicoes_part = posicoes_part[(posicoes_part['temporada'] == temporada) | (posicoes_part['temporada'].isna())]
+                    posicoes_part = posicoes_part[(posicoes_part['temporada'] == temporada) | (
+                        posicoes_part['temporada'].isna())]
                 else:
                     provas_ids_temp = set(provas_df['id'].tolist())
-                    posicoes_part = posicoes_part[posicoes_part['prova_id'].isin(provas_ids_temp)]
+                    posicoes_part = posicoes_part[posicoes_part['prova_id'].isin(
+                        provas_ids_temp)]
                 posicoes_part = posicoes_part.sort_values('prova_id')
                 if not posicoes_part.empty:
                     provas_nomes = [
@@ -658,11 +763,12 @@ def participante_view():
                     )
                     st.plotly_chart(fig_pos, width="stretch")
                 else:
-                    st.info("Ainda não há histórico de posições para o seu usuário.")
+                    st.info(
+                        "Ainda não há histórico de posições para o seu usuário.")
             else:
                 st.info("Ainda não há histórico de posições registrado.")
 
-    # ------------------ Aba: Histórico (consolidado multi-temporada) ----------------------
+    # ------------------ Aba: Histórico (consolidado multi-temporada) --------
     if show_historico_geral_tab:
         with tab_map["Histórico"]:
             _render_historico_geral(user['id'])
@@ -673,9 +779,18 @@ def participante_view():
         st.write(f"Usuário: **{user['nome']}**")
         novo_email = st.text_input("Email cadastrado", value=user['email'])
         st.subheader("Alterar Senha")
-        senha_atual = st.text_input("Senha Atual", type="password", key="senha_atual")
-        nova_senha = st.text_input("Nova Senha", type="password", key="nova_senha")
-        confirma_senha = st.text_input("Confirme Nova Senha", type="password", key="confirma_senha")
+        senha_atual = st.text_input(
+            "Senha Atual",
+            type="password",
+            key="senha_atual")
+        nova_senha = st.text_input(
+            "Nova Senha",
+            type="password",
+            key="nova_senha")
+        confirma_senha = st.text_input(
+            "Confirme Nova Senha",
+            type="password",
+            key="confirma_senha")
 
         if st.button("Salvar Alterações (Conta)"):
             erros = []
@@ -684,12 +799,14 @@ def participante_view():
             elif novo_email != user['email']:
                 email_cadastrado = get_user_by_email(novo_email)
                 if email_cadastrado and email_cadastrado['id'] != user['id']:
-                    erros.append("O email informado já está em uso por outro usuário.")
+                    erros.append(
+                        "O email informado já está em uso por outro usuário.")
 
             if senha_atual or nova_senha or confirma_senha:
                 if not senha_atual:
                     erros.append("Informe a senha atual para alterar a senha.")
-                # fix(crítico): coluna real é `senha_hash` — era `user['senha']` (KeyError silencioso)
+                # fix(crítico): coluna real é `senha_hash` — era
+                # `user['senha']` (KeyError silencioso)
                 elif not check_password(senha_atual, user['senha_hash']):
                     erros.append("Senha atual incorreta.")
                 elif not nova_senha:
@@ -702,7 +819,8 @@ def participante_view():
                     st.error(erro)
             else:
                 atualizado = False
-                if novo_email and novo_email.strip() != "" and novo_email != user['email']:
+                if novo_email and novo_email.strip(
+                ) != "" and novo_email != user['email']:
                     if update_user_email(user['id'], novo_email):
                         st.success("Email atualizado!")
                         atualizado = True
@@ -783,7 +901,8 @@ def _render_historico_geral(usuario_id: int) -> None:
     with col5:
         st.metric(
             label="Acertos 11º",
-            value=str(resumo.total_acertos_11),
+            value=str(
+                resumo.total_acertos_11),
             help="Total de vezes que acertou o 11º colocado em todas as temporadas",
         )
 
@@ -809,7 +928,8 @@ def _render_historico_geral(usuario_id: int) -> None:
 
         # Coleta os últimos 5 anos únicos
         todas_temporadas = sorted(fichas_dict.keys())
-        anos_selecionados = sorted(todas_temporadas)[-5:] if len(todas_temporadas) > 5 else sorted(todas_temporadas)
+        anos_selecionados = sorted(
+            todas_temporadas)[-5:] if len(todas_temporadas) > 5 else sorted(todas_temporadas)
 
         # Ordena pilotos por total de fichas (descendente)
         pilotos_ordenados = sorted(

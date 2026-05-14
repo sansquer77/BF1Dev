@@ -1,6 +1,7 @@
 import streamlit as st
 from utils.helpers import render_page_header
 
+
 def main():
     render_page_header(st, "Sobre o BF1")
 
@@ -56,6 +57,7 @@ def main():
 
     <a href="https://www.digitalocean.com/?refcode=7a57329868da&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge"><img src="https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg" alt="DigitalOcean Referral Badge" /></a>
     """, unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     main()

@@ -10,7 +10,9 @@ from db.db_schema import db_connect
 
 def _sanitize_identifier(identifier: str) -> str:
     value = (identifier or "").strip()
-    if not value.replace("_", "").isalnum() or not (value[0].isalpha() or value[0] == "_"):
+    if not value.replace(
+            "_", "").isalnum() or not (
+            value[0].isalpha() or value[0] == "_"):
         raise ValueError(f"Invalid identifier: {identifier}")
     return value
 
@@ -32,7 +34,8 @@ def _table_columns(table_name: str) -> list[str]:
             """,
             (table_name,),
         )
-        return [str(r["column_name"]) for r in (c.fetchall() or []) if r and r["column_name"]]
+        return [str(r["column_name"])
+                for r in (c.fetchall() or []) if r and r["column_name"]]
 
 
 def _get_table_column_types(conn, table_name: str) -> dict[str, str]:
@@ -69,7 +72,8 @@ def _get_required_columns_for_insert(conn, table_name: str) -> list[str]:
         """,
         (table_name,),
     )
-    return [str(r["column_name"]) for r in (c.fetchall() or []) if r and r.get("column_name")]
+    return [str(r["column_name"])
+            for r in (c.fetchall() or []) if r and r.get("column_name")]
 
 
 def _get_fk_constraints(conn, table: str) -> list[dict[str, Any]]:
@@ -153,19 +157,27 @@ def _prevalidate_fk_values(
             distinct_keys.add(values)
 
         for key_values in distinct_keys:
-            where_sql = " AND ".join(f"{_quote_identifier(pc)} = %s" for pc in parent_cols)
+            where_sql = " AND ".join(
+                f"{_quote_identifier(pc)} = %s" for pc in parent_cols)
             check_sql = (
                 f"SELECT 1 FROM {_quote_identifier(parent_table)} "
                 f"WHERE {where_sql} LIMIT 1"
             )
             c.execute(check_sql, key_values)
             if c.fetchone() is None:
-                key_map = ", ".join(f"{lc}={val!r}" for lc, val in zip(local_cols, key_values))
-                errors.append(f"FK {fk_name}: valor não encontrado em {parent_table} ({key_map})")
+                key_map = ", ".join(
+                    f"{lc}={
+                        val!r}" for lc,
+                    val in zip(
+                        local_cols,
+                        key_values))
+                errors.append(
+                    f"FK {fk_name}: valor não encontrado em {parent_table} ({key_map})")
                 if len(errors) >= 10:
                     return errors
 
     return errors
+
 
 __all__ = [
     "_table_columns",

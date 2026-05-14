@@ -10,6 +10,7 @@ from services.data_access_backup import (
 )
 from utils.helpers import render_page_header
 
+
 def main():
     perfil = st.session_state.get("user_role", "participante")
     if perfil != "master":
@@ -50,7 +51,8 @@ def main():
     if confirmar_restore:
         upload_db()
     else:
-        st.info("Marque a confirmação para habilitar o upload de arquivo .sql de restauração.")
+        st.info(
+            "Marque a confirmação para habilitar o upload de arquivo .sql de restauração.")
 
     st.divider()
     st.header("Backup/Restauração de tabelas específicas")
@@ -67,7 +69,8 @@ def main():
     with col_a:
         if st.button("➕ Criar próxima temporada", width="stretch"):
             new_year = create_next_temporada()
-            st.success(f"✅ Temporada {new_year} criada/registrada com sucesso.")
+            st.success(
+                f"✅ Temporada {new_year} criada/registrada com sucesso.")
             st.rerun()
     with col_b:
         existing = list_temporadas()
@@ -75,7 +78,9 @@ def main():
             st.write("Temporadas cadastradas:")
             st.write(", ".join(existing))
         else:
-            st.info("Nenhuma temporada cadastrada. Botão acima cria a próxima temporada.")
+            st.info(
+                "Nenhuma temporada cadastrada. Botão acima cria a próxima temporada.")
+
 
 if __name__ == "__main__":
     main()

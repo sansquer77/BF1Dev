@@ -8,6 +8,7 @@ from services.championship_service import (
 )
 from db.db_utils import get_pilotos_df, get_usuarios_df
 
+
 def main():
     st.title("📣 Apostas do Campeonato")
 
@@ -35,10 +36,8 @@ def main():
 
     with st.form("form_aposta_campeonato"):
         champion = st.selectbox(
-            "Piloto Campeão",
-            pilotos,
-            index=pilotos.index(aposta_atual["champion"]) if aposta_atual else 0
-        )
+            "Piloto Campeão", pilotos, index=pilotos.index(
+                aposta_atual["champion"]) if aposta_atual else 0)
         vice = st.selectbox(
             "Piloto Vice-Campeão",
             pilotos,
@@ -55,7 +54,8 @@ def main():
             if champion == vice:
                 st.error("Campeão e vice não podem ser o mesmo piloto.")
             else:
-                ok = save_championship_bet(user_id, user_nome, champion, vice, team)
+                ok = save_championship_bet(
+                    user_id, user_nome, champion, vice, team)
                 if ok:
                     st.success("Aposta de campeonato salva com sucesso!")
                 else:
@@ -91,11 +91,18 @@ def main():
         st.markdown("## 📑 Todas as apostas do campeonato (admin)")
         apostas_df = get_championship_bets_df()
         if not apostas_df.empty:
-            apostas_df = apostas_df[["user_nome", "champion", "vice", "team", "bet_time"]]
-            apostas_df.columns = ["Participante", "Campeão", "Vice", "Equipe", "Data/Hora"]
+            apostas_df = apostas_df[["user_nome",
+                                     "champion", "vice", "team", "bet_time"]]
+            apostas_df.columns = [
+                "Participante",
+                "Campeão",
+                "Vice",
+                "Equipe",
+                "Data/Hora"]
             st.dataframe(apostas_df, use_container_width=True)
         else:
             st.info("Nenhuma aposta registrada por nenhum participante.")
+
 
 if __name__ == "__main__":
     main()

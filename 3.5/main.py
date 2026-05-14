@@ -8,6 +8,30 @@ Melhorias:
 - Tema Liquid Glass (responsivo mobile/desktop)
 - Detecção automática de Timezone do cliente
 """
+from services.auth_service import decode_token, clear_auth_cookies
+from ui.hall_da_fama import hall_da_fama
+from ui.sobre import main as sobre_view
+from ui.dashboard import main as dashboard_view
+from ui.backup import main as backup_view
+from ui.gestao_pilotos import main as gestao_pilotos_view
+from ui.gestao_regras import main as gestao_regras_view
+from ui.gestao_provas import main as gestao_provas_view
+from ui.log_acessos import main as log_acessos_view
+from ui.log_apostas import main as log_apostas_view
+from ui.classificacao import main as classificacao_view
+from ui.regulamento import main as regulamento_view
+from ui.analysis import main as analysis_view
+from ui.gestao_apostas import main as gestao_apostas_view
+from ui.championship_results import main as championship_results_view
+from ui.championship_bets import main as championship_bets_view
+from ui.calendario import main as calendario_view
+from ui.gestao_resultados import resultados_view
+from ui.usuarios import main as usuarios_view
+from ui.painel import participante_view
+from ui.login import login_view
+from db.master_user_manager import MasterUserManager
+from db.migrations import run_migrations
+from db.repo_users import get_user_by_id, get_usuario_temporadas_ativas
 import streamlit as st
 import logging
 import datetime
@@ -22,6 +46,8 @@ st.set_page_config(
 )
 
 # ============ CARREGAR ESTILOS CSS LIQUID GLASS ============
+
+
 def load_css():
     """Carrega o arquivo CSS customizado com tema Liquid Glass."""
     css_file = Path(__file__).parent / "assets" / "styles.css"
@@ -29,30 +55,31 @@ def load_css():
         with open(css_file, "r", encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
+
 def load_pwa_meta_tags():
     """Adiciona meta tags para PWA e iOS Add to Home Screen."""
     import base64
     from pathlib import Path
-    
+
     # Carregar ícone 180x180 como base64 (tamanho ideal para iOS)
     icon_path = Path(__file__).parent / "static" / "apple-touch-icon-180.png"
     if not icon_path.exists():
         icon_path = Path(__file__).parent / "static" / "apple-touch-icon.png"
-    
+
     # Carregar favicon como base64
     favicon_path = Path(__file__).parent / "static" / "favicon.ico"
-    
+
     icon_base64 = ""
     favicon_base64 = ""
-    
+
     if icon_path.exists():
         with open(icon_path, "rb") as f:
             icon_base64 = base64.b64encode(f.read()).decode()
-    
+
     if favicon_path.exists():
         with open(favicon_path, "rb") as f:
             favicon_base64 = base64.b64encode(f.read()).decode()
-    
+
     # Usar JavaScript para injetar as meta tags no <head> do documento
     if icon_base64 or favicon_base64:
         icon_data_uri = f"data:image/png;base64,{icon_base64}" if icon_base64 else ""
@@ -61,37 +88,37 @@ def load_pwa_meta_tags():
             <script>
             (function() {{
                 var head = document.getElementsByTagName('head')[0];
-                
+
                 // Remover meta tags antigas se existirem
                 document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove());
                 document.querySelectorAll('link[rel="icon"]').forEach(el => el.remove());
                 document.querySelectorAll('link[rel="manifest"]').forEach(el => el.remove());
-                
+
                 // Favicon via data URI
                 var favicon = document.createElement('link');
                 favicon.rel = 'icon';
                 favicon.type = 'image/x-icon';
                 favicon.href = '{favicon_data_uri}';
                 head.appendChild(favicon);
-                
+
                 // Manifest para PWA
                 var manifest = document.createElement('link');
                 manifest.rel = 'manifest';
                 manifest.href = '/static/manifest.json';
                 head.appendChild(manifest);
-                
+
                 // Apple Touch Icon (múltiplos tamanhos)
                 var link = document.createElement('link');
                 link.rel = 'apple-touch-icon';
                 link.href = '{icon_data_uri}';
                 head.appendChild(link);
-                
+
                 var link180 = document.createElement('link');
                 link180.rel = 'apple-touch-icon';
                 link180.sizes = '180x180';
                 link180.href = '{icon_data_uri}';
                 head.appendChild(link180);
-                
+
                 // Verificar/adicionar meta tags PWA
                 if (!document.querySelector('meta[name="apple-mobile-web-app-capable"]')) {{
                     var meta1 = document.createElement('meta');
@@ -99,14 +126,14 @@ def load_pwa_meta_tags():
                     meta1.content = 'yes';
                     head.appendChild(meta1);
                 }}
-                
+
                 if (!document.querySelector('meta[name="apple-mobile-web-app-title"]')) {{
                     var meta2 = document.createElement('meta');
                     meta2.name = 'apple-mobile-web-app-title';
                     meta2.content = 'BF1';
                     head.appendChild(meta2);
                 }}
-                
+
                 if (!document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')) {{
                     var meta3 = document.createElement('meta');
                     meta3.name = 'apple-mobile-web-app-status-bar-style';
@@ -116,7 +143,7 @@ def load_pwa_meta_tags():
             }})();
             </script>
         """, unsafe_allow_html=True)
-    
+
     st.markdown("""
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="theme-color" content="#d32f2f">
@@ -233,10 +260,13 @@ load_pwa_meta_tags()
 load_timezone_detector()
 
 # ============ SINCRONIZAÇÃO DE TIMEZONE PARA SESSION STATE ============
+
+
 def _sync_timezone_to_session():
     """Garante que client_timezone esteja sempre definido na sessão."""
     if "client_timezone" not in st.session_state:
         st.session_state["client_timezone"] = _TZ_DEFAULT
+
 
 # ============ CONFIGURAÇÃO DE LOGGING ============
 logging.basicConfig(
@@ -246,9 +276,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============ INICIALIZAÇÃO DO BANCO ============
-from db.repo_users import get_user_by_id, get_usuario_temporadas_ativas
-from db.migrations import run_migrations
-from db.master_user_manager import MasterUserManager
+
 
 @st.cache_resource(show_spinner=False)
 def bootstrap_app() -> bool:
@@ -262,27 +290,6 @@ def bootstrap_app() -> bool:
 bootstrap_app()
 
 # ============ IMPORTAÇÃO DAS VIEWS ============
-from ui.login import login_view
-from ui.painel import participante_view
-from ui.usuarios import main as usuarios_view
-from ui.gestao_resultados import resultados_view
-from ui.calendario import main as calendario_view
-from ui.championship_bets import main as championship_bets_view
-from ui.championship_results import main as championship_results_view
-from ui.gestao_apostas import main as gestao_apostas_view
-from ui.analysis import main as analysis_view
-from ui.regulamento import main as regulamento_view
-from ui.classificacao import main as classificacao_view
-from ui.log_apostas import main as log_apostas_view
-from ui.log_acessos import main as log_acessos_view
-from ui.gestao_provas import main as gestao_provas_view
-from ui.gestao_regras import main as gestao_regras_view
-from ui.gestao_pilotos import main as gestao_pilotos_view
-from ui.backup import main as backup_view
-from ui.dashboard import main as dashboard_view
-from ui.sobre import main as sobre_view
-from ui.hall_da_fama import hall_da_fama
-from services.auth_service import decode_token, clear_auth_cookies
 
 # ============ ESTADO INICIAL DA SESSÃO ============
 if 'pagina' not in st.session_state:
@@ -291,8 +298,11 @@ if 'token' not in st.session_state:
     st.session_state['token'] = None
 
 # ============ MENUS POR PERFIL ============
+
+
 def _calendario_label():
     return f"Calendário ({datetime.datetime.now().year})"
+
 
 def menu_master():
     return [
@@ -317,6 +327,7 @@ def menu_master():
         "Sobre",
     ]
 
+
 def menu_admin():
     return [
         "Painel do Participante",
@@ -335,6 +346,7 @@ def menu_admin():
         "Regulamento",
         "Sobre",
     ]
+
 
 def menu_participante():
     return [
@@ -491,8 +503,13 @@ def _flatten_grouped_menu(grouped_menu: dict[str, list[str]]) -> list[str]:
     return flattened
 
 
-def _normalize_grouped_menu(menu_items: list[str], grouped_menu: dict[str, list[str]]) -> tuple[list[str], dict[str, list[str]]]:
-    normalized_menu = {section: list(items) for section, items in grouped_menu.items()}
+def _normalize_grouped_menu(menu_items: list[str],
+                            grouped_menu: dict[str,
+                                               list[str]]) -> tuple[list[str],
+                                                                    dict[str,
+                                                                         list[str]]]:
+    normalized_menu = {section: list(items)
+                       for section, items in grouped_menu.items()}
 
     # Remove duplicatas mantendo a ordem por seção.
     for section_name, items in normalized_menu.items():
@@ -505,10 +522,12 @@ def _normalize_grouped_menu(menu_items: list[str], grouped_menu: dict[str, list[
             seen.add(item)
         normalized_menu[section_name] = deduped
 
-    has_logout = "Logout" in menu_items or any("Logout" in items for items in normalized_menu.values())
+    has_logout = "Logout" in menu_items or any(
+        "Logout" in items for items in normalized_menu.values())
     if has_logout:
         for section_name, items in normalized_menu.items():
-            normalized_menu[section_name] = [item for item in items if item != "Logout"]
+            normalized_menu[section_name] = [
+                item for item in items if item != "Logout"]
 
         participante_items = normalized_menu.setdefault("Participante", [])
         participante_items.append("Logout")
@@ -523,11 +542,13 @@ def _normalize_grouped_menu(menu_items: list[str], grouped_menu: dict[str, list[
     return _flatten_grouped_menu(normalized_menu), normalized_menu
 
 
-def _default_group_for_page(grouped_menu: dict[str, list[str]], page: str) -> str:
+def _default_group_for_page(
+        grouped_menu: dict[str, list[str]], page: str) -> str:
     for section_name, items in grouped_menu.items():
         if page in items:
             return section_name
     return next(iter(grouped_menu.keys()))
+
 
 def get_payload():
     token = st.session_state.get('token')
@@ -610,19 +631,23 @@ def _sync_session_from_token() -> bool:
     user_id = payload.get("user_id")
 
     st.session_state["user_id"] = user_id
-    st.session_state["user_nome"] = payload.get("nome", st.session_state.get("user_nome"))
+    st.session_state["user_nome"] = payload.get(
+        "nome", st.session_state.get("user_nome"))
 
     user = get_user_by_id(int(user_id)) if user_id else None
     if not user:
         st.session_state["user_role"] = perfil
-        st.session_state["user_status"] = str(payload.get("status", "")).strip().lower()
+        st.session_state["user_status"] = str(
+            payload.get("status", "")).strip().lower()
         st.session_state["allowed_seasons"] = []
         st.session_state["inactive_has_history"] = False
         return True
 
     status_usuario = str(user.get("status", "")).strip().lower()
     perfil_usuario = str(user.get("perfil", perfil)).strip().lower()
-    usuario_inativo = (status_usuario != "ativo") or (perfil_usuario == "inativo")
+    usuario_inativo = (
+        status_usuario != "ativo") or (
+        perfil_usuario == "inativo")
 
     if usuario_inativo:
         allowed_seasons = get_usuario_temporadas_ativas(int(user_id))
@@ -645,30 +670,37 @@ def _enforce_route_guard(pagina: str):
     _ensure_token_from_cookie()
     token = st.session_state.get("token")
     if not token:
-        _clear_session_and_redirect_login("Sessão ausente. Faça login novamente.")
+        _clear_session_and_redirect_login(
+            "Sessão ausente. Faça login novamente.")
 
     payload = decode_token(token)
     if not payload:
-        _clear_session_and_redirect_login("Sessão expirada ou inválida. Faça login novamente.")
+        _clear_session_and_redirect_login(
+            "Sessão expirada ou inválida. Faça login novamente.")
 
     perfil = str(payload.get("perfil", "participante")).strip().lower()
     user_id = payload.get("user_id")
 
     if not user_id:
-        _clear_session_and_redirect_login("Sessão inválida. Faça login novamente.")
+        _clear_session_and_redirect_login(
+            "Sessão inválida. Faça login novamente.")
 
     user = get_user_by_id(int(user_id))
     if not user:
-        _clear_session_and_redirect_login("Usuário não encontrado. Faça login novamente.")
+        _clear_session_and_redirect_login(
+            "Usuário não encontrado. Faça login novamente.")
 
     status_usuario = str(user.get("status", "")).strip().lower()
     perfil_usuario = str(user.get("perfil", perfil)).strip().lower()
-    usuario_inativo = (status_usuario != "ativo") or (perfil_usuario == "inativo")
+    usuario_inativo = (
+        status_usuario != "ativo") or (
+        perfil_usuario == "inativo")
 
     # Sincroniza sessão com claims assinadas do JWT a cada rota.
     st.session_state["user_id"] = user_id
     st.session_state["user_role"] = "inativo" if usuario_inativo else perfil_usuario
-    st.session_state["user_nome"] = payload.get("nome", st.session_state.get("user_nome"))
+    st.session_state["user_nome"] = payload.get(
+        "nome", st.session_state.get("user_nome"))
     st.session_state["user_status"] = status_usuario
 
     if usuario_inativo:
@@ -696,6 +728,7 @@ def _enforce_route_guard(pagina: str):
         st.session_state["pagina"] = "Painel do Participante"
         st.stop()
 
+
 # ============ DICIONÁRIO DE ROTAS ============
 PAGES = {
     "Login": login_view,
@@ -721,6 +754,8 @@ PAGES = {
 }
 
 # ============ MENU LATERAL ============
+
+
 def sidebar_menu():
     token_ok = _sync_session_from_token()
     token = st.session_state.get("token")
@@ -739,7 +774,9 @@ def sidebar_menu():
             menu_items = menu_admin()
             grouped_menu = grouped_menu_admin()
         elif perfil == "inativo":
-            has_history = bool(st.session_state.get("inactive_has_history", False))
+            has_history = bool(
+                st.session_state.get(
+                    "inactive_has_history", False))
             menu_items = menu_inativo(has_history)
             grouped_menu = grouped_menu_inativo(has_history)
         else:
@@ -751,7 +788,8 @@ def sidebar_menu():
             grouped_menu = {"Acesso": menu_items}
             st.session_state["pagina"] = "Login"
 
-    menu_items, grouped_menu = _normalize_grouped_menu(menu_items, grouped_menu)
+    menu_items, grouped_menu = _normalize_grouped_menu(
+        menu_items, grouped_menu)
 
     if "menu_lateral" in st.session_state and st.session_state["menu_lateral"] not in menu_items:
         del st.session_state["menu_lateral"]
@@ -761,9 +799,11 @@ def sidebar_menu():
     current_page = st.session_state.get("pagina", menu_items[0])
     last_section_key = f"menu_secao_last_{profile_key}"
     persisted_section = st.session_state.get(last_section_key)
-    default_section = persisted_section if persisted_section in grouped_menu else _default_group_for_page(grouped_menu, current_page)
+    default_section = persisted_section if persisted_section in grouped_menu else _default_group_for_page(
+        grouped_menu, current_page)
     section_names = list(grouped_menu.keys())
-    default_section_index = section_names.index(default_section) if default_section in section_names else 0
+    default_section_index = section_names.index(
+        default_section) if default_section in section_names else 0
 
     if "menu_secao" in st.session_state and st.session_state["menu_secao"] not in section_names:
         del st.session_state["menu_secao"]
@@ -777,7 +817,8 @@ def sidebar_menu():
     st.session_state[last_section_key] = chosen_section
 
     section_items = grouped_menu.get(chosen_section, menu_items)
-    if "menu_lateral" in st.session_state and st.session_state["menu_lateral"] not in section_items:
+    if "menu_lateral" in st.session_state and st.session_state[
+            "menu_lateral"] not in section_items:
         del st.session_state["menu_lateral"]
 
     section_default = current_page if current_page in section_items else section_items[0]
@@ -794,11 +835,13 @@ def sidebar_menu():
     st.sidebar.divider()
     st.sidebar.markdown("### 🌍 Timezone")
 
-    # Lista de timezones oferecidos — deve ser idêntica a _VALID_TIMEZONES (ordenada).
+    # Lista de timezones oferecidos — deve ser idêntica a _VALID_TIMEZONES
+    # (ordenada).
     common_timezones = sorted(_VALID_TIMEZONES)
 
     current_tz = st.session_state.get("client_timezone", _TZ_DEFAULT)
-    # Garante que o valor atual esteja na lista (pode ter vindo de versão antiga).
+    # Garante que o valor atual esteja na lista (pode ter vindo de versão
+    # antiga).
     if current_tz not in common_timezones:
         current_tz = _TZ_DEFAULT
         st.session_state["client_timezone"] = current_tz
@@ -822,6 +865,8 @@ def sidebar_menu():
         st.rerun()
 
 # ============ APP PRINCIPAL ============
+
+
 def main():
     # Garante client_timezone definido antes de qualquer view consumir.
     _sync_timezone_to_session()
@@ -848,6 +893,7 @@ def main():
         PAGES[pagina]()
     else:
         st.error("Página não encontrada.")
+
 
 if __name__ == "__main__":
     main()

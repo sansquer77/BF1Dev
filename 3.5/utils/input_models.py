@@ -26,7 +26,10 @@ def _validate_temporada(value: Optional[str]) -> Optional[str]:
     return normalized or None
 
 
-def _validate_nome_simples(value: str, field_name: str, max_len: int = 120) -> str:
+def _validate_nome_simples(
+        value: str,
+        field_name: str,
+        max_len: int = 120) -> str:
     normalized = str(value or "").strip()
     if not normalized:
         raise InputValidationError(f"{field_name} obrigatorio")
@@ -73,7 +76,8 @@ try:
             if not normalized:
                 raise InputValidationError("Lista de pilotos vazia")
             if len(set(normalized)) != len(normalized):
-                raise InputValidationError("Pilotos repetidos nao sao permitidos")
+                raise InputValidationError(
+                    "Pilotos repetidos nao sao permitidos")
             return normalized
 
         @field_validator("fichas")
@@ -134,11 +138,14 @@ except Exception:
             if self.usuario_id <= 0 or self.prova_id <= 0:
                 raise InputValidationError("IDs invalidos")
 
-            normalized_pilotos = [str(v).strip() for v in (pilotos or []) if str(v).strip()]
+            normalized_pilotos = [
+                str(v).strip() for v in (
+                    pilotos or []) if str(v).strip()]
             if not normalized_pilotos:
                 raise InputValidationError("Lista de pilotos vazia")
             if len(set(normalized_pilotos)) != len(normalized_pilotos):
-                raise InputValidationError("Pilotos repetidos nao sao permitidos")
+                raise InputValidationError(
+                    "Pilotos repetidos nao sao permitidos")
             self.pilotos = normalized_pilotos
 
             normalized_fichas = [int(v) for v in (fichas or [])]
@@ -181,7 +188,12 @@ except Exception:
                 raise InputValidationError("season invalida")
 
     class _ChampionshipResultInputFallback:
-        def __init__(self, champion: str, vice: str, team: str, season: Optional[int] = None):
+        def __init__(
+                self,
+                champion: str,
+                vice: str,
+                team: str,
+                season: Optional[int] = None):
             self.champion = _validate_nome_simples(champion, "champion")
             self.vice = _validate_nome_simples(vice, "vice")
             self.team = _validate_nome_simples(team, "team")

@@ -43,7 +43,9 @@ def get_season_options(
     return seasons
 
 
-def get_default_season_index(options: list[str], current_year: str | None = None) -> int:
+def get_default_season_index(
+        options: list[str],
+        current_year: str | None = None) -> int:
     if not options:
         return 0
     year = current_year or get_current_year_str()

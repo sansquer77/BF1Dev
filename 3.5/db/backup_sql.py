@@ -8,7 +8,6 @@ import streamlit as st
 
 from db.backup_repair import _repair_insert_legacy_literals
 from db.backup_utils import (
-    _build_data_only_sql,
     _build_pg_env_from_database_url,
     _detect_cmd,
     _execute_with_savepoint,
@@ -36,7 +35,8 @@ def get_postgres_backup_mode() -> tuple[str, str]:
 
     ok, _, err = _run_command([pg_dump, "--version"])
     if not ok:
-        return "fallback", f"pg_dump unavailable: {err.strip() or 'unknown error'}"
+        return "fallback", f"pg_dump unavailable: {
+            err.strip() or 'unknown error'}"
 
     probe_ok, _, probe_err = _run_command(
         [
@@ -95,9 +95,12 @@ def restore_backup_from_sql(sql_content: str) -> bool:
             try:
                 _run_fix_sequences_after_restore()
             except Exception as exc:
-                st.warning(f"Restore concluído, mas falhou ao ressincronizar sequences: {exc}")
+                st.warning(
+                    f"Restore concluído, mas falhou ao ressincronizar sequences: {exc}")
             return True
-        st.warning(f"psql failed, trying statement execution. Detail: {err.strip()}")
+        st.warning(
+            f"psql failed, trying statement execution. Detail: {
+                err.strip()}")
 
     statements = [s.strip() for s in sql_content.split(";") if s.strip()]
     try:
@@ -116,14 +119,15 @@ def restore_backup_from_sql(sql_content: str) -> bool:
                 if upper.startswith("TRUNCATE TABLE"):
                     tables = _extract_truncate_tables(stmt)
                     if tables is not None:
-                        valid_tables = [t for t in tables if t.lower() in existing_tables]
+                        valid_tables = [
+                            t for t in tables if t.lower() in existing_tables]
                         if not valid_tables:
                             continue
                         stmt = (
-                            "TRUNCATE TABLE "
-                            + ", ".join(_quote_identifier(t) for t in valid_tables)
-                            + " RESTART IDENTITY CASCADE"
-                        )
+                            "TRUNCATE TABLE " +
+                            ", ".join(
+                                _quote_identifier(t) for t in valid_tables) +
+                            " RESTART IDENTITY CASCADE")
 
                 insert_table = _extract_insert_table(stmt)
                 if insert_table and insert_table.lower() not in existing_tables:
@@ -133,19 +137,24 @@ def restore_backup_from_sql(sql_content: str) -> bool:
                 if ok_stmt:
                     continue
 
-                if insert_table and err_stmt and (_is_json_syntax_error(err_stmt) or _is_array_syntax_error(err_stmt)):
-                    repaired_stmt = _repair_insert_legacy_literals(conn, stmt, insert_table)
+                if insert_table and err_stmt and (
+                        _is_json_syntax_error(err_stmt) or _is_array_syntax_error(err_stmt)):
+                    repaired_stmt = _repair_insert_legacy_literals(
+                        conn, stmt, insert_table)
                     if repaired_stmt and repaired_stmt != stmt:
-                        ok_repaired, err_repaired = _execute_with_savepoint(c, repaired_stmt)
+                        ok_repaired, err_repaired = _execute_with_savepoint(
+                            c, repaired_stmt)
                         if ok_repaired:
                             continue
                         err_stmt = err_repaired if err_repaired else err_stmt
 
-                if insert_table and err_stmt and _is_fk_violation_error(err_stmt):
+                if insert_table and err_stmt and _is_fk_violation_error(
+                        err_stmt):
                     pending_fk_inserts.append((stmt, str(err_stmt)))
                     continue
 
-                raise err_stmt if err_stmt else RuntimeError("Unknown restore statement error")
+                raise err_stmt if err_stmt else RuntimeError(
+                    "Unknown restore statement error")
 
             max_passes = max(2, len(existing_tables) + 1)
             for _ in range(max_passes):
@@ -164,7 +173,8 @@ def restore_backup_from_sql(sql_content: str) -> bool:
                         next_pending.append((stmt, str(err_stmt)))
                         continue
 
-                    raise err_stmt if err_stmt else RuntimeError("Unknown restore statement error")
+                    raise err_stmt if err_stmt else RuntimeError(
+                        "Unknown restore statement error")
 
                 pending_fk_inserts = next_pending
                 if progress == 0:
@@ -173,16 +183,16 @@ def restore_backup_from_sql(sql_content: str) -> bool:
             if pending_fk_inserts:
                 first_error = pending_fk_inserts[0][1]
                 raise RuntimeError(
-                    "Restore failed: unresolved foreign key dependencies in "
-                    f"{len(pending_fk_inserts)} INSERT statement(s). First error: {first_error}"
-                )
+                    "Restore failed: unresolved foreign key dependencies in " f"{
+                        len(pending_fk_inserts)} INSERT statement(s). First error: {first_error}")
 
             conn.commit()
 
         try:
             _run_fix_sequences_after_restore()
         except Exception as exc:
-            st.warning(f"Restore concluído, mas falhou ao ressincronizar sequences: {exc}")
+            st.warning(
+                f"Restore concluído, mas falhou ao ressincronizar sequences: {exc}")
         return True
     except Exception as exc:
         st.error(f"Restore failed: {exc}")
@@ -247,6 +257,7 @@ def create_next_temporada() -> str:
         conn.commit()
 
     return next_year
+
 
 __all__ = [
     "list_temporadas",

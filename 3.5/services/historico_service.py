@@ -63,7 +63,8 @@ class DadosGrafico:
     """Dados preparados para o gráfico de barras de apostas por temporada."""
 
     # { temporada: { piloto: total_fichas } }
-    fichas_por_temporada_piloto: dict[str, dict[str, int]] = field(default_factory=dict)
+    fichas_por_temporada_piloto: dict[str, dict[str, int]] = field(
+        default_factory=dict)
     piloto_mais_apostado: Optional[str] = None
     total_fichas_piloto_mais_apostado: int = 0
 
@@ -167,7 +168,8 @@ def _parse_posicoes(raw: str) -> dict[int, str]:
     """
     try:
         parsed = ast.literal_eval(raw)
-        # Normaliza chaves para int — evita falsos negativos em posicoes.get(11)
+        # Normaliza chaves para int — evita falsos negativos em
+        # posicoes.get(11)
         return {int(k): str(v).strip() for k, v in parsed.items()}
     except Exception:
         return {}
@@ -194,7 +196,8 @@ def _contar_acertos_11_em_temporada(
     if apostas_df.empty or resultados_df.empty:
         return 0
 
-    # Monta índice prova_id (int) -> piloto_11_real para evitar lookups repetidos
+    # Monta índice prova_id (int) -> piloto_11_real para evitar lookups
+    # repetidos
     piloto_11_por_prova: dict[int, str] = {}
     for _, resultado in resultados_df.iterrows():
         try:
@@ -244,10 +247,12 @@ def calcular_resumo_historico(usuario_id: int) -> ResumoHistorico:
     total_acertos_11 = 0
 
     for temporada in sorted(temporadas):
-        # Fonte oficial: pontos já calculados e persistidos pelo serviço de classificação
+        # Fonte oficial: pontos já calculados e persistidos pelo serviço de
+        # classificação
         posicoes_df = get_posicoes_participantes_df(temporada)
 
-        posicao = _get_posicao_final_de_temporada(posicoes_df, usuario_id, temporada)
+        posicao = _get_posicao_final_de_temporada(
+            posicoes_df, usuario_id, temporada)
         if posicao is not None:
             posicoes_por_temporada.append((temporada, posicao))
 
@@ -255,7 +260,8 @@ def calcular_resumo_historico(usuario_id: int) -> ResumoHistorico:
         if pontuacao is not None:
             pontuacoes_por_temporada.append((temporada, pontuacao))
 
-        # Acertos do 11º: não está em posicoes_participantes — precisa das apostas
+        # Acertos do 11º: não está em posicoes_participantes — precisa das
+        # apostas
         apostas_temp = get_apostas_df(temporada)
         apostas_part = (
             apostas_temp[apostas_temp["usuario_id"] == usuario_id]
@@ -318,13 +324,18 @@ def calcular_dados_grafico(usuario_id: int) -> DadosGrafico:
         if apostas_part.empty:
             continue
 
-        # setdefault apenas quando há apostas — evita temporadas fantasma no gráfico
+        # setdefault apenas quando há apostas — evita temporadas fantasma no
+        # gráfico
         fichas_por_temporada_piloto.setdefault(temporada, {})
 
         for _, aposta in apostas_part.iterrows():
             try:
-                pilotos = [p.strip() for p in str(aposta["pilotos"]).split(",") if p.strip()]
-                fichas = [int(f) for f in str(aposta["fichas"]).split(",") if f.strip()]
+                pilotos = [
+                    p.strip() for p in str(
+                        aposta["pilotos"]).split(",") if p.strip()]
+                fichas = [
+                    int(f) for f in str(
+                        aposta["fichas"]).split(",") if f.strip()]
             except Exception:
                 continue
 
@@ -334,12 +345,16 @@ def calcular_dados_grafico(usuario_id: int) -> DadosGrafico:
                 fichas_por_temporada_piloto[temporada][piloto] = (
                     fichas_por_temporada_piloto[temporada].get(piloto, 0) + ficha
                 )
-                fichas_totais_piloto[piloto] = fichas_totais_piloto.get(piloto, 0) + ficha
+                fichas_totais_piloto[piloto] = fichas_totais_piloto.get(
+                    piloto, 0) + ficha
 
-    dados = DadosGrafico(fichas_por_temporada_piloto=fichas_por_temporada_piloto)
+    dados = DadosGrafico(
+        fichas_por_temporada_piloto=fichas_por_temporada_piloto)
 
     if fichas_totais_piloto:
-        piloto_top = max(fichas_totais_piloto, key=lambda p: fichas_totais_piloto[p])
+        piloto_top = max(
+            fichas_totais_piloto,
+            key=lambda p: fichas_totais_piloto[p])
         dados.piloto_mais_apostado = piloto_top
         dados.total_fichas_piloto_mais_apostado = fichas_totais_piloto[piloto_top]
 

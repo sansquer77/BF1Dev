@@ -14,7 +14,10 @@ def _parse_datetime_sp(date_str: str, time_str: str):
     return parse_datetime_sao_paulo(date_str, time_str)
 
 
-def pode_fazer_aposta(prova_ou_data, horario_prova_str: str | None = None, horario_usuario=None):
+def pode_fazer_aposta(
+        prova_ou_data,
+        horario_prova_str: str | None = None,
+        horario_usuario=None):
     """Verifica se ainda é possível fazer aposta para a prova.
 
     Aceita dict com chaves ``data``/``horario`` ou strings separadas (forma legada).
@@ -40,9 +43,9 @@ def pode_fazer_aposta(prova_ou_data, horario_prova_str: str | None = None, horar
 
         pode = horario_usuario_utc <= horario_limite_utc
         mensagem = (
-            f"Aposta {'permitida' if pode else 'bloqueada'} "
-            f"(Horário limite SP: {horario_limite_sp.strftime('%d/%m/%Y %H:%M:%S')})"
-        )
+            f"Aposta {
+                'permitida' if pode else 'bloqueada'} " f"(Horário limite SP: {
+                horario_limite_sp.strftime('%d/%m/%Y %H:%M:%S')})")
         return pode, mensagem, horario_limite_sp
     except Exception as e:
         return False, f"Erro ao validar horário: {str(e)}", None
@@ -64,9 +67,9 @@ def validar_composicao_aposta(
         return False, "A lista de pilotos não pode estar vazia."
 
     if len(pilotos) != len(fichas):
-        return False, (
-            f"Número de pilotos ({len(pilotos)}) diferente do número de fichas ({len(fichas)})."
-        )
+        return False, (f"Número de pilotos ({
+            len(pilotos)}) diferente do número de fichas ({
+            len(fichas)}).")
 
     duplicados = [p for p in set(pilotos) if pilotos.count(p) > 1]
     if duplicados:
@@ -83,7 +86,9 @@ def validar_composicao_aposta(
         return False, f"O piloto '{piloto_11}' não pode estar na aposta e como 11º."
 
     if regras is not None and pilotos_df is not None:
-        ok = _aposta_valida_regras(pilotos, [int(f) for f in fichas], piloto_11, pilotos_df, regras)
+        ok = _aposta_valida_regras(
+            pilotos, [
+                int(f) for f in fichas], piloto_11, pilotos_df, regras)
         if not ok:
             return False, "A aposta viola as regras configuradas para esta temporada."
 
@@ -112,7 +117,8 @@ def _aposta_valida_regras(
     if not pilotos_sel or not fichas_sel or not piloto_11:
         return False
 
-    min_pilotos = int(regras.get("qtd_minima_pilotos") or regras.get("min_pilotos", 3))
+    min_pilotos = int(regras.get("qtd_minima_pilotos")
+                      or regras.get("min_pilotos", 3))
     qtd_fichas = int(regras.get("quantidade_fichas", 15))
     fichas_max = int(regras.get("fichas_por_piloto", qtd_fichas))
     permite_mesma_equipe = bool(regras.get("mesma_equipe", False))
@@ -130,17 +136,17 @@ def _aposta_valida_regras(
     if piloto_11 in pilotos_sel:
         return False
 
-    pilotos_disponiveis = set(pilotos_df["nome"].astype(str).tolist()) if not pilotos_df.empty else set()
-    if pilotos_disponiveis and any(str(p) not in pilotos_disponiveis for p in pilotos_sel):
+    pilotos_disponiveis = set(pilotos_df["nome"].astype(
+        str).tolist()) if not pilotos_df.empty else set()
+    if pilotos_disponiveis and any(
+            str(p) not in pilotos_disponiveis for p in pilotos_sel):
         return False
     if pilotos_disponiveis and str(piloto_11) not in pilotos_disponiveis:
         return False
 
     if not permite_mesma_equipe and not pilotos_df.empty and "equipe" in pilotos_df.columns:
-        mapa_eq: dict[str, str] = {
-            str(nome): str(eq)
-            for nome, eq in zip(pilotos_df["nome"].astype(str), pilotos_df["equipe"].astype(str))
-        }
+        mapa_eq: dict[str, str] = {str(nome): str(eq) for nome, eq in zip(
+            pilotos_df["nome"].astype(str), pilotos_df["equipe"].astype(str))}
         equipes = [mapa_eq.get(str(p), "") for p in pilotos_sel]
         equipes_validas = [e for e in equipes if e]
         if len(set(equipes_validas)) < len(equipes_validas):
@@ -160,7 +166,8 @@ def ajustar_aposta_para_regras(
         return [], []
     qtd_fichas = int(regras.get("quantidade_fichas", 15))
     fichas_max = int(regras.get("fichas_por_piloto", qtd_fichas))
-    min_pilotos = int(regras.get("qtd_minima_pilotos") or regras.get("min_pilotos", 3))
+    min_pilotos = int(regras.get("qtd_minima_pilotos")
+                      or regras.get("min_pilotos", 3))
 
     n = min(len(pilotos), len(fichas))
     pilotos = [p.strip() for p in pilotos[:n]]
@@ -198,7 +205,8 @@ def ajustar_aposta_para_regras(
                 faltam -= 1
             if safety % 1000 == 0 and faltam > 0:
                 todos_pilotos = pilotos_df["nome"].tolist()
-                candidatos = [p for p in todos_pilotos if p not in set(pilotos)]
+                candidatos = [
+                    p for p in todos_pilotos if p not in set(pilotos)]
                 if candidatos:
                     novo = random.choice(candidatos)
                     pilotos.append(novo)

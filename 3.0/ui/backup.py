@@ -1,6 +1,7 @@
 import streamlit as st
 from db.backup_utils import download_db, upload_db, download_tabela, upload_tabela, create_next_temporada, list_temporadas
 
+
 def main():
     perfil = st.session_state.get("user_role", "participante")
     if perfil != "master":
@@ -37,7 +38,8 @@ def main():
     with col_a:
         if st.button("➕ Criar próxima temporada", width="stretch"):
             new_year = create_next_temporada()
-            st.success(f"✅ Temporada {new_year} criada/registrada com sucesso.")
+            st.success(
+                f"✅ Temporada {new_year} criada/registrada com sucesso.")
             st.rerun()
     with col_b:
         existing = list_temporadas()
@@ -45,7 +47,9 @@ def main():
             st.write("Temporadas cadastradas:")
             st.write(", ".join(existing))
         else:
-            st.info("Nenhuma temporada cadastrada. Botão acima cria a próxima temporada.")
+            st.info(
+                "Nenhuma temporada cadastrada. Botão acima cria a próxima temporada.")
+
 
 if __name__ == "__main__":
     main()

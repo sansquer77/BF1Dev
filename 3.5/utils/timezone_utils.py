@@ -24,32 +24,35 @@ def convert_utc_to_client_tz(
 ) -> str:
     """
     Converte um timestamp UTC para timezone do cliente no formato especificado.
-    
+
     Args:
         utc_timestamp: timestamp UTC (datetime, str, ou None)
         client_tz: timezone do cliente (ex: 'America/Sao_Paulo')
                    Se None, tenta obter de st.session_state
         format_str: formato da saída (default: "31/12/2026 14:30:45")
-    
+
     Returns:
         String com timestamp convertido no formato especificado,
         ou string vazia se input inválido
     """
     # Tratamento de None e NaN
-    if utc_timestamp is None or (isinstance(utc_timestamp, float) and pd.isna(utc_timestamp)):
+    if utc_timestamp is None or (
+        isinstance(
+            utc_timestamp,
+            float) and pd.isna(utc_timestamp)):
         return ""
-    
+
     # Se client_tz não fornecido, tenta obter do session_state
     if client_tz is None:
         client_tz = get_client_timezone()
-    
+
     # Validação de timezone
     try:
         tz_obj = ZoneInfo(client_tz)
     except Exception as e:
         logger.warning(f"Timezone inválido '{client_tz}': {e}. Usando UTC.")
         tz_obj = ZoneInfo("UTC")
-    
+
     # Parse do timestamp
     try:
         if isinstance(utc_timestamp, str):
@@ -67,13 +70,14 @@ def convert_utc_to_client_tz(
                 return str(utc_timestamp)
             dt = dt.to_pydatetime()
     except Exception as e:
-        logger.debug(f"Erro ao fazer parse de timestamp '{utc_timestamp}': {e}")
+        logger.debug(
+            f"Erro ao fazer parse de timestamp '{utc_timestamp}': {e}")
         return str(utc_timestamp)
-    
+
     # Se datetime é naive (sem timezone), assume UTC
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-    
+
     # Converte para timezone do cliente
     try:
         dt_local = dt.astimezone(tz_obj)
@@ -91,27 +95,27 @@ def convert_dataframe_timestamps(
 ) -> pd.DataFrame:
     """
     Converte múltiplas colunas de timestamp em um DataFrame.
-    
+
     Args:
         df: DataFrame contendo as colunas de timestamp
         timestamp_columns: lista de nomes de colunas a converter
         client_tz: timezone do cliente (se None, obtém de st.session_state)
         format_str: formato da saída
-    
+
     Returns:
         DataFrame com colunas de timestamp convertidas
     """
     df_copy = df.copy()
-    
+
     if client_tz is None:
         client_tz = get_client_timezone()
-    
+
     for col in timestamp_columns:
         if col in df_copy.columns:
             df_copy[col] = df_copy[col].apply(
                 lambda x: convert_utc_to_client_tz(x, client_tz, format_str)
             )
-    
+
     return df_copy
 
 

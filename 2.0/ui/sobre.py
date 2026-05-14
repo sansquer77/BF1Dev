@@ -1,5 +1,6 @@
 import streamlit as st
 
+
 def main():
     st.title("ℹ️ Sobre o BF1")
 
@@ -31,7 +32,7 @@ def main():
 
     - Para dúvidas, sugestões ou reportar bugs:
         - **E-mail:** cristiano_gaspar@outlook.com
-    
+
     - Agradecimentos a todos os participantes e beta testers do bolão ao longo dos anos.
 
     ### ☁️ Infraestrutura
@@ -41,6 +42,7 @@ def main():
     ---
     <small>Versão atual: 2.0-2025. Todos os direitos reservados.</small>
     """)
+
 
 if __name__ == "__main__":
     main()

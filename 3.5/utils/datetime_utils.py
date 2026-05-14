@@ -41,4 +41,5 @@ def parse_datetime_sao_paulo(date_str: str, time_str: str) -> datetime:
         except ValueError:
             continue
 
-    raise ValueError(f"Formato de data/hora inválido: '{date_str} {normalized_time}'")
+    raise ValueError(
+        f"Formato de data/hora inválido: '{date_str} {normalized_time}'")

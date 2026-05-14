@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import os
 import io  # IMPORTANTE: necessário para exportar Excel em memória
 from pathlib import Path
 from db.db_utils import db_connect
 
 DB_PATH = Path("bolao_F1.db")
+
 
 def download_db():
     """Permite fazer o download do arquivo inteiro do banco de dados SQLite."""
@@ -22,6 +22,7 @@ def download_db():
     else:
         st.warning("Arquivo do banco de dados não encontrado.")
 
+
 def upload_db():
     """Permite upload de um novo arquivo .db, substituindo o banco atual."""
     uploaded_file = st.file_uploader(
@@ -34,12 +35,14 @@ def upload_db():
             out.write(uploaded_file.getbuffer())
         st.success("Banco de dados substituído com sucesso!")
 
+
 def listar_tabelas():
     """Retorna o nome de todas as tabelas do banco de dados."""
     with sqlite3.connect(DB_PATH) as conn:
         query = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
         tabelas = pd.read_sql(query, conn)["name"].tolist()
     return tabelas
+
 
 def exportar_tabela_excel(tabela):
     """Exporta os dados da tabela como arquivo Excel em buffer de memória."""
@@ -52,9 +55,13 @@ def exportar_tabela_excel(tabela):
     output.seek(0)
     return output
 
+
 def download_tabela():
     tabelas = listar_tabelas()
-    tabela = st.selectbox("Selecione a tabela para exportar", tabelas, key="select_export")
+    tabela = st.selectbox(
+        "Selecione a tabela para exportar",
+        tabelas,
+        key="select_export")
     if st.button("Exportar para Excel"):
         excel_buffer = exportar_tabela_excel(tabela)
         st.download_button(
@@ -62,12 +69,15 @@ def download_tabela():
             data=excel_buffer,
             file_name=f"{tabela}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
+            use_container_width=True)
+
 
 def upload_tabela():
     tabelas = listar_tabelas()
-    tabela = st.selectbox("Escolha a tabela para sobrescrever:", tabelas, key="select_import")
+    tabela = st.selectbox(
+        "Escolha a tabela para sobrescrever:",
+        tabelas,
+        key="select_import")
     uploaded_file = st.file_uploader(
         f"Upload do arquivo .xlsx para substituir dados da tabela '{tabela}'",
         type=["xlsx"], key="upload_one_table"
@@ -78,6 +88,7 @@ def upload_tabela():
             conn.execute(f"DELETE FROM {tabela}")
             df.to_sql(tabela, conn, if_exists='append', index=False)
         st.success(f"Tabela '{tabela}' atualizada com sucesso!")
+
 
 def main():
     st.title("💾 Backup e Restauração do Banco de Dados")
@@ -100,6 +111,7 @@ def main():
         download_tabela()
     with tab2:
         upload_tabela()
+
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,6 @@
-import pandas as pd
 from db_utils import championship_db_connect, db_connect
 from datetime import datetime, UTC
+
 
 def init_championship_db():
     """Cria as tabelas necessárias para apostas e resultado do campeonato."""
@@ -38,6 +38,7 @@ def init_championship_db():
     conn.commit()
     conn.close()
 
+
 def get_user_name(user_id):
     """Obtém o nome do usuário pelo ID"""
     try:
@@ -49,6 +50,7 @@ def get_user_name(user_id):
         return result[0] if result else "Nome não encontrado"
     except Exception:
         return "Erro ao buscar nome"
+
 
 def save_championship_bet(user_id, user_nome, champion, vice, team):
     """Salva ou atualiza a aposta do usuário para o campeonato e registra no log."""
@@ -69,6 +71,7 @@ def save_championship_bet(user_id, user_nome, champion, vice, team):
     conn.commit()
     conn.close()
 
+
 def get_championship_bet(user_id):
     """Retorna a última aposta válida do usuário no campeonato."""
     init_championship_db()
@@ -80,8 +83,13 @@ def get_championship_bet(user_id):
     result = cursor.fetchone()
     conn.close()
     if result:
-        return {"champion": result[0], "vice": result[1], "team": result[2], "bet_time": result[3]}
+        return {
+            "champion": result[0],
+            "vice": result[1],
+            "team": result[2],
+            "bet_time": result[3]}
     return None
+
 
 def get_championship_bet_log(user_id):
     """Retorna o histórico de apostas do usuário no campeonato (mais recente primeiro)."""
@@ -98,6 +106,7 @@ def get_championship_bet_log(user_id):
     conn.close()
     return result
 
+
 def save_final_results(champion, vice, team, season=2025):
     """Salva ou atualiza o resultado oficial do campeonato."""
     init_championship_db()
@@ -109,6 +118,7 @@ def save_final_results(champion, vice, team, season=2025):
     ''', (season, champion, vice, team))
     conn.commit()
     conn.close()
+
 
 def get_final_results(season=2025):
     """Retorna o resultado oficial do campeonato."""
@@ -123,6 +133,7 @@ def get_final_results(season=2025):
     if result:
         return {"champion": result[0], "vice": result[1], "team": result[2]}
     return None
+
 
 def calcular_pontuacao_campeonato(user_id, season=2025):
     """Calcula a pontuação bônus do participante com base nas apostas e resultado final."""
