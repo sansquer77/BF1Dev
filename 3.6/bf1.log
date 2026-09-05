@@ -1,0 +1,55 @@
+2026-03-21 11:16:03,840 - db.migrations - INFO - ✓ Tabela hall_da_fama criada com sucesso
+2026-03-28 17:06:41,986 - db.migrations - INFO - ✓ Tabela hall_da_fama criada com sucesso
+2026-03-28 17:06:48,065 - db.migrations - INFO - ✓ Tabela hall_da_fama criada com sucesso
+2026-03-28 17:07:03,541 - db.migrations - INFO - ✓ Tabela hall_da_fama criada com sucesso
+2026-03-28 17:39:28,144 - db.migrations - INFO - ✓ Tabela hall_da_fama criada com sucesso
+2026-04-02 09:47:49,179 - db - INFO - ✓ Módulo 'db' carregado com sucesso
+2026-04-02 09:48:00,627 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:48:00,629 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:48:12,915 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:48:13,148 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:48:19,188 - db.master_user_manager - ERROR - ✗ Erro ao criar usuário Master: couldn't get a connection after 30.00 sec
+2026-04-02 09:48:26,200 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:48:26,723 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:48:41,303 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:48:42,328 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:49:00,325 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:49:02,373 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:49:19,195 - db.rules_utils - ERROR - Erro ao criar regra: couldn't get a connection after 30.00 sec
+2026-04-02 09:49:26,872 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:49:31,224 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:49:49,197 - db - INFO - 🔌 Fechando pool de conexões...
+2026-04-02 09:49:49,198 - db - INFO - ✓ Pool fechado com sucesso
+2026-04-02 09:50:08,668 - db - INFO - ✓ Módulo 'db' carregado com sucesso
+2026-04-02 09:50:19,867 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:50:19,867 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:50:32,157 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:50:32,158 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:50:38,678 - db.master_user_manager - ERROR - ✗ Erro ao criar usuário Master: couldn't get a connection after 30.00 sec
+2026-04-02 09:50:45,492 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:50:45,492 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:51:00,824 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:51:01,157 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:51:20,104 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:51:21,132 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:51:38,687 - db.rules_utils - ERROR - Erro ao criar regra: couldn't get a connection after 30.00 sec
+2026-04-02 09:51:47,240 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:51:49,468 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 09:52:08,697 - db - INFO - 🔌 Fechando pool de conexões...
+2026-04-02 09:52:08,699 - db - INFO - ✓ Pool fechado com sucesso
+2026-04-02 15:23:27,045 - db - INFO - ✓ Módulo 'db' carregado com sucesso
+2026-04-02 15:23:27,046 - db - INFO - 🔌 Fechando pool de conexões...
+2026-04-02 15:23:27,046 - db - INFO - ✓ Pool fechado com sucesso
+2026-04-02 15:23:36,863 - db - INFO - ✓ Módulo 'db' carregado com sucesso
+2026-04-02 15:23:48,312 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 15:23:48,312 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 15:24:00,612 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 15:24:00,612 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 15:24:06,878 - db - INFO - 🔌 Fechando pool de conexões...
+2026-04-02 15:24:11,879 - psycopg.pool - WARNING - couldn't stop thread 'pool-1-worker-0' within 5.0 seconds
+2026-04-02 15:24:13,896 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 15:24:13,896 - psycopg.pool - WARNING - error connecting in 'pool-1': connection failed: connection to server at "134.122.29.252", port 25060 failed: could not receive data from server: Connection refused
+2026-04-02 15:24:13,897 - db - INFO - ✓ Pool fechado com sucesso
+2026-04-02 15:56:28,932 - db - INFO - ✓ Módulo 'db' carregado com sucesso
+2026-04-02 15:56:28,966 - db - INFO - 🔌 Fechando pool de conexões...
+2026-04-02 15:56:28,966 - db - INFO - ✓ Pool fechado com sucesso
